@@ -1,3 +1,5 @@
+# install.packages('lasR', repos = 'https://r-lidar.r-universe.dev')
+
 library(lidR)
 library(fs)
 library(sf)
@@ -19,25 +21,40 @@ reports_path <- "results"
 # CPU, RAM, HDD etc usage reports will go to:
 system_monitoring_path <- "system_monitoring"
 
+#workstation id
+workstation_id <- Sys.info()[4]
 
 
 # settings that determine the datasets to run the functions on, how many cores to use, and 
 # which drives to test.
 benchmark_settings <- list(
   
-  drive_in =  c(SSD ="N:/", 
-                HDD="G:/", 
-                NET="//vic-fas2/finland/"),
+  drive_in =  c(
+    # SSD ="D:/"
+    SSD ="N:/"
+    # HDD="G:/", 
+    # NET="//vic-fas2/finland/"
+    ),
   
-  drive_out = c(SSD ="N:/", 
-                HDD="G:/", 
-                NET="//vic-fas1/projects_d/Tompalski/"),
+  drive_out = c(
+    # SSD ="D:/"
+    SSD ="N:/"
+    # HDD="G:/", 
+    # NET="//vic-fas1/projects_d/Tompalski/"
+    ),
   
   cores =  c(1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40) ,
   
   #subfolder with original point cloud (i.e. not normalized)
   datasets_org = c(
-    ALS_test = "benchmark_data/tile_1000_density_1"
+    ALS_1000_1 = "benchmark_data/1_org/tile_1000_density_1",
+    ALS_1000_2 = "benchmark_data/1_org/tile_1000_density_2",
+    ALS_1000_5 = "benchmark_data/1_org/tile_1000_density_5",
+    ALS_1000_10 = "benchmark_data/1_org/tile_1000_density_10",
+    ALS_1000_20 = "benchmark_data/1_org/tile_1000_density_20",
+    ALS_1000_30 = "benchmark_data/1_org/tile_1000_density_30",
+    ALS_1000_40 = "benchmark_data/1_org/tile_1000_density_40",
+    ALS_1000_50 = "benchmark_data/1_org/tile_1000_density_50"
     # ALS2012="prf_harmonized_data/2012_ALS/2_tiled/",
     # ALS2005="prf_harmonized_data/2005_ALS_CGVD28/2_tiled",
     # ALS2018="prf_harmonized_data/2018_SPL_CGVD28/2_tiled_adjusted"
@@ -45,7 +62,14 @@ benchmark_settings <- list(
   
   #subfolder with normalized point clouds 
   datasets_norm = c(
-    ALS_test = "benchmark_data/tile_1000_density_1"
+    ALS_1000_1 = "benchmark_data/2_norm/tile_1000_density_1",
+    ALS_1000_2 = "benchmark_data/2_norm/tile_1000_density_2",
+    ALS_1000_5 = "benchmark_data/2_norm/tile_1000_density_5",
+    ALS_1000_10 = "benchmark_data/2_norm/tile_1000_density_10",
+    ALS_1000_20 = "benchmark_data/2_norm/tile_1000_density_20",
+    ALS_1000_30 = "benchmark_data/2_norm/tile_1000_density_30",
+    ALS_1000_40 = "benchmark_data/2_norm/tile_1000_density_40",
+    ALS_1000_50 = "benchmark_data/2_norm/tile_1000_density_50"
     # ALS2012="prf_harmonized_data/2012_ALS/3_tiled_norm/",
     # ALS2005="prf_harmonized_data/2005_ALS_CGVD28/3_tiled_norm",
     # ALS2018="prf_harmonized_data/2018_SPL_CGVD28/3_tiled_norm"
@@ -67,21 +91,21 @@ benchmark_tasks <-
     "normalization", 
     "lidR::normalize_height(las = ctg, algorithm = tin())", 
     "ans = exec(pipeline = normalize() + write_las(fout), on = f, progress=TRUE)", 
-    "lasheight -i {f_lastools} -odir {dir_out} -olaz -cores {cores} -replace_z", 
+    "lasheight -i {f_lastools} -odir {dir_out} -olaz -cores {cores} -replace_z -buffered 20", 
     "datasets_org",
     "laz",
     
     "pixel_metrics_1", 
     "lidR::pixel_metrics(las = ctg, ~max(Z), res = 20)", 
     "ans = exec(pipeline = rasterize(20, 'max', ofile = fout), on = f, progress=TRUE)", 
-    "lascanopy -i {f_lastools} -max -odir {dir_out} -otif -cores {cores}", 
+    "lascanopy -i {f_lastools} -max -odir {dir_out} -otif -cores {cores} -buffered 20", 
     "datasets_norm",
     "tif",
     
     "pixel_metrics_2", 
     "lidR::pixel_metrics(las = ctg, ~stdmetrics_z(Z), res = 20)", 
     "ans = exec(pipeline = rasterize(20, stdmetrics_z(Z), ofile = fout), on = f, progress=TRUE)", 
-    "lascanopy -i {f_lastools} -max -avg -std -ske -kur -cov -b 10 20 30 40 50 60 70 80 90 -p 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 -odir {dir_out} -otif -cores {cores}", 
+    "lascanopy -i {f_lastools} -max -avg -std -ske -kur -cov -b 10 20 30 40 50 60 70 80 90 -p 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 -odir {dir_out} -otif -cores {cores} -buffered 20", 
     "datasets_norm",
     "tif"
   )

@@ -136,7 +136,7 @@ benchmark_run <- function(task_id,
     eval(parse(text = x))
     
     #filename for system monitoring log
-    output_fname1 <- glue("{sys$nodename}_{task_id}_{run_id}_lidR")
+    output_fname1 <- glue("{workstation_id}_{task_id}_{run_id}_lidR")
     
     #start system resource monitoring (windows only, a powershell script run in the background)
     MonitoringProcess1 <- 
@@ -199,7 +199,7 @@ benchmark_run <- function(task_id,
     set_parallel_strategy(concurrent_files(ncores = cores))
     
     #filename for system monitoring log
-    output_fname2 <- glue("{sys$nodename}_{task_id}_{run_id}_lasR")
+    output_fname2 <- glue("{workstation_id}_{task_id}_{run_id}_lasR")
     
     #start system resource monitoring (windows only, a powershell script run in the background)
     MonitoringProcess2 <- 
@@ -249,14 +249,16 @@ benchmark_run <- function(task_id,
     
     cli::cli_h1("Running lastools")
     
+    #filename for system monitoring log
+    output_fname3 <- glue("{workstation_id}_{task_id}_{run_id}_lastools")
+    
+    # fout_results_lastools <- file.path(reports_path, paste0(output_fname3,".csv"))
+    
     #reset output dir
     dir_out_reset(dir_out)
     
     #lastools command to execute 
     command <- paste0(lastools_path, "/", task_call_lastools)
-    
-    #filename for system monitoring log
-    output_fname3 <- glue("{sys$nodename}_{task_id}_{run_id}_lastools")
     
     #start system resource monitoring (windows only, a powershell script run in the background)
     MonitoringProcess3 <- 
@@ -304,19 +306,33 @@ benchmark_run <- function(task_id,
   if(run_lastools) benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools)
   
   # return(benchmark_lidR_result)
-  
-  return(
-    list(
-      task_id = task_id,
-      run_id = run_id,
-      cores = cores,
-      benchmark_lidR_result=benchmark_lidR_result,
-      benchmark_lasR_result=benchmark_lasR_result,
-      benchmark_lastools_result=benchmark_lastools_result,
-      sys = sys,
-      d_info = d_info
+  output <- 
+    bind_rows(
+      as_tibble(X$benchmark_lidR_result),
+      as_tibble(X$benchmark_lasR_result),
+      as_tibble(X$benchmark_lastools_result)
+    ) %>% 
+    mutate(task_id=task_id,
+           run_id = run_id,
+           cores = cores) %>%
+    bind_cols(
+      as_tibble(sys),
+      as_tibble(d_info)
+      
     )
-  )
+  
+  return(output)
+    # list(
+    #   task_id = task_id,
+    #   run_id = run_id,
+    #   cores = cores,
+    #   benchmark_lidR_result=benchmark_lidR_result,
+    #   benchmark_lasR_result=benchmark_lasR_result,
+    #   benchmark_lastools_result=benchmark_lastools_result,
+    #   sys = sys,
+    #   d_info = d_info
+    # )
+  
   
 }
 
