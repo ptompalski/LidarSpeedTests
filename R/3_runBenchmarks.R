@@ -6,8 +6,8 @@ source("R/1_functions.R")
 # Before running the benchmark a subset of the `benchmark_combinations` can be created
 
 
-B <-  benchmark_combinations %>% filter(run_id == "ALS_1000_1_12_SSD_SSD",
-                                        task_id == "pixel_metrics_1")
+# B <-  benchmark_combinations %>% filter(run_id == "ALS_1000_1_12_SSD_SSD", task_id == "pixel_metrics_1")
+B <-  benchmark_combinations %>% filter(task_id == "pixel_metrics_1")
 
 
 
@@ -19,18 +19,11 @@ for (i in 1:nrow(B)) {
   #get current row
   b <- B[i,]
   
-  #check if run already completed
-  output_fname <- glue("{reports_path}/{workstation_id}_{b$task_id}_{b$run_id}.csv")
   
-  if(!file.exists(output_fname)) {
-    
-    benchmark_result <- benchmark_run(task_id = B$task_id, run_id = B$run_id, 
-                                      run_lidR = T,run_lasR = T, run_lastools = T,
-                                      benchmark_tasks = benchmark_tasks, benchmark_runs = benchmark_runs)
-    
-    write.csv(benchmark_result, file = output_fname, row.names = F)
-    
-  }
+  benchmark_run(task_id = b$task_id, run_id = b$run_id, 
+                run_lidR = T,run_lasR = T, run_lastools = T,
+                benchmark_tasks = benchmark_tasks, benchmark_runs = benchmark_runs)
+  
 }
 
 

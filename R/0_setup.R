@@ -8,7 +8,7 @@ library(future)
 library(lasR)
 library(callr)  
 library(glue)
-
+library(benchmarkme)
 
 
 # PATHS, SETTINGS, TASKS
@@ -30,20 +30,22 @@ workstation_id <- Sys.info()[4]
 benchmark_settings <- list(
   
   drive_in =  c(
-    # SSD ="D:/"
-    SSD ="N:/"
+    SSD ="D:/"
+    # SSD ="N:/"
     # HDD="G:/", 
     # NET="//vic-fas2/finland/"
     ),
   
   drive_out = c(
-    # SSD ="D:/"
-    SSD ="N:/"
+    SSD ="D:/"
+    # SSD ="N:/"
     # HDD="G:/", 
     # NET="//vic-fas1/projects_d/Tompalski/"
     ),
   
-  cores =  c(1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40) ,
+  
+  # cores =  c(1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40) ,
+  cores =  c(1, 2, seq(4, parallel::detectCores(), 4 )) ,
   
   #subfolder with original point cloud (i.e. not normalized)
   datasets_org = c(
@@ -156,3 +158,27 @@ benchmark_runs <-
 benchmark_combinations <- expand_grid(task_id = benchmark_tasks$task_id, run_id = benchmark_runs$ID)
 
 
+#overwrite the benchmarkme::get_ram() function, which is currently not working on some workstations.
+#corrected function below.
+get_ram <- function()
+{
+  os = R.version$os
+  ram = suppressWarnings(try(benchmarkme:::system_ram(os), silent = TRUE))
+  if (inherits(ram, "try-error") || length(ram) == 0L || any(is.na(ram))) {
+    message("\t Unable to detect your RAM. # nocov\n            Please raise an issue at https://github.com/csgillespie/benchmarkme")
+    ram = structure(NA, class = "ram")
+  }
+  else {
+    cleaned_ram = suppressWarnings(try(benchmarkme:::clean_ram(ram, os),
+                                       silent = TRUE))
+    if (inherits(cleaned_ram, "try-error") || length(ram) ==
+        0L) {
+      message("\t Unable to detect your RAM. # nocov\n            Please raise an issue at https://github.com/csgillespie/benchmarkme")
+      ram = structure(NA, class = "ram")
+    }
+    else {
+      ram = structure(cleaned_ram, class = "ram")
+    }
+  }
+  return(ram)
+}

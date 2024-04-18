@@ -84,8 +84,21 @@ benchmark_ALS_info <- function(x, dir_in) {
   
 }
 
-
-# benchmark_run(run_lidR = F, run_lasR = F, run_lastools = F, benchmark_tasks = benchmark_tasks, benchmark_runs = benchmark_runs)
+check_results <- function(path) {
+  
+  #count number of files and total size
+  file_count <- length(list.files(path))
+  
+  output_size <- sum(fs::dir_info(path)$size) 
+  
+  return(
+    list(
+      output_file_count = file_count,
+      output_total_size = output_size
+    )
+  )
+  
+}
 
 benchmark_run <- function(task_id, 
                           run_id,
@@ -122,6 +135,10 @@ benchmark_run <- function(task_id,
   #point cloud info
   d_info <- benchmark_ALS_info(ctg, dir_in = dir_in)
   
+  #output file names
+  output_fname_lidR <- glue("{workstation_id}_{task_id}_{run_id}_lidR")
+  output_fname_lasR <- glue("{workstation_id}_{task_id}_{run_id}_lasR")
+  output_fname_lastools <- glue("{workstation_id}_{task_id}_{run_id}_lastools")
   
   # function to run lidR call
   benchmark_run_lidR <- function(task_call_lidR) {
@@ -136,11 +153,11 @@ benchmark_run <- function(task_id,
     eval(parse(text = x))
     
     #filename for system monitoring log
-    output_fname1 <- glue("{workstation_id}_{task_id}_{run_id}_lidR")
+    # output_fname1 <- glue("{workstation_id}_{task_id}_{run_id}_lidR")
     
     #start system resource monitoring (windows only, a powershell script run in the background)
     MonitoringProcess1 <- 
-      callr::r_bg( function(x,y)  system2("powershell", args=c("-file",  "./cpu_ram_usage.ps1", x, y)), args = list(output_fname1, system_monitoring_path)  )  
+      callr::r_bg( function(x,y)  system2("powershell", args=c("-file",  "./cpu_ram_usage.ps1", x, y)), args = list(output_fname_lidR, system_monitoring_path)  )  
     
     
     #record start time
@@ -160,7 +177,7 @@ benchmark_run <- function(task_id,
     finish_time_lidR <- Sys.time()
     
     #display time elapsed
-    cli::cli_alert_success("Finished in {round(finish_time_lidR-start_time_lidR)} sec.")
+    cli::cli_alert_success("Finished in {round(as.numeric(finish_time_lidR-start_time_lidR))} sec.")
     
     # record if run was successful
     is_successful_lidR <- 1
@@ -174,12 +191,19 @@ benchmark_run <- function(task_id,
     #reset workers
     future::plan(future::sequential)
     
-    return(list(
-      tool = "lidR",
-      success=is_successful_lidR,
-      start_time =  start_time_lidR,
-      finish_time= finish_time_lidR
-    ))
+    check_results_lidR <- check_results(dir_out)
+    
+    return(
+      c(
+        list(
+          tool = "lidR",
+          success=is_successful_lidR,
+          start_time =  start_time_lidR,
+          finish_time= finish_time_lidR
+        ),
+        check_results_lidR
+      )
+    )
     
     Sys.sleep(5)
     
@@ -225,19 +249,27 @@ benchmark_run <- function(task_id,
     #stop system monitoring
     MonitoringProcess2$kill()
     
-    cli::cli_alert_success("Finished in {round(finish_time_lasR-start_time_lasR)} sec.")
+    cli::cli_alert_success("Finished in {round(as.numeric(finish_time_lasR-start_time_lasR))} sec.")
     
     is_successful_lasR <- 1
     if(is.character(result_lasR) & length(result_lasR)==1) {
       if(result_lasR == "ERROR") is_successful_lasR <- 0
     }
     
-    return(list(
-      tool = "lasR",
-      success=is_successful_lasR,
-      start_time =  start_time_lasR,
-      finish_time= finish_time_lasR
-    ))
+    check_results_lasR <- check_results(dir_out)
+    
+    return(
+      c(
+        list(
+          tool = "lasR",
+          success=is_successful_lasR,
+          start_time =  start_time_lasR,
+          finish_time= finish_time_lasR
+        ),
+        check_results_lasR
+      )
+    )
+    
     
     Sys.sleep(5)
   }
@@ -253,6 +285,8 @@ benchmark_run <- function(task_id,
     output_fname3 <- glue("{workstation_id}_{task_id}_{run_id}_lastools")
     
     # fout_results_lastools <- file.path(reports_path, paste0(output_fname3,".csv"))
+    # 
+    # if(!file.exists(fout_results_lastools)) {
     
     #reset output dir
     dir_out_reset(dir_out)
@@ -281,58 +315,104 @@ benchmark_run <- function(task_id,
     #stop system monitoring
     MonitoringProcess3$kill()
     
-    cli::cli_alert_success("Finished in {round(finish_time_lastools-start_time_lastools)} sec.")
-
+    cli::cli_alert_success("Finished in {round(as.numeric(finish_time_lastools-start_time_lastools))} sec.")
+    
     is_successful_lastools <- 1
     if(is.character(result_lastools) & length(result_lastools)==1) {
       if(result_lastools == "ERROR") is_successful_lastools <- 0
     }
     
-    return(list(
-      tool = "lastools",
-      success = is_successful_lastools,
-      start_time =  start_time_lastools,
-      finish_time= finish_time_lastools
-    ))
+    check_results_lastools <- check_results(dir_out)
+    
+    O <-     
+      c(
+        list(
+          tool = "lastools",
+          success = is_successful_lastools,
+          start_time =  start_time_lastools,
+          finish_time= finish_time_lastools
+        ),
+        check_results_lastools
+      )
+    
+    
+    return(O)
+    
     
     Sys.sleep(5)
-    
   }
+  
+  ######
   
   benchmark_lidR_result <- benchmark_lasR_result <- benchmark_lastools_result <- NA
   
-  if(run_lidR) benchmark_lidR_result <- benchmark_run_lidR(task_call_lidR = benchmark_tasks_current$task_call_lidR)
-  if(run_lasR) benchmark_lasR_result <- benchmark_run_lasR(task_call_lasR = benchmark_tasks_current$task_call_lasR)
-  if(run_lastools) benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools)
-  
-  # return(benchmark_lidR_result)
-  output <- 
-    bind_rows(
-      as_tibble(X$benchmark_lidR_result),
-      as_tibble(X$benchmark_lasR_result),
-      as_tibble(X$benchmark_lastools_result)
-    ) %>% 
-    mutate(task_id=task_id,
-           run_id = run_id,
-           cores = cores) %>%
+  common_output <- 
+    tibble(
+    task_id=task_id,
+    run_id = run_id,
+    cores = cores) %>%
     bind_cols(
-      as_tibble(sys),
-      as_tibble(d_info)
-      
+          as_tibble(sys),
+          as_tibble(d_info)
     )
   
-  return(output)
-    # list(
-    #   task_id = task_id,
-    #   run_id = run_id,
-    #   cores = cores,
-    #   benchmark_lidR_result=benchmark_lidR_result,
-    #   benchmark_lasR_result=benchmark_lasR_result,
-    #   benchmark_lastools_result=benchmark_lastools_result,
-    #   sys = sys,
-    #   d_info = d_info
-    # )
+  if(run_lidR) {
+    f_results <- glue::glue("{reports_path}/{output_fname_lidR}.csv")
+    if(!file.exists(f_results)) {
+      benchmark_lidR_result <- benchmark_run_lidR(task_call_lidR = benchmark_tasks_current$task_call_lidR)  
+      R <- bind_cols(benchmark_lidR_result, common_output)
+      write.csv(R, file = f_results)
+      
+    } else {
+      cli::cli_warn(glue::glue("Output already exist: {f_results}"))
+    }
+  }
   
+  if(run_lasR) {
+    f_results <- glue::glue("{reports_path}/{output_fname_lasR}.csv")
+    if(!file.exists(f_results)) {
+      benchmark_lasR_result <- benchmark_run_lasR(task_call_lasR = benchmark_tasks_current$task_call_lasR) 
+      R <- bind_cols(benchmark_lasR_result, common_output)
+      write.csv(R, file = f_results)
+      
+    } else {
+      cli::cli_warn(glue::glue("Output already exist: {f_results}"))
+    }
+  }
+  
+  if(run_lastools) {
+    f_results <- glue::glue("{reports_path}/{output_fname_lastools}.csv")
+    if(!file.exists(f_results)) {
+      benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools)
+      R <- bind_cols(benchmark_lastools_result, common_output)
+      write.csv(R, file = f_results)
+      
+    } else {
+      cli::cli_warn(glue::glue("Output already exist: {f_results}"))
+    }
+  }
+  
+  
+  # if(run_lasR) benchmark_lasR_result <- benchmark_run_lasR(task_call_lasR = benchmark_tasks_current$task_call_lasR)
+  # if(run_lastools) benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools)
+  
+  # # return(benchmark_lidR_result)
+  # output <- 
+  #   bind_rows(
+  #     as_tibble(benchmark_lidR_result),
+  #     as_tibble(benchmark_lasR_result),
+  #     as_tibble(benchmark_lastools_result)
+  #   ) %>% 
+  #   mutate(task_id=task_id,
+  #          run_id = run_id,
+  #          cores = cores) %>%
+  #   bind_cols(
+  #     as_tibble(sys),
+  #     as_tibble(d_info)
+  #     
+  #   )
+  # 
+  # return(output)
   
 }
 
