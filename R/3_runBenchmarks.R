@@ -8,7 +8,8 @@ source("R/1_functions.R")
 
 # B <-  benchmark_combinations %>% filter(run_id == "ALS_1000_1_12_SSD_SSD", task_id == "pixel_metrics_1")
 B <-  benchmark_combinations %>% filter(task_id == "pixel_metrics_1")
-
+B <-  B %>% 
+    filter(!grepl("_50_|_40_",run_id))
 
 
 

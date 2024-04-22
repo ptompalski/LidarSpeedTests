@@ -108,7 +108,7 @@ benchmark_run <- function(task_id,
                           benchmark_tasks, 
                           benchmark_runs) {
   
-  cli::cli_alert_info("Benchmark run started: {task_id}, {run_id}")
+  cli::cli_h1("Benchmark run started: {task_id}, {run_id}")
   
   #get task calls based on task id
   benchmark_tasks_current  <- benchmark_tasks[benchmark_tasks$task_id==task_id,]
@@ -143,7 +143,7 @@ benchmark_run <- function(task_id,
   # function to run lidR call
   benchmark_run_lidR <- function(task_call_lidR) {
     
-    cli::cli_h1("Running lidR")
+    cli::cli_h2("Running lidR")
     
     #reset output dir
     dir_out_reset(dir_out)
@@ -214,7 +214,7 @@ benchmark_run <- function(task_id,
   #function to run lasR 
   benchmark_run_lasR <- function(task_call_lasR) {
     
-    cli::cli_h1("Running lasR")
+    cli::cli_h2("Running lasR")
     
     #reset output dir
     dir_out_reset(dir_out)
@@ -279,7 +279,7 @@ benchmark_run <- function(task_id,
   #function to run lastools
   benchmark_run_lastools <- function(task_call_lastools) {
     
-    cli::cli_h1("Running lastools")
+    cli::cli_h2("Running lastools")
     
     #filename for system monitoring log
     output_fname3 <- glue("{workstation_id}_{task_id}_{run_id}_lastools")
