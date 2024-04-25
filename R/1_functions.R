@@ -177,7 +177,7 @@ benchmark_run <- function(task_id,
     finish_time_lidR <- Sys.time()
     
     #display time elapsed
-    cli::cli_alert_success("Finished in {round(as.numeric(finish_time_lidR-start_time_lidR))} sec.")
+    cli::cli_alert_success("Finished in {finish_time_lidR-start_time_lidR} sec.")
     
     # record if run was successful
     is_successful_lidR <- 1
@@ -249,7 +249,7 @@ benchmark_run <- function(task_id,
     #stop system monitoring
     MonitoringProcess2$kill()
     
-    cli::cli_alert_success("Finished in {round(as.numeric(finish_time_lasR-start_time_lasR))} sec.")
+    cli::cli_alert_success("finish_time_lasR-start_time_lasR} sec.")
     
     is_successful_lasR <- 1
     if(is.character(result_lasR) & length(result_lasR)==1) {
@@ -315,7 +315,7 @@ benchmark_run <- function(task_id,
     #stop system monitoring
     MonitoringProcess3$kill()
     
-    cli::cli_alert_success("Finished in {round(as.numeric(finish_time_lastools-start_time_lastools))} sec.")
+    cli::cli_alert_success("Finished in {finish_time_lastools-start_time_lastools} sec.")
     
     is_successful_lastools <- 1
     if(is.character(result_lastools) & length(result_lastools)==1) {

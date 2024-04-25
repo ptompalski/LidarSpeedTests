@@ -44,8 +44,9 @@ benchmark_settings <- list(
     ),
   
   
-  # cores =  c(1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40) ,
-  cores =  c(1, 2, seq(4, parallel::detectCores(), 4 )) ,
+  # cores =  c(1, 2, 4, 8, 16, 32) ,
+  cores =  c(1, 2, 4, seq(8, parallel::detectCores(), 8 )),
+  # cores =  c(1, 2, seq(4, parallel::detectCores(), 4 )) ,
   
   #subfolder with original point cloud (i.e. not normalized)
   datasets_org = c(
