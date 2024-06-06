@@ -7,7 +7,7 @@ dir_out_reset <- function(dir_out) {
 system_info <- function(lastools_path) {
   
   system_details <- 
-    benchmarkme::get_sys_details(byte_compiler = F, 
+    get_sys_details(byte_compiler = F, 
                                  linear_algebra = F, 
                                  machine = F)
   
@@ -38,7 +38,7 @@ system_info <- function(lastools_path) {
     release = system_details$sys_info$release,
     cpu = cpu_info$model_name,
     cpu_threads = cpu_info$no_of_cores,
-    ram = benchmarkme::get_ram(),
+    ram = get_ram(),
     Rversion = R.version.string,
     lidR_version = lidR_version,
     lasR_version = lasR_version,
@@ -421,3 +421,5 @@ benchmark_run <- function(task_id,
 
 
 
+
+# exec(pipeline = rasterize(20, stdmetrics_z(Z), ofile = fout), on = f, progress=TRUE)

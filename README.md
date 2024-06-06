@@ -33,19 +33,22 @@ benchmarks several tools to guide these decisions.
 
 ## Input Data
 
-The benchmark uses a 10 x 10 km subset of ALS data acquired in Ontario,
-Canada. The dataset is divided into 1 x 1 km tiles (100 tiles in total).
-This dataset is freely available, with URLs and tile extents provided in
-the `ALS_tiles.gpkg` file.
+The benchmark uses a subset of ALS data acquired over the Peatawawa
+research forest located in in Ontario, Canada. The dataset is divided
+into 1 x 1 km tiles (100 tiles in total). This dataset is freely
+available and can be downloaded from
+<https://opendata.nfis.org/mapserver/PRF.html>.
 
 ![](graphics/data.png)
 
-The selection of this particular dataset was driven by its exceptionally
-high point density, approximately 60 pts/m2. To facilitate a
+The average point density of the dataset is 13.6 pts/m². To facilitate a
 comprehensive analysis, the original dataset was systematically reduced
-to create variants with different densities: 1, 2, 5, 10, 20, 30, 40,
-and 50 pts/m2. Benchmarks were conducted across these modified datasets
-to assess performance at varying point densities.
+to create variants with different densities: 1, 2, 5, 10. To simulate
+dataset with higher point density, the data was artificially densified
+by duplicating and then introducing a random noise to a subset of
+points. This procedure was used to generate datasets with densities of
+20, and 50 pts/m². Benchmarks were conducted across these modified
+datasets to assess performance at varying point densities.
 
 ![](graphics/data_density_crossections.png)
 
@@ -82,3 +85,31 @@ respectively.
 # Results
 
 in progress
+
+### Generate DEM
+
+![](graphics/result_generate_DEM_W-VIC-A127816_v2.png)
+
+### Genenerate DSM
+
+![](graphics/result_generate_DSM1_W-VIC-A127816_v2.png)
+
+![](graphics/result_generate_DSM2_W-VIC-A127816_v2.png)
+
+### Normalization
+
+![](graphics/result_normalization_W-VIC-A127816_v2.png)
+
+### Pixel metrics
+
+#### Single metric
+
+![](graphics/result_pixel_metrics_1a_W-VIC-A127816_v2.png)
+
+#### Multiple metrics
+
+![](graphics/result_pixel_metrics_2_W-VIC-A127816_v2.png)
+
+### Detecting treetops
+
+![](graphics/result_tree_detection_W-VIC-A127816_v2.png)

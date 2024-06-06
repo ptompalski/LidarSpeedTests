@@ -6,16 +6,23 @@ source("R/1_functions.R")
 # Before running the benchmark a subset of the `benchmark_combinations` can be created
 
 #e.g. single task only
-B <-  benchmark_combinations %>% filter(task_id == "pixel_metrics_1")
-B <-  benchmark_combinations %>% filter(task_id == "normalization")
+B <- benchmark_combinations 
+# B <- benchmark_combinations %>% filter(task_id == "generate_DEM")
+# B <-  benchmark_combinations %>% filter(task_id == "pixel_metrics_1")
+#B <-  benchmark_combinations %>% filter(task_id == "normalization")
 
 #e.g. exclude datasets with 40 and 50 pts/m2
-#B <-  B %>% filter(!grepl("_50_|_40_",run_id))
+# B <-  B %>% filter(!grepl("1000_20|1000_30|1000_40|1000_50",run_id))
 
 #exclude runs with 1 or  2 cores
-B <- B %>% filter(!grepl("_1_S|_2_S",run_id)) 
+# B <- B %>% filter(!grepl("_1_S|_2_S",run_id))
+# B <- B %>% filter(run_id == "ALS_1000_1_4_SSD_SSD")
 
+# B <- B %>% filter(run_id == "ALS_1000_10_sort2_4_SSD_SSD")
+# B <- B %>% filter(grepl("_s_",run_id))
 
+#randomize order 
+# B <- B[sample(1:nrow(B)), ] 
 
 #loop over all benchmark_combinations
 for (i in 1:nrow(B)) {
@@ -29,4 +36,8 @@ for (i in 1:nrow(B)) {
   
 }
 
+
+
+# task_id <- "generate_DEM"
+# run_id <- "ALS_1000_1_1_SSD_SSD"
 
