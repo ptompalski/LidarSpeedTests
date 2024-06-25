@@ -116,7 +116,12 @@ in progress
 
 ## Influence of tile size
 
-![](graphics/byTileSize.png)
+This benchmark was aimed to evaluate the influence of the tile size on
+processing time. In addition to the 1000 m tile size used in all
+standard benchmark runs, three additional sizes were tested: 200, 500,
+and 2000 m.
+
+![](graphics/byTileSize.png) ![](graphics/byTileSizeRel.png)
 
 ## Influence of drive/storage type
 
