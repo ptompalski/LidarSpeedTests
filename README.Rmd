@@ -117,3 +117,20 @@ in progress
 ### Detecting treetops
 
 ![](graphics/result_tree_detection_W-VIC-A127816_v2.png)
+
+
+## Influence of tile size
+
+
+![](graphics/byTileSize.png)
+
+
+## Influence of drive/storage type
+
+This benchmark was aimed to evaluate the influence of drive configuration on processing time. The benchmark involved reading data from a drive, processing it, and then saving the processed data (`normalization` task was used for this purpose). Two types of drives were tested: an internal SSD and a network folder on a server. Four distinct configurations were assessed: reading and writing both from the SSD (`SSD_SSD`), reading from the SSD and writing to the network folder (`SSD_NET`), reading from the network folder and writing to the SSD (`NET_SSD`), and reading and writing both from the network folder (`NET_NET`). 
+
+
+![](graphics/byDrives.png)
+
+
+![](graphics/byDrivesRel.png)
