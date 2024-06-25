@@ -75,15 +75,18 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 - Digital Terrain Model (DTM) generation
 - Height normalization
 - Point cloud metrics calculation (two scenarios: single metric, multiple metrics)
-- ...
 
-### Complex Tasks
+
+### Complex Tasks (in progress)
 - a workflow consisting of the following tasks: Generate DTM, normalize heights, and calculate metrics.
 - ...
 
-# Results
+### Additional benchmarks:
+- Influence of tile size on processing time
+- Influence of drive configuration on processing time
 
-in progress
+
+# Results
 
 ### Generate DEM
 

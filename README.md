@@ -74,17 +74,19 @@ respectively.
 - Height normalization
 - Point cloud metrics calculation (two scenarios: single metric,
   multiple metrics)
-- …
 
-### Complex Tasks
+### Complex Tasks (in progress)
 
 - a workflow consisting of the following tasks: Generate DTM, normalize
   heights, and calculate metrics.
 - …
 
-# Results
+### Additional benchmarks:
 
-in progress
+- Influence of tile size on processing time
+- Influence of drive configuration on processing time
+
+# Results
 
 ### Generate DEM
 
