@@ -106,19 +106,31 @@ respectively.
 
 ### Normalization
 
+> [!NOTE]  
+> Bizzare results for `lasR` - reruning and investigating.
+
 ![](graphics/result_normalization_W-VIC-A127816_v2.png)
 
 ### Pixel metrics
 
 #### Single metric
 
+> [!NOTE]  
+> Bizzare results for `lasR` - reruning and investigating.
+
 ![](graphics/result_pixel_metrics_1a_W-VIC-A127816_v2.png)
 
 #### Multiple metrics
 
+> [!NOTE]  
+> Benchmark needs to be re-designed to make the results comparable. 
+
 ![](graphics/result_pixel_metrics_2_W-VIC-A127816_v2.png)
 
 ### Detecting treetops
+
+> [!NOTE]  
+> Bizzare results for `lasR` - reruning and investigating.
 
 ![](graphics/result_tree_detection_W-VIC-A127816_v2.png)
 
