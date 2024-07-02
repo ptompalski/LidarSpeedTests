@@ -31,6 +31,12 @@ knitr::opts_chunk$set(
 ```
   
 # LidarSpeedTests
+
+```{=gfm}
+> [!IMPORTANT]  
+> This is an ongoing work and the results may contain errors.
+```
+
 This repository is dedicated to evaluating the performance of various point cloud processing tools in handling typical airborne laser scanning (ALS) data processing tasks. The goal is to provide users with comparative insights into processing time, CPU, RAM, and disk usage across different tools and configurations. More importantly, benchmark results could help decide which processing parameters are most optimal given the dataset and workstation characteristics. 
 
 
@@ -87,6 +93,12 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 
 
 # Results
+
+```{=gfm}
+> [!IMPORTANT]  
+> Work in progress. Benchmarks need to be updated using the newest version of the `lasR` package.
+```
+
 
 ### Generate DEM
 

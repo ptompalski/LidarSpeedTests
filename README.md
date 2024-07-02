@@ -3,6 +3,9 @@
 
 # LidarSpeedTests
 
+> [!IMPORTANT]  
+> This is an ongoing work and the results may contain errors.
+
 This repository is dedicated to evaluating the performance of various
 point cloud processing tools in handling typical airborne laser scanning
 (ALS) data processing tasks. The goal is to provide users with
@@ -87,6 +90,9 @@ respectively.
 - Influence of drive configuration on processing time
 
 # Results
+
+> [!IMPORTANT]  
+> Work in progress. Benchmarks need to be updated using the newest version of the `lasR` package.
 
 ### Generate DEM
 
