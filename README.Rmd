@@ -115,12 +115,8 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 
 ### Normalization 
 
-```{=gfm}
-> [!NOTE]  
-> Bizzare results for `lasR` - reruning and investigating.
-```
 
-![](graphics/result_normalization_W-VIC-A127816_v2.png)
+![](graphics/result_normalization_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
 
 ### Pixel metrics
