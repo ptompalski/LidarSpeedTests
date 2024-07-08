@@ -96,13 +96,13 @@ respectively.
 
 ### Generate DEM
 
-![](graphics/result_generate_DEM_W-VIC-A127816_v2.png)
+![](graphics/result_generate_DEM_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
 ### Genenerate DSM
 
-![](graphics/result_generate_DSM1_W-VIC-A127816_v2.png)
+![](graphics/result_generate_DSM1_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
-![](graphics/result_generate_DSM2_W-VIC-A127816_v2.png)
+![](graphics/result_generate_DSM2_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
 ### Normalization
 
@@ -112,24 +112,17 @@ respectively.
 
 #### Single metric
 
-> [!NOTE]  
-> Bizzare results for `lasR` - reruning and investigating.
-
-![](graphics/result_pixel_metrics_1a_W-VIC-A127816_v2.png)
+![](graphics/result_pixel_metrics_1a_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
 #### Multiple metrics
 
 > [!NOTE]  
-> Benchmark needs to be re-designed to make the results comparable. 
-
-![](graphics/result_pixel_metrics_2_W-VIC-A127816_v2.png)
+> > Work in progress
 
 ### Detecting treetops
 
 > [!NOTE]  
-> Bizzare results for `lasR` - reruning and investigating.
-
-![](graphics/result_tree_detection_W-VIC-A127816_v2.png)
+> Work in progress
 
 ## Influence of tile size
 

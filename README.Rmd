@@ -2,8 +2,7 @@
 output: 
   github_document:
     toc: false
-    fig_width: 7
-    fig_height: 5
+
 ---
   
   <!-- README.md is generated from README.Rmd. Please edit that file -->
@@ -102,15 +101,15 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 
 ### Generate DEM
 
-![](graphics/result_generate_DEM_W-VIC-A127816_v2.png)
+![](graphics/result_generate_DEM_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
 
 ### Genenerate DSM 
 
-![](graphics/result_generate_DSM1_W-VIC-A127816_v2.png)
+![](graphics/result_generate_DSM1_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
 
-![](graphics/result_generate_DSM2_W-VIC-A127816_v2.png)
+![](graphics/result_generate_DSM2_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
 
 ### Normalization 
@@ -123,31 +122,27 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 
 #### Single metric
 
-```{=gfm}
-> [!NOTE]  
-> Bizzare results for `lasR` - reruning and investigating.
-```
 
-![](graphics/result_pixel_metrics_1a_W-VIC-A127816_v2.png)
+![](graphics/result_pixel_metrics_1a_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
 
 #### Multiple metrics
 
 ```{=gfm}
 > [!NOTE]  
-> Benchmark needs to be re-designed to make the results comparable. 
+> > Work in progress
 ```
 
-![](graphics/result_pixel_metrics_2_W-VIC-A127816_v2.png)
+
 
 
 ### Detecting treetops
 
 ```{=gfm}
 > [!NOTE]  
-> Bizzare results for `lasR` - reruning and investigating.
+> Work in progress
 ```
 
-![](graphics/result_tree_detection_W-VIC-A127816_v2.png)
+
 
 
 ## Influence of tile size
