@@ -93,11 +93,6 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 
 # Results
 
-```{=gfm}
-> [!IMPORTANT]  
-> Work in progress. Benchmarks need to be updated using the newest version of the `lasR` package.
-```
-
 
 ### Generate DEM
 
@@ -127,11 +122,8 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 
 #### Multiple metrics
 
-```{=gfm}
-> [!NOTE]  
-> > Work in progress
-```
 
+![](graphics/result_pixel_metrics_2_W-VIC-A127816_lidR_4.1.1_lasR_0.7.2_lastools_240402.svg)
 
 
 

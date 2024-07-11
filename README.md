@@ -91,9 +91,6 @@ respectively.
 
 # Results
 
-> [!IMPORTANT]  
-> Work in progress. Benchmarks need to be updated using the newest version of the `lasR` package.
-
 ### Generate DEM
 
 ![](graphics/result_generate_DEM_W-VIC-A127816_lidR_4.1.1_lasR_0.7.1_lastools_240402.svg)
@@ -116,8 +113,7 @@ respectively.
 
 #### Multiple metrics
 
-> [!NOTE]  
-> > Work in progress
+![](graphics/result_pixel_metrics_2_W-VIC-A127816_lidR_4.1.1_lasR_0.7.2_lastools_240402.svg)
 
 ### Detecting treetops
 

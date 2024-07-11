@@ -1,5 +1,5 @@
 # install.packages('lasR', repos = 'https://r-lidar.r-universe.dev')
-# remotes::install_github("r-lidar/lidR") #doesn't work, permission denied
+
 library(lidR)
 library(fs)
 library(sf)
@@ -9,10 +9,13 @@ library(lasR)
 library(callr)  
 library(glue)
 library(benchmarkme)
+library(magrittr)
+
+clrs <- c("#4575b4", "#41ab5d", "#ffbc42")
+names(clrs) <- c("lasR", "lidR", "lastools")
 
 
 # PATHS, SETTINGS, TASKS
-
 lastools_path <- "C:/LAStools/bin"
 
 #benchmark results will be saved to:
@@ -23,7 +26,6 @@ system_monitoring_path <- "system_monitoring"
 
 #workstation id
 workstation_id <- Sys.info()[4]
-
 
 
 geomSeries <- function(base, max) {
@@ -56,11 +58,6 @@ benchmark_settings <- list(
   
   #subfolder with original point cloud (i.e. not normalized)
   datasets_org = c(
-    # ALS_1000_1 = "benchmark_data2/1_org/tile_1000_density_1",
-    # ALS_1000_2 = "benchmark_data2/1_org/tile_1000_density_2",
-    # ALS_1000_5 = "benchmark_data2/1_org/tile_1000_density_5",
-    # ALS_1000_10 = "benchmark_data2/1_org/tile_1000_density_10",
-    
     ALS_1000_1 = "benchmark_data2/1_org2/tile_1000_density_1",
     ALS_1000_2 = "benchmark_data2/1_org2/tile_1000_density_2",
     ALS_1000_5 = "benchmark_data2/1_org2/tile_1000_density_5",
@@ -68,33 +65,11 @@ benchmark_settings <- list(
     ALS_1000_20 = "benchmark_data2/1_org2/tile_1000_density_20"
     # ALS_1000_50 = "benchmark_data2/1_org2/tile_1000_density_50"
     
-    # ALS_1000_10_optim = "benchmark_data/1_org/tile_1000_density_10_optim",
-    # ALS_1000_10_sort = "benchmark_data/1_org/tile_1000_density_10_sort",
-    # ALS_1000_10_sort2 = "benchmark_data/1_org/tile_1000_density_10_sort_2",
-    # ALS_1000_20 = "benchmark_data/1_org/tile_1000_density_20",
-    # ALS_1000_30 = "benchmark_data/1_org/tile_1000_density_30",
-    # ALS_1000_40 = "benchmark_data/1_org/tile_1000_density_40",
-    # ALS_1000_50 = "benchmark_data/1_org/tile_1000_density_50"
-    # ALS2012="prf_harmonized_data/2012_ALS/2_tiled/",
-    # ALS2005="prf_harmonized_data/2005_ALS_CGVD28/2_tiled",
-    # ALS2018="prf_harmonized_data/2018_SPL_CGVD28/2_tiled_adjusted"
     ), 
   
-  #subfolder with normalized point clouds 
+  #subfolder with normalized point clouds, currently not used
   datasets_norm = c(
-    ALS_1000_1 = "benchmark_data/2_norm/tile_1000_density_1",
-    ALS_1000_2 = "benchmark_data/2_norm/tile_1000_density_2",
-    ALS_1000_5 = "benchmark_data/2_norm/tile_1000_density_5",
-    ALS_1000_10 = "benchmark_data/2_norm/tile_1000_density_10",
-    ALS_1000_20 = "benchmark_data/2_norm/tile_1000_density_20",
-    ALS_1000_30 = "benchmark_data/2_norm/tile_1000_density_30",
-    ALS_1000_40 = "benchmark_data/2_norm/tile_1000_density_40",
-    ALS_1000_50 = "benchmark_data/2_norm/tile_1000_density_50"
-    # ALS2012="prf_harmonized_data/2012_ALS/3_tiled_norm/",
-    # ALS2005="prf_harmonized_data/2005_ALS_CGVD28/3_tiled_norm",
-    # ALS2018="prf_harmonized_data/2018_SPL_CGVD28/3_tiled_norm"
     )
-  
 )
 
 
@@ -117,27 +92,20 @@ benchmark_tasks <-
     "datasets_org",
     "laz",
     
-    # "pixel_metrics_1", 
-    # "Pixel metrics (simple)",
-    # "lidR::pixel_metrics(las = ctg, ~max(Z), res = 20)", 
-    # "ans = exec(pipeline = rasterize(20, 'max', ofile = fout), on = f, progress=TRUE)", 
-    # "lascanopy -i {f_lastools} -max -odir {dir_out} -otif -cores {cores} -buffered 20", 
-    # "datasets_norm",
-    # "tif",
-    
     "pixel_metrics_1a", 
     "Pixel metrics (simple)",
     "lidR::pixel_metrics(las = ctg, ~mean(Z), res = 20)", 
-    "ans = exec(pipeline = rasterize(20, 'zmean', ofile = fout), on = f, progress=TRUE)", 
+    "ans = exec(pipeline = rasterize(20, 'z_mean', ofile = fout), on = f, progress=TRUE)",
     "lascanopy -i {f_lastools} -step 20 -avg -odir {dir_out} -otif -cores {cores} -buffered 20", 
     "datasets_org",
     "tif",
     
+    
     "pixel_metrics_2", 
     "Pixel metrics (complex)",
-    "pixel_metrics(las = ctg, ~stdmetrics_z(Z), res = 20)", 
-    "exec(pipeline = rasterize(20, stdmetrics_z(Z), ofile = fout), on = f, progress=TRUE)", 
-    "lascanopy -i {f_lastools} -max -avg -std -ske -kur -cov -b 10 20 30 40 50 60 70 80 90 -p 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 -odir {dir_out} -otif -cores {cores} -buffered 20", 
+    "pixel_metrics(las = ctg, ~metrics_multiple(Z), res = 20)", 
+    "exec(pipeline = rasterize(20, c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95'), ofile = fout), on = f, progress=TRUE)", 
+    "lascanopy -i {f_lastools} -max -avg -std -cov -p 5 25 50 75 95 -odir {dir_out} -otif -cores {cores} -buffered 20", 
     "datasets_org",
     "tif",
     
@@ -149,7 +117,7 @@ benchmark_tasks <-
     "datasets_org",
     "tif",
     
-    "generate_DSM1", #rasterizing, no interpolation
+    "generate_DSM1", #rasterizing highest point, no interpolation
     "Generate DSM (rasterize highest)",
     "rasterize_canopy(ctg, res = 1, algorithm = p2r())", 
     "exec(pipeline = chm(1, tin=FALSE, ofile = fout), on = f, progress=TRUE)", 
@@ -169,7 +137,7 @@ benchmark_tasks <-
     "Detect treetops",
     "ttops <- locate_trees(ctg, lmf(ws = 5))",
     "exec(pipeline = local_maximum(5), on = f, progress=TRUE)",
-    "",
+    "", #not possible with lastools
     "datasets_org",
     ""
     
@@ -177,11 +145,6 @@ benchmark_tasks <-
     
     
   )
-
-#other tasks to add:
-# - generate DTM
-# - generate CHM (simple max per pixel, based on tin?) #this is somewhat similar to dtm (when tin used) or pixel metrics max - simple rasterization
-# lidR::rasterize_terrain
 
 
 

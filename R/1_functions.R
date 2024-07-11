@@ -1,15 +1,41 @@
+metrics_multiple <- function(z) {
+  
+  #function to generate the following set of metrics using lidR
+  # c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95')
+  
+  zmax <- max(z)
+  zmean <- mean(z)
+  zsd <- stats::sd(z)
+  probs <- c(0.05, 0.25, 0.50, 0.75, 0.95)#seq(0.05, 0.95, 0.05)
+  zq <- as.list(stats::quantile(z, probs))
+  names(zq) <- paste0("zq", probs * 100)
+  
+  n <- length(z)
+  pzabove2 <- lidR:::fast_countover(z, 2)/n * 100
+  
+  m <- list(
+    zmax=zmax,
+    zmean=zmean,
+    zsd = zsd,
+    pzabove2 =pzabove2
+  )
+  
+  return(c(m,zq))
+}
+
+
 dir_out_reset <- function(dir_out) {
   if(dir.exists(dir_out)) fs::dir_delete(dir_out)
   fs::dir_create(dir_out)
 }
 
 #gets info about the system, R, and the lidar related packages/software
-system_info <- function(lastools_path) {
+system_info <- function(lastools_path="C:/LAStools/bin") {
   
   system_details <- 
     get_sys_details(byte_compiler = F, 
-                                 linear_algebra = F, 
-                                 machine = F)
+                    linear_algebra = F, 
+                    machine = F)
   
   pkgs <- system_details$installed_packages 
   
@@ -55,7 +81,7 @@ prepare_input <- function(dir_in, dir_out) {
   
   opt_output_files(ctg) <- paste0(dir_out, "/{ORIGINALFILENAME}")
   opt_laz_compression(ctg) <- TRUE
-  opt_progress(ctg) <- TRUE
+  opt_progress(ctg) <- FALSE
   opt_stop_early(ctg) <- FALSE
   
   return(ctg)
@@ -106,7 +132,59 @@ benchmark_run <- function(task_id,
                           run_lasR = T, 
                           run_lastools = T, 
                           benchmark_tasks, 
-                          benchmark_runs) {
+                          benchmark_runs,
+                          force_rerun_lidR = F,
+                          force_rerun_lasR = F,
+                          force_rerun_lastools = F,
+                          sysinfo
+) {
+  
+  
+  
+  system_info <- function(lastools_path="C:/LAStools/bin") {
+    
+    system_details <- 
+      get_sys_details(byte_compiler = F, 
+                      linear_algebra = F, 
+                      machine = F)
+    
+    pkgs <- system_details$installed_packages 
+    
+    #get lidR, lasR, and lastools versions (if installed)
+    lidR_version <- lasR_version <- lastools_version <- NA
+    
+    if("lidR" %in% pkgs[,1]) {
+      lidR_version <- pkgs[which(pkgs[,1]=="lidR"),3]
+    } 
+    
+    if("lasR" %in% pkgs[,1]) {
+      lasR_version <- pkgs[which(pkgs[,1]=="lasR"),3]
+    } 
+    
+    # lastools_path <- "C:/LAStools/bin"
+    if(dir.exists(lastools_path)) {
+      a <- system(paste0(lastools_path,"/las2las.exe -version"), intern = T)  
+      lastools_version <- as.numeric(gsub("\\D", "", a))
+    }
+    
+    cpu_info <- benchmarkme::get_cpu()
+    
+    output <- list(
+      nodename = system_details$sys_info$nodename,
+      sysname = system_details$sys_info$sysname,
+      release = system_details$sys_info$release,
+      cpu = cpu_info$model_name,
+      cpu_threads = cpu_info$no_of_cores,
+      ram = get_ram(),
+      Rversion = R.version.string,
+      lidR_version = lidR_version,
+      lasR_version = lasR_version,
+      lastools_version=lastools_version
+    )
+    
+    return(output)
+  }
+  
   
   cli::cli_h1("Benchmark run started: {task_id}, {run_id}")
   
@@ -125,7 +203,7 @@ benchmark_run <- function(task_id,
   dir_out <- benchmark_runs_current$dir_out
   
   #system info
-  sys <- system_info(lastools_path = lastools_path)
+  sys <- sysinfo
   
   # prepare input
   ctg <- prepare_input(dir_in = dir_in, dir_out = dir_out)
@@ -136,11 +214,12 @@ benchmark_run <- function(task_id,
   d_info <- benchmark_ALS_info(ctg, dir_in = dir_in)
   
   #output file names
-  output_fname_lidR <- glue("{workstation_id}_{task_id}_{run_id}_lidR")
-  output_fname_lasR <- glue("{workstation_id}_{task_id}_{run_id}_lasR")
-  output_fname_lastools <- glue("{workstation_id}_{task_id}_{run_id}_lastools")
+  output_fname_lidR <- glue("{workstation_id}_{task_id}_{run_id}_{sys$lidR_version}_lidR")
+  output_fname_lasR <- glue("{workstation_id}_{task_id}_{run_id}_{sys$lasR_version}_lasR")
+  output_fname_lastools <- glue("{workstation_id}_{task_id}_{run_id}_{sys$lastools_version}_lastools")
   
-  # function to run lidR call
+  
+  # function to exec lidR call
   benchmark_run_lidR <- function(task_call_lidR) {
     
     cli::cli_h2("Running lidR")
@@ -211,7 +290,7 @@ benchmark_run <- function(task_id,
   
   
   
-  #function to run lasR 
+  #function to exec lasR 
   benchmark_run_lasR <- function(task_call_lasR) {
     
     cli::cli_h2("Running lasR")
@@ -220,6 +299,7 @@ benchmark_run <- function(task_id,
     dir_out_reset(dir_out)
     
     #set parallel strategy (note: more strategies need to be tested)
+    unset_parallel_strategy() 
     set_parallel_strategy(concurrent_files(ncores = cores))
     
     #filename for system monitoring log
@@ -249,7 +329,7 @@ benchmark_run <- function(task_id,
     #stop system monitoring
     MonitoringProcess2$kill()
     
-    cli::cli_alert_success("finish_time_lasR-start_time_lasR} sec.")
+    cli::cli_alert_success("{finish_time_lasR-start_time_lasR} sec.")
     
     is_successful_lasR <- 1
     if(is.character(result_lasR) & length(result_lasR)==1) {
@@ -276,17 +356,13 @@ benchmark_run <- function(task_id,
   
   
   
-  #function to run lastools
+  #function to exec lastools
   benchmark_run_lastools <- function(task_call_lastools) {
     
     cli::cli_h2("Running lastools")
     
     #filename for system monitoring log
     output_fname3 <- glue("{workstation_id}_{task_id}_{run_id}_lastools")
-    
-    # fout_results_lastools <- file.path(reports_path, paste0(output_fname3,".csv"))
-    # 
-    # if(!file.exists(fout_results_lastools)) {
     
     #reset output dir
     dir_out_reset(dir_out)
@@ -344,20 +420,27 @@ benchmark_run <- function(task_id,
   
   ######
   
+  
+  
+  
   benchmark_lidR_result <- benchmark_lasR_result <- benchmark_lastools_result <- NA
   
   common_output <- 
     tibble(
-    task_id=task_id,
-    run_id = run_id,
-    cores = cores) %>%
+      task_id=task_id,
+      run_id = run_id,
+      cores = cores) %>%
     bind_cols(
-          as_tibble(sys),
-          as_tibble(d_info)
+      # as_tibble(sys),
+      sysinfo,
+      as_tibble(d_info)
     )
   
   if(run_lidR) {
     f_results <- glue::glue("{reports_path}/{output_fname_lidR}.csv")
+    
+    if(force_rerun_lidR) file.remove(f_results)
+    
     if(!file.exists(f_results)) {
       benchmark_lidR_result <- benchmark_run_lidR(task_call_lidR = benchmark_tasks_current$task_call_lidR)  
       R <- bind_cols(benchmark_lidR_result, common_output)
@@ -370,6 +453,9 @@ benchmark_run <- function(task_id,
   
   if(run_lasR) {
     f_results <- glue::glue("{reports_path}/{output_fname_lasR}.csv")
+    
+    if(force_rerun_lasR) file.remove(f_results)
+    
     if(!file.exists(f_results)) {
       benchmark_lasR_result <- benchmark_run_lasR(task_call_lasR = benchmark_tasks_current$task_call_lasR) 
       R <- bind_cols(benchmark_lasR_result, common_output)
@@ -382,6 +468,9 @@ benchmark_run <- function(task_id,
   
   if(run_lastools) {
     f_results <- glue::glue("{reports_path}/{output_fname_lastools}.csv")
+    
+    if(force_rerun_lastools) file.remove(f_results)
+    
     if(!file.exists(f_results)) {
       benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools)
       R <- bind_cols(benchmark_lastools_result, common_output)
@@ -392,34 +481,5 @@ benchmark_run <- function(task_id,
     }
   }
   
-  
-  # if(run_lasR) benchmark_lasR_result <- benchmark_run_lasR(task_call_lasR = benchmark_tasks_current$task_call_lasR)
-  # if(run_lastools) benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools)
-  
-  # # return(benchmark_lidR_result)
-  # output <- 
-  #   bind_rows(
-  #     as_tibble(benchmark_lidR_result),
-  #     as_tibble(benchmark_lasR_result),
-  #     as_tibble(benchmark_lastools_result)
-  #   ) %>% 
-  #   mutate(task_id=task_id,
-  #          run_id = run_id,
-  #          cores = cores) %>%
-  #   bind_cols(
-  #     as_tibble(sys),
-  #     as_tibble(d_info)
-  #     
-  #   )
-  # 
-  # return(output)
-  
 }
 
-
-
-
-
-
-
-# exec(pipeline = rasterize(20, stdmetrics_z(Z), ofile = fout), on = f, progress=TRUE)
