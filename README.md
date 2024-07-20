@@ -36,7 +36,7 @@ benchmarks several tools to guide these decisions.
 
 ## Input Data
 
-The benchmark uses a subset of ALS data acquired over the Peatawawa
+The benchmark uses a subset of ALS data acquired over the Petawawa
 research forest located in in Ontario, Canada. The dataset is divided
 into 1 x 1 km tiles (100 tiles in total). This dataset is freely
 available and can be downloaded from
