@@ -54,7 +54,7 @@ Point cloud processing tools offer a range of functionalities, often with overla
 
 ## Input Data
 
-The benchmark uses a subset of ALS data acquired over the Peatawawa research forest located in in Ontario, Canada. The dataset is divided into 1 x 1 km tiles (100 tiles in total). This dataset is freely available and can be downloaded from https://opendata.nfis.org/mapserver/PRF.html.
+The benchmark uses a subset of ALS data acquired over the Petawawa research forest located in in Ontario, Canada. The dataset is divided into 1 x 1 km tiles (100 tiles in total). This dataset is freely available and can be downloaded from https://opendata.nfis.org/mapserver/PRF.html.
 
 ![](graphics/data.png)
 
