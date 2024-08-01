@@ -1,0 +1,17 @@
+{
+  "hash": "7bae9b43591358ed47d2a1a2aab153e2",
+  "result": {
+    "engine": "knitr",
+    "markdown": "---\ntitle: \"CPU and RAM usage\"\nformat: html\nengine: knitr\nlightbox: true\ndate: today\n---\n\n\n\n\n::: {.callout-warning}\nWork in progress - not all results included. \n:::\n\n\n## CPU and RAM usage for a single task\n\n![](graphics/system_usage_combined_CPU-RAM.png)\n\n\n## Average CPU utilization by task\n\n![](graphics/system_usage_CPU.png)\n\n## Average Memory utilization by task\n\n![](graphics/system_usage_RAM.png)",
+    "supporting": [
+      "results_CPU-RAM_files"
+    ],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}

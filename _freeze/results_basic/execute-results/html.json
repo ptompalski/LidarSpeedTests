@@ -1,0 +1,15 @@
+{
+  "hash": "b1353137a08ad5aad5457186074ae1c2",
+  "result": {
+    "engine": "knitr",
+    "markdown": "---\ntitle: \"Results - basic tasks\"\nformat: html\nengine: knitr\nlightbox: true\ndate: today\n---\n\n\n\n\n# Results\n\n\n### Generate DEM\n\n![](graphics/result_generate_DEM_W-VIC-A127816_lidR_4.1.1_lasR_0.9.1_lastools_240402.png)\n\n\n### Genenerate DSM \n\n![](graphics/result_generate_DSM1_W-VIC-A127816.png)\n\n\n![](graphics/result_generate_DSM2_W-VIC-A127816.png)\n\n\n### Normalization \n\n\n![](graphics/result_normalization_W-VIC-A127816.png)\n\n\n### Pixel metrics\n\n#### Single metric\n\n\n![](graphics/result_pixel_metrics_1a_W-VIC-A127816.png)\n\n#### Multiple metrics\n\n\n![](graphics/result_pixel_metrics_2_W-VIC-A127816.png)\n\n\n\n### Detecting treetops\n\n::: {.callout-note}\nWork in progress\n:::\n\n\n",
+    "supporting": [],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}
