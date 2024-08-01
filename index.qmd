@@ -1,12 +1,11 @@
 ---
-output: 
-  github_document:
-    toc: false
-
+title: ""
+format: html
+engine: knitr
+lightbox: true
+date: today
 ---
-  
-  <!-- README.md is generated from README.Rmd. Please edit that file -->
-  
+
 ```{r, echo = FALSE, warning=FALSE, message=FALSE}
 options(digits = 2)
 
@@ -31,10 +30,10 @@ knitr::opts_chunk$set(
   
 # LidarSpeedTests
 
-```{=gfm}
-> [!IMPORTANT]  
-> This is an ongoing work and the results may contain errors.
-```
+
+::: {.callout-warning}
+This is an ongoing work and the results may contain errors.
+:::
 
 This repository is dedicated to evaluating the performance of various point cloud processing tools in handling typical airborne laser scanning (ALS) data processing tasks. The goal is to provide users with comparative insights into processing time, CPU, RAM, and disk usage across different tools and configurations. More importantly, benchmark results could help decide which processing parameters are most optimal given the dataset and workstation characteristics. 
 
@@ -62,14 +61,13 @@ The average point density of the dataset is 13.6 pts/m². To facilitate a compre
 
 ![](graphics/data_density_crossections.png)
 
-
 ## Included Software Packages
 
 So far the benchmark focuses on lidar processing tools available in R (`lidR`, `lasR`), as well as `lastools`.
 
-- `lidR`: https://github.com/r-lidar/lidR 
-- `lasR`: https://github.com/r-lidar/lasR
-- `lastools`: https://rapidlasso.de/product-overview/
+- `lidR`: [github.com/r-lidar/lidR](https://github.com/r-lidar/lidR)
+- `lasR`: [github.com/r-lidar/lasR](https://github.com/r-lidar/lasR)
+- `lastools`: [rapidlasso.de/product-overview](https://rapidlasso.de/product-overview/)
 
 ## Benchmark Tasks
 
@@ -89,68 +87,3 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 ### Additional benchmarks:
 - Influence of tile size on processing time
 - Influence of drive configuration on processing time
-
-
-# Results
-
-
-### Generate DEM
-
-![](graphics/result_generate_DEM_W-VIC-A127816.png)
-
-
-### Genenerate DSM 
-
-![](graphics/result_generate_DSM1_W-VIC-A127816.png)
-
-
-![](graphics/result_generate_DSM2_W-VIC-A127816.png)
-
-
-### Normalization 
-
-
-![](graphics/result_normalization_W-VIC-A127816.png)
-
-
-### Pixel metrics
-
-#### Single metric
-
-
-![](graphics/result_pixel_metrics_1a_W-VIC-A127816.png)
-
-#### Multiple metrics
-
-
-![](graphics/result_pixel_metrics_2_W-VIC-A127816.png)
-
-
-
-### Detecting treetops
-
-```{=gfm}
-> [!NOTE]  
-> Work in progress
-```
-
-
-
-
-## Influence of tile size
-
-This benchmark was aimed to evaluate the influence of the tile size on processing time. In addition to the 1000 m tile size used in all standard benchmark runs, three additional sizes were tested: 200, 500, and 2000 m. 
-
-
-![](graphics/byTileSize.png)
-![](graphics/byTileSizeRel.png)
-
-## Influence of drive/storage type
-
-This benchmark was aimed to evaluate the influence of drive configuration on processing time. The benchmark involved reading data from a drive, processing it, and then saving the processed data (`normalization` task was used for this purpose). Two types of drives were tested: an internal SSD and a network folder on a server. Four distinct configurations were assessed: reading and writing both from the SSD (`SSD_SSD`), reading from the SSD and writing to the network folder (`SSD_NET`), reading from the network folder and writing to the SSD (`NET_SSD`), and reading and writing both from the network folder (`NET_NET`). 
-
-
-![](graphics/byDrives.png)
-
-
-![](graphics/byDrivesRel.png)

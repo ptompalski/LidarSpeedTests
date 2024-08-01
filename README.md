@@ -93,27 +93,27 @@ respectively.
 
 ### Generate DEM
 
-![](graphics/result_generate_DEM_W-VIC-A127816_lidR_4.1.1_lasR_0.9.1_lastools_240402.svg)
+![](graphics/result_generate_DEM_W-VIC-A127816.png)
 
 ### Genenerate DSM
 
-![](graphics/result_generate_DSM1_W-VIC-A127816_lidR_4.1.1_lasR_0.9.1_lastools_240402.svg)
+![](graphics/result_generate_DSM1_W-VIC-A127816.png)
 
-![](graphics/result_generate_DSM2_W-VIC-A127816_lidR_4.1.1_lasR_0.9.1_lastools_240402.svg)
+![](graphics/result_generate_DSM2_W-VIC-A127816.png)
 
 ### Normalization
 
-![](graphics/result_normalization_W-VIC-A127816_lidR_4.1.1_lasR_0.9.1_lastools_240402.svg)
+![](graphics/result_normalization_W-VIC-A127816.png)
 
 ### Pixel metrics
 
 #### Single metric
 
-![](graphics/result_pixel_metrics_1a_W-VIC-A127816_lidR_4.1.1_lasR_0.9.1_lastools_240402.svg)
+![](graphics/result_pixel_metrics_1a_W-VIC-A127816.png)
 
 #### Multiple metrics
 
-![](graphics/result_pixel_metrics_2_W-VIC-A127816_lidR_4.1.1_lasR_0.9.1_lastools_240402.svg)
+![](graphics/result_pixel_metrics_2_W-VIC-A127816.png)
 
 ### Detecting treetops
 
