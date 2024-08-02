@@ -1,5 +1,8 @@
 ---
 title: "Results - basic tasks"
+author:
+  - name: Piotr Tompalski
+    email: piotr.tompalski@nrcan-rncan.gc.ca
 format: html
 engine: knitr
 lightbox: true
@@ -11,7 +14,7 @@ date: today
 
 ### Generate DEM
 
-![](graphics/result_generate_DEM_W-VIC-A127816_lidR_4.1.1_lasR_0.9.1_lastools_240402.png)
+![](graphics/result_generate_DEM_W-VIC-A127816.png)
 
 
 ### Genenerate DSM 

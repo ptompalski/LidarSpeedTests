@@ -1,5 +1,8 @@
 ---
 title: "CPU and RAM usage"
+author:
+  - name: Piotr Tompalski
+    email: piotr.tompalski@nrcan-rncan.gc.ca
 format: html
 engine: knitr
 lightbox: true

@@ -1,6 +1,6 @@
 project:
   type: website
-
+  output-dir: docs
 website:
   title: "LidarSpeedTests"
   repo-url: https://github.com/ptompalski/LidarSpeedTests
@@ -20,6 +20,8 @@ website:
             text: Infulence of tile size and storage type
           - href: results_CPU-RAM.qmd 
             text: CPU and RAM usage
+          - href: results_table.qmd
+            text: All results (tables)
             
       # - href: data.qmd
       #   text: Data
