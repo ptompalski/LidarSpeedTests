@@ -19,12 +19,7 @@ knitr::opts_chunk$set(
   dpi = 300
 )
 
-# library(tidyverse)
-# library(sf)
-# library(rnaturalearth)
-# library(tidyterra)
-# library(patchwork)
-# library(tmap)
+
 
 ```
   
