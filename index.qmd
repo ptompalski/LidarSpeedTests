@@ -76,6 +76,7 @@ Tasks are categorized into 'Simple' and 'Complex' to differentiate between singl
 ### Simple Tasks
 - Ground classification
 - Digital Terrain Model (DTM) generation
+- Canaopy Height model (CHM) generation
 - Height normalization
 - Point cloud metrics calculation (two scenarios: single metric, multiple metrics)
 
