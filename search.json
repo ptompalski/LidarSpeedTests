@@ -21,41 +21,6 @@
     "text": "Influence of drive/storage type\nThis benchmark was aimed to evaluate the influence of drive configuration on processing time. The benchmark involved reading data from a drive, processing it, and then saving the processed data (normalization task was used for this purpose). Two types of drives were tested: an internal SSD and a network folder on a server. Four distinct configurations were assessed: reading and writing both from the SSD (SSD_SSD), reading from the SSD and writing to the network folder (SSD_NET), reading from the network folder and writing to the SSD (NET_SSD), and reading and writing both from the network folder (NET_NET)."
   },
   {
-    "objectID": "results_CPU-RAM.html",
-    "href": "results_CPU-RAM.html",
-    "title": "CPU and RAM usage",
-    "section": "",
-    "text": "Warning\n\n\n\nWork in progress - not all results included."
-  },
-  {
-    "objectID": "results_CPU-RAM.html#cpu-and-ram-usage-for-a-single-task",
-    "href": "results_CPU-RAM.html#cpu-and-ram-usage-for-a-single-task",
-    "title": "CPU and RAM usage",
-    "section": "CPU and RAM usage for a single task",
-    "text": "CPU and RAM usage for a single task"
-  },
-  {
-    "objectID": "results_CPU-RAM.html#average-cpu-utilization-by-task",
-    "href": "results_CPU-RAM.html#average-cpu-utilization-by-task",
-    "title": "CPU and RAM usage",
-    "section": "Average CPU utilization by task",
-    "text": "Average CPU utilization by task"
-  },
-  {
-    "objectID": "results_CPU-RAM.html#average-memory-utilization-by-task",
-    "href": "results_CPU-RAM.html#average-memory-utilization-by-task",
-    "title": "CPU and RAM usage",
-    "section": "Average Memory utilization by task",
-    "text": "Average Memory utilization by task"
-  },
-  {
-    "objectID": "results_basic.html",
-    "href": "results_basic.html",
-    "title": "Results - basic tasks",
-    "section": "",
-    "text": "Results\n\nGenerate DEM\n\n\n\nGenenerate DSM\n\n\n\n\nNormalization\n\n\n\nPixel metrics\n\nSingle metric\n\n\n\nMultiple metrics\n\n\n\n\nDetecting treetops\n\n\n\n\n\n\nNote\n\n\n\nWork in progress"
-  },
-  {
     "objectID": "index.html",
     "href": "index.html",
     "title": "LidarSpeedTests",
@@ -96,5 +61,40 @@
     "title": "LidarSpeedTests",
     "section": "",
     "text": "Tasks are categorized into ‘Simple’ and ‘Complex’ to differentiate between single-step operations and multi-step processing pipelines, respectively.\n\n\n\nGround classification\nDigital Terrain Model (DTM) generation\nCanaopy Height model (CHM) generation\nHeight normalization\nPoint cloud metrics calculation (two scenarios: single metric, multiple metrics)\n\n\n\n\n\na workflow consisting of the following tasks: Generate DTM, normalize heights, and calculate metrics.\n…\n\n\n\n\n\nInfluence of tile size on processing time\nInfluence of drive configuration on processing time"
+  },
+  {
+    "objectID": "results_basic.html",
+    "href": "results_basic.html",
+    "title": "Results - basic tasks",
+    "section": "",
+    "text": "Results\n\nGenerate DEM\n\n\n\nGenenerate DSM\n\n\n\n\nNormalization\n\n\n\nPixel metrics\n\nSingle metric\n\n\n\nMultiple metrics\n\n\n\n\nDetecting treetops\n\n\n\n\n\n\nNote\n\n\n\nWork in progress"
+  },
+  {
+    "objectID": "results_CPU-RAM.html",
+    "href": "results_CPU-RAM.html",
+    "title": "CPU and RAM usage",
+    "section": "",
+    "text": "Warning\n\n\n\nWork in progress - not all results included."
+  },
+  {
+    "objectID": "results_CPU-RAM.html#cpu-and-ram-usage-for-a-single-task",
+    "href": "results_CPU-RAM.html#cpu-and-ram-usage-for-a-single-task",
+    "title": "CPU and RAM usage",
+    "section": "CPU and RAM usage for a single task",
+    "text": "CPU and RAM usage for a single task"
+  },
+  {
+    "objectID": "results_CPU-RAM.html#average-cpu-utilization-by-task",
+    "href": "results_CPU-RAM.html#average-cpu-utilization-by-task",
+    "title": "CPU and RAM usage",
+    "section": "Average CPU utilization by task",
+    "text": "Average CPU utilization by task"
+  },
+  {
+    "objectID": "results_CPU-RAM.html#average-memory-utilization-by-task",
+    "href": "results_CPU-RAM.html#average-memory-utilization-by-task",
+    "title": "CPU and RAM usage",
+    "section": "Average Memory utilization by task",
+    "text": "Average Memory utilization by task"
   }
 ]
