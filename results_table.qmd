@@ -1,0 +1,180 @@
+---
+title: "All results (tables)"
+author:
+  - name: Piotr Tompalski
+    email: piotr.tompalski@nrcan-rncan.gc.ca
+format: html
+engine: knitr
+lightbox: true
+date: today
+---
+
+```{r, echo=FALSE, message=F, warning=F}
+library(tidyverse)
+# library(kableExtra)
+# library(flextable)
+library(gt)
+
+W <- readRDS("CPU-RAM.rds")
+# W <- W %>% filter(task_id != "Detect treetops")
+
+
+W <- W %>% mutate(processing_time = hms::as_hms(as_datetime(seconds_to_period(round(as.numeric(processing_time))))))
+
+W <- W %>% mutate(CPU_perc = round(CPU_perc,1),
+                  RAM_perc = round(RAM_perc,1))
+
+WW <- W %>% ungroup() %>% select(tool, task=task_plot_title, cores, density=density_points_rnd, CPU_perc, RAM_perc, processing_time)
+
+WW <- 
+  WW %>% mutate(density_labels = fct_reorder(
+    paste0("Density: ", round(density), " pts/m²"), density
+  )
+  )
+WW <- WW %>% select(-density)
+
+#create tables by task
+tasks <- unique(WW$task)
+tasks<- tasks[tasks != "Detect treetops"]
+
+#put normalization at the beginning
+tasks <- c("Normalization", tasks[tasks != "Normalization"])
+
+
+#make sure that all tasks/tools have values (NA if missing)
+X <- expand_grid(tool= unique(WW$tool), task=tasks, cores=unique(WW$cores), density_labels = unique(WW$density_labels))
+
+WW <- X %>% left_join(WW)
+
+WW <- WW %>% group_by(task, cores, density_labels) %>%
+  # filter(task=="Normalization") %>%
+  arrange(density_labels, cores) %>%
+  mutate(min_proc_time=min(processing_time, na.rm=T)) %>%
+  mutate(delta_proc_time = processing_time - min_proc_time,
+         delta_proc_time_perc = round(as.numeric(delta_proc_time) / as.numeric(min_proc_time) * 100,1)) %>%
+  select(-min_proc_time) %>%
+  #replace 0 with NA
+  mutate(across(contains("delta"), ~if_else(.x==0, NA, .x)))
+
+
+
+# tasks <- tasks[1]
+
+TABLES <- list()
+
+for (current_task in tasks) {
+
+theTable <- 
+  WW %>%
+  ungroup() %>%
+  filter(task==current_task) %>% 
+  select(-task) %>%
+  # select(-task, -CPU_perc, -RAM_perc) %>%
+  pivot_wider(names_from = tool, values_from = c(processing_time, delta_proc_time, delta_proc_time_perc, CPU_perc, RAM_perc)) 
+
+
+theTable <- 
+  theTable %>% #arrange(density, cores) %>% 
+  group_by(density_labels) %>%
+  relocate(density_labels)
+
+TABLES[[current_task]] <-
+theTable %>% 
+  gt() %>%
+  
+  #merge columns related to processing time
+  cols_merge(
+    columns = c(processing_time_lidR, delta_proc_time_lidR, delta_proc_time_perc_lidR),
+    pattern = "{1}<br><small><<+{2}s +{3}%>></small>"
+  ) %>%
+  cols_merge(
+    columns = c(processing_time_lasR, delta_proc_time_lasR, delta_proc_time_perc_lasR),
+    pattern = "{1}<br><small><<+{2}s +{3}%>></small>"
+  ) %>%
+  cols_merge(
+    columns = c(processing_time_lastools, delta_proc_time_lastools, delta_proc_time_perc_lastools),
+    pattern = "{1}<br><small><<+{2}s +{3}%>></small>"
+  ) %>%
+  
+  tab_spanner(
+    label = "Processing time",
+    columns = c(processing_time_lidR, processing_time_lasR, processing_time_lastools)
+  ) %>%
+  cols_label(
+    processing_time_lidR = "lidR",
+    processing_time_lasR = "lasR",
+    processing_time_lastools = "lastools"
+  ) %>%
+  
+  #merge columns related to CPU and RAM
+  cols_merge(
+    columns = c(CPU_perc_lidR, RAM_perc_lidR),
+    pattern = "{1}<br><small><i>{2}</i></small>"
+  ) %>%
+  cols_merge(
+    columns = c(CPU_perc_lasR, RAM_perc_lasR),
+    pattern = "{1}<br><small><i>{2}</i></small>"
+  )%>%
+  cols_merge(
+    columns = c(CPU_perc_lastools, RAM_perc_lastools),
+    pattern = "{1}<br><small><i>{2}</i></small>"
+  )  %>%
+  
+  tab_spanner(
+    label = html("CPU and <small><i>RAM</i></small> usage [%]"),
+    columns = c(CPU_perc_lidR, CPU_perc_lasR, CPU_perc_lastools, RAM_perc_lidR, RAM_perc_lasR, RAM_perc_lastools)
+  ) %>%
+  cols_label(
+    CPU_perc_lidR = "lidR",
+    CPU_perc_lasR = "lasR",
+    CPU_perc_lastools = "lastools"
+  ) %>%
+  
+  fmt_percent(columns = c(starts_with("CPU"), starts_with("RAM")),scale_values = F, decimals = 1) %>%
+  
+  # tab_style(
+  #   style = cell_borders(
+  #     sides = c("left", "right"),
+  #     weight = px(2)),
+  #   locations = cells_body(
+  #     columns = c(CPU_perc_lidR)
+  #   )
+  # ) %>%
+  
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  
+  cols_width(
+    cores ~ pct(5),
+    starts_with("processing_time_") ~ pct(20),
+    starts_with("CPU_") ~ pct(7)
+  ) %>%
+  
+  opt_stylize(style = 1,color = "gray", add_row_striping = T) %>%
+  
+  tab_header(title=current_task)
+}
+
+
+
+
+```
+
+<!-- display all tables in separate tabs -->
+
+::: panel-tabset
+```{r, echo=F, results='asis'}
+
+for (i in 1:length(TABLES)) {
+  cat(paste0("## ",names(TABLES[i])))
+  cat("\n \n")
+  
+  print(htmltools::tagList(TABLES[i]))
+  cat("\n \n")
+}
+
+
+```
+:::
