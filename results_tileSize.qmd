@@ -1,0 +1,21 @@
+---
+title: "Results - influence of tile size"
+author:
+  - name: Piotr Tompalski
+    email: piotr.tompalski@nrcan-rncan.gc.ca
+format: html
+engine: knitr
+lightbox: true
+date: 08/01/2024
+date-modified: today
+---
+
+
+
+This benchmark was aimed to evaluate the influence of the tile size on processing time. In addition to the 1000 m tile size used in all standard benchmark runs, three additional sizes were tested: 200, 500, and 2000 m.
+
+![](graphics/byTileSize.png) 
+
+![](graphics/byTileSizeRel.png)
+
+

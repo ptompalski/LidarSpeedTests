@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Piotr Tompalski">
-<meta name="dcterms.date" content="2024-08-03">
+<meta name="dcterms.date" content="2024-01-08">
 
 <title>CPU and RAM usage – LidarSpeedTests</title>
 <style>
@@ -97,25 +97,44 @@ ul.task-list li input[type="checkbox"] {
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item dropdown ">
-    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-results" role="link" data-bs-toggle="dropdown" aria-expanded="false">
- <span class="menu-text">Results</span>
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-simple-tasks" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Simple tasks</span>
     </a>
-    <ul class="dropdown-menu" aria-labelledby="nav-menu-results">    
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-simple-tasks">    
         <li>
     <a class="dropdown-item" href="./results_basic.html">
- <span class="dropdown-text">Basic tasks</span></a>
+ <span class="dropdown-text">Figures</span></a>
   </li>  
         <li>
-    <a class="dropdown-item" href="./results_tileSizeStorage.html">
- <span class="dropdown-text">Infulence of tile size and storage type</span></a>
+    <a class="dropdown-item" href="./results_table.html">
+ <span class="dropdown-text">Tables</span></a>
   </li>  
         <li>
     <a class="dropdown-item" href="./results_CPU-RAM.html">
  <span class="dropdown-text">CPU and RAM usage</span></a>
   </li>  
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-complex-tasks" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Complex tasks</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-complex-tasks">    
+        <li class="dropdown-header">In preparation</li>
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-additional-results" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Additional results</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-additional-results">    
         <li>
-    <a class="dropdown-item" href="./results_table.html">
- <span class="dropdown-text">All results (tables)</span></a>
+    <a class="dropdown-item" href="./results_tileSize.html">
+ <span class="dropdown-text">Infulence of tile size</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./results_storage.html">
+ <span class="dropdown-text">Infulence of storage type</span></a>
   </li>  
     </ul>
   </li>
@@ -170,10 +189,16 @@ ul.task-list li input[type="checkbox"] {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">August 3, 2024</p>
+      <p class="date">January 8, 2024</p>
     </div>
   </div>
   
+    <div>
+    <div class="quarto-title-meta-heading">Modified</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date-modified">August 14, 2024</p>
+    </div>
+  </div>
     
   </div>
   
@@ -632,7 +657,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 });
 </script>
 </div> <!-- /content -->
-<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_CPU-RAM.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div></div></footer><script>var lightboxQuarto = GLightbox({"closeEffect":"zoom","selector":".lightbox","descPosition":"bottom","openEffect":"zoom","loop":false});
+<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_CPU-RAM.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div></div></footer><script>var lightboxQuarto = GLightbox({"loop":false,"openEffect":"zoom","closeEffect":"zoom","selector":".lightbox","descPosition":"bottom"});
 (function() {
   let previousOnload = window.onload;
   window.onload = () => {

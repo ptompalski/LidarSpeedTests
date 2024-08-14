@@ -9,7 +9,7 @@
 <meta name="author" content="Piotr Tompalski">
 <meta name="dcterms.date" content="2024-08-01">
 
-<title>Results - basic tasks – LidarSpeedTests</title>
+<title>Results - influence of tile size – LidarSpeedTests</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -156,28 +156,15 @@ ul.task-list li input[type="checkbox"] {
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active">
-    <h2 id="toc-title">On this page</h2>
-   
-  <ul>
-  <li><a href="#results" id="toc-results" class="nav-link active" data-scroll-target="#results">Results</a>
-  <ul class="collapse">
-  <li><a href="#generate-dem" id="toc-generate-dem" class="nav-link" data-scroll-target="#generate-dem">Generate DEM</a></li>
-  <li><a href="#genenerate-dsm" id="toc-genenerate-dsm" class="nav-link" data-scroll-target="#genenerate-dsm">Genenerate DSM</a></li>
-  <li><a href="#normalization" id="toc-normalization" class="nav-link" data-scroll-target="#normalization">Normalization</a></li>
-  <li><a href="#pixel-metrics" id="toc-pixel-metrics" class="nav-link" data-scroll-target="#pixel-metrics">Pixel metrics</a></li>
-  <li><a href="#detecting-treetops" id="toc-detecting-treetops" class="nav-link" data-scroll-target="#detecting-treetops">Detecting treetops</a></li>
-  </ul></li>
-  </ul>
-<div class="toc-actions"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_basic.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+        
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Results - basic tasks</h1>
+<h1 class="title">Results - influence of tile size</h1>
 </div>
 
 
@@ -212,51 +199,11 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<section id="results" class="level1">
-<h1>Results</h1>
-<section id="generate-dem" class="level3">
-<h3 class="anchored" data-anchor-id="generate-dem">Generate DEM</h3>
-<p><a href="graphics/result_generate_DEM_W-VIC-A127816.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1"><img src="graphics/result_generate_DEM_W-VIC-A127816.png" class="img-fluid"></a></p>
-</section>
-<section id="genenerate-dsm" class="level3">
-<h3 class="anchored" data-anchor-id="genenerate-dsm">Genenerate DSM</h3>
-<p><a href="graphics/result_generate_DSM1_W-VIC-A127816.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2"><img src="graphics/result_generate_DSM1_W-VIC-A127816.png" class="img-fluid"></a></p>
-<p><a href="graphics/result_generate_DSM2_W-VIC-A127816.png" class="lightbox" data-gallery="quarto-lightbox-gallery-3"><img src="graphics/result_generate_DSM2_W-VIC-A127816.png" class="img-fluid"></a></p>
-</section>
-<section id="normalization" class="level3">
-<h3 class="anchored" data-anchor-id="normalization">Normalization</h3>
-<p><a href="graphics/result_normalization_W-VIC-A127816.png" class="lightbox" data-gallery="quarto-lightbox-gallery-4"><img src="graphics/result_normalization_W-VIC-A127816.png" class="img-fluid"></a></p>
-</section>
-<section id="pixel-metrics" class="level3">
-<h3 class="anchored" data-anchor-id="pixel-metrics">Pixel metrics</h3>
-<section id="single-metric" class="level4">
-<h4 class="anchored" data-anchor-id="single-metric">Single metric</h4>
-<p><a href="graphics/result_pixel_metrics_1a_W-VIC-A127816.png" class="lightbox" data-gallery="quarto-lightbox-gallery-5"><img src="graphics/result_pixel_metrics_1a_W-VIC-A127816.png" class="img-fluid"></a></p>
-</section>
-<section id="multiple-metrics" class="level4">
-<h4 class="anchored" data-anchor-id="multiple-metrics">Multiple metrics</h4>
-<p><a href="graphics/result_pixel_metrics_2_W-VIC-A127816.png" class="lightbox" data-gallery="quarto-lightbox-gallery-6"><img src="graphics/result_pixel_metrics_2_W-VIC-A127816.png" class="img-fluid"></a></p>
-</section>
-</section>
-<section id="detecting-treetops" class="level3">
-<h3 class="anchored" data-anchor-id="detecting-treetops">Detecting treetops</h3>
-<div class="callout callout-style-default callout-note callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-Note
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>Work in progress</p>
-</div>
-</div>
+<p>This benchmark was aimed to evaluate the influence of the tile size on processing time. In addition to the 1000 m tile size used in all standard benchmark runs, three additional sizes were tested: 200, 500, and 2000 m.</p>
+<p><a href="graphics/byTileSize.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1"><img src="graphics/byTileSize.png" class="img-fluid"></a></p>
+<p><a href="graphics/byTileSizeRel.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2"><img src="graphics/byTileSizeRel.png" class="img-fluid"></a></p>
 
 
-</section>
-</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
@@ -680,7 +627,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 });
 </script>
 </div> <!-- /content -->
-<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_basic.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div></div></footer><script>var lightboxQuarto = GLightbox({"selector":".lightbox","loop":false,"descPosition":"bottom","openEffect":"zoom","closeEffect":"zoom"});
+<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_tileSize.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div></div></footer><script>var lightboxQuarto = GLightbox({"selector":".lightbox","closeEffect":"zoom","loop":false,"descPosition":"bottom","openEffect":"zoom"});
 (function() {
   let previousOnload = window.onload;
   window.onload = () => {

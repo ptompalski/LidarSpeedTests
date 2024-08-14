@@ -1,59 +1,31 @@
 [
   {
-    "objectID": "results_tileSizeStorage.html",
-    "href": "results_tileSizeStorage.html",
-    "title": "Results - effect of tile size and storage type",
+    "objectID": "results_tileSize.html",
+    "href": "results_tileSize.html",
+    "title": "Results - influence of tile size",
     "section": "",
     "text": "This benchmark was aimed to evaluate the influence of the tile size on processing time. In addition to the 1000 m tile size used in all standard benchmark runs, three additional sizes were tested: 200, 500, and 2000 m."
   },
   {
-    "objectID": "results_tileSizeStorage.html#influence-of-tile-size",
-    "href": "results_tileSizeStorage.html#influence-of-tile-size",
-    "title": "Results - effect of tile size and storage type",
+    "objectID": "results_storage.html",
+    "href": "results_storage.html",
+    "title": "Results - influence of storage type",
     "section": "",
-    "text": "This benchmark was aimed to evaluate the influence of the tile size on processing time. In addition to the 1000 m tile size used in all standard benchmark runs, three additional sizes were tested: 200, 500, and 2000 m."
+    "text": "This benchmark was aimed to evaluate the influence of drive configuration on processing time. The benchmark involved reading data from a drive, processing it, and then saving the processed data (normalization task was used for this purpose). Two types of drives were tested: an internal SSD and a network folder on a server. Four distinct configurations were assessed: reading and writing both from the SSD (SSD_SSD), reading from the SSD and writing to the network folder (SSD_NET), reading from the network folder and writing to the SSD (NET_SSD), and reading and writing both from the network folder (NET_NET)."
   },
   {
-    "objectID": "results_tileSizeStorage.html#influence-of-drivestorage-type",
-    "href": "results_tileSizeStorage.html#influence-of-drivestorage-type",
-    "title": "Results - effect of tile size and storage type",
-    "section": "Influence of drive/storage type",
-    "text": "Influence of drive/storage type\nThis benchmark was aimed to evaluate the influence of drive configuration on processing time. The benchmark involved reading data from a drive, processing it, and then saving the processed data (normalization task was used for this purpose). Two types of drives were tested: an internal SSD and a network folder on a server. Four distinct configurations were assessed: reading and writing both from the SSD (SSD_SSD), reading from the SSD and writing to the network folder (SSD_NET), reading from the network folder and writing to the SSD (NET_SSD), and reading and writing both from the network folder (NET_NET)."
-  },
-  {
-    "objectID": "results_CPU-RAM.html",
-    "href": "results_CPU-RAM.html",
-    "title": "CPU and RAM usage",
+    "objectID": "results_basic.html",
+    "href": "results_basic.html",
+    "title": "Results - basic tasks",
     "section": "",
-    "text": "Warning\n\n\n\nWork in progress - not all results included."
-  },
-  {
-    "objectID": "results_CPU-RAM.html#cpu-and-ram-usage-for-a-single-task",
-    "href": "results_CPU-RAM.html#cpu-and-ram-usage-for-a-single-task",
-    "title": "CPU and RAM usage",
-    "section": "CPU and RAM usage for a single task",
-    "text": "CPU and RAM usage for a single task"
-  },
-  {
-    "objectID": "results_CPU-RAM.html#average-cpu-utilization-by-task",
-    "href": "results_CPU-RAM.html#average-cpu-utilization-by-task",
-    "title": "CPU and RAM usage",
-    "section": "Average CPU utilization by task",
-    "text": "Average CPU utilization by task"
-  },
-  {
-    "objectID": "results_CPU-RAM.html#average-memory-utilization-by-task",
-    "href": "results_CPU-RAM.html#average-memory-utilization-by-task",
-    "title": "CPU and RAM usage",
-    "section": "Average Memory utilization by task",
-    "text": "Average Memory utilization by task"
+    "text": "Results\n\nGenerate DEM\n\n\n\nGenenerate DSM\n\n\n\n\nNormalization\n\n\n\nPixel metrics\n\nSingle metric\n\n\n\nMultiple metrics\n\n\n\n\nDetecting treetops\n\n\n\n\n\n\nNote\n\n\n\nWork in progress"
   },
   {
     "objectID": "index.html",
     "href": "index.html",
     "title": "LidarSpeedTests",
     "section": "",
-    "text": "Warning\n\n\n\nThis is an ongoing work and the results may contain errors.\n\n\nThis repository is dedicated to evaluating the performance of various point cloud processing tools in handling typical airborne laser scanning (ALS) data processing tasks. The goal is to provide users with comparative insights into processing time, CPU, RAM, and disk usage across different tools and configurations. More importantly, benchmark results could help decide which processing parameters are most optimal given the dataset and workstation characteristics.\n\n\nPoint cloud processing tools offer a range of functionalities, often with overlapping capabilities. Users face decisions about which tool to use and how to configure settings for optimal performance. This project benchmarks several tools to guide these decisions.\n\n\n\n\nUniform Task Performance: Each tool is tested against standardized tasks to ensure comparable results.\nResource Utilization: We measure and record processing time, CPU and RAM usage.\nIterative Testing: Tools are tested under various conditions to assess performance impacts:\n\nDifferent numbers of workers (CPU cores/threads)\nVarious storage devices including local (SSD, HDD) and network drives\nDiverse input data characteristics\n\n\n\n\n\nThe benchmark uses a subset of ALS data acquired over the Petawawa research forest located in in Ontario, Canada. The dataset is divided into 1 x 1 km tiles (100 tiles in total). This dataset is freely available and can be downloaded from https://opendata.nfis.org/mapserver/PRF.html.\n\nThe average point density of the dataset is 13.6 pts/m². To facilitate a comprehensive analysis, the original dataset was systematically reduced to create variants with different densities: 1, 2, 5, 10. To simulate dataset with higher point density, the data was artificially densified by duplicating and then introducing a random noise to a subset of points. This procedure was used to generate datasets with densities of 20, and 50 pts/m². Benchmarks were conducted across these modified datasets to assess performance at varying point densities.\n\n\n\n\nSo far the benchmark focuses on lidar processing tools available in R (lidR, lasR), as well as lastools.\n\nlidR: github.com/r-lidar/lidR\nlasR: github.com/r-lidar/lasR\nlastools: rapidlasso.de/product-overview\n\n\n\n\nTasks are categorized into ‘Simple’ and ‘Complex’ to differentiate between single-step operations and multi-step processing pipelines, respectively.\n\n\n\nGround classification\nDigital Terrain Model (DTM) generation\nCanaopy Height model (CHM) generation\nHeight normalization\nPoint cloud metrics calculation (two scenarios: single metric, multiple metrics)\n\n\n\n\n\na workflow consisting of the following tasks: Generate DTM, normalize heights, and calculate metrics.\n…\n\n\n\n\n\nInfluence of tile size on processing time\nInfluence of drive configuration on processing time"
+    "text": "Warning\n\n\n\nThis is an ongoing work and the results may contain errors.\n\n\nThis repository is dedicated to evaluating the performance of various point cloud processing tools in handling typical airborne laser scanning (ALS) data processing tasks. The goal is to provide users with comparative insights into processing time, CPU, RAM, and disk usage across different tools and configurations. More importantly, benchmark results could help decide which processing parameters are most optimal given the dataset and workstation characteristics.\n\n\nPoint cloud processing tools offer a range of functionalities, often with overlapping capabilities. Users face decisions about which tool to use and how to configure settings for optimal performance. This project benchmarks several tools to guide these decisions.\n\n\n\n\nUniform Task Performance: Each tool is tested against standardized tasks to ensure comparable results.\nResource Utilization: We measure and record processing time, CPU and RAM usage.\nIterative Testing: Tools are tested under various conditions to assess performance impacts:\n\nDifferent numbers of workers (CPU cores/threads)\nVarious storage devices including local (SSD, HDD) and network drives\nDiverse input data characteristics\n\n\n\n\n\nThe benchmark uses a subset of ALS data acquired over the Petawawa research forest located in in Ontario, Canada. The dataset is divided into 1 x 1 km tiles (100 tiles in total). This dataset is freely available and can be downloaded from https://opendata.nfis.org/mapserver/PRF.html.\n\nThe average point density of the dataset is 13.6 pts/m². To facilitate a comprehensive analysis, the original dataset was systematically reduced to create variants with different densities: 1, 2, 5, 10. To simulate dataset with higher point density, the data was artificially densified by duplicating and then introducing a random noise to a subset of points. This procedure was used to generate datasets with densities of 20, and 50 pts/m². Benchmarks were conducted across these modified datasets to assess performance at varying point densities.\n\n\n\n\nSo far the benchmark focuses on lidar processing tools available in R (lidR, lasR), as well as lastools.\n\nlidR: github.com/r-lidar/lidR\nlasR: github.com/r-lidar/lasR\nlastools: rapidlasso.de/product-overview\n\n\n\n\nTasks are categorized into ‘Simple’ and ‘Complex’ to differentiate between single-step operations and multi-step processing pipelines, respectively.\n\n\n\nGround classification\nDigital Terrain Model (DTM) generation\nCanaopy Height model (CHM) generation\nHeight normalization\nPoint cloud metrics calculation (two scenarios: single metric, multiple metrics)\n\n\n\n\n\na workflow consisting of the following tasks: Generate DTM, normalize heights, generate CHM\n…\n\n\n\n\n\nInfluence of tile size on processing time\nInfluence of drive configuration on processing time"
   },
   {
     "objectID": "index.html#project-overview",
@@ -88,14 +60,35 @@
     "href": "index.html#benchmark-tasks",
     "title": "LidarSpeedTests",
     "section": "",
-    "text": "Tasks are categorized into ‘Simple’ and ‘Complex’ to differentiate between single-step operations and multi-step processing pipelines, respectively.\n\n\n\nGround classification\nDigital Terrain Model (DTM) generation\nCanaopy Height model (CHM) generation\nHeight normalization\nPoint cloud metrics calculation (two scenarios: single metric, multiple metrics)\n\n\n\n\n\na workflow consisting of the following tasks: Generate DTM, normalize heights, and calculate metrics.\n…\n\n\n\n\n\nInfluence of tile size on processing time\nInfluence of drive configuration on processing time"
+    "text": "Tasks are categorized into ‘Simple’ and ‘Complex’ to differentiate between single-step operations and multi-step processing pipelines, respectively.\n\n\n\nGround classification\nDigital Terrain Model (DTM) generation\nCanaopy Height model (CHM) generation\nHeight normalization\nPoint cloud metrics calculation (two scenarios: single metric, multiple metrics)\n\n\n\n\n\na workflow consisting of the following tasks: Generate DTM, normalize heights, generate CHM\n…\n\n\n\n\n\nInfluence of tile size on processing time\nInfluence of drive configuration on processing time"
   },
   {
-    "objectID": "results_basic.html",
-    "href": "results_basic.html",
-    "title": "Results - basic tasks",
+    "objectID": "results_CPU-RAM.html",
+    "href": "results_CPU-RAM.html",
+    "title": "CPU and RAM usage",
     "section": "",
-    "text": "Results\n\nGenerate DEM\n\n\n\nGenenerate DSM\n\n\n\n\nNormalization\n\n\n\nPixel metrics\n\nSingle metric\n\n\n\nMultiple metrics\n\n\n\n\nDetecting treetops\n\n\n\n\n\n\nNote\n\n\n\nWork in progress"
+    "text": "Warning\n\n\n\nWork in progress - not all results included."
+  },
+  {
+    "objectID": "results_CPU-RAM.html#cpu-and-ram-usage-for-a-single-task",
+    "href": "results_CPU-RAM.html#cpu-and-ram-usage-for-a-single-task",
+    "title": "CPU and RAM usage",
+    "section": "CPU and RAM usage for a single task",
+    "text": "CPU and RAM usage for a single task"
+  },
+  {
+    "objectID": "results_CPU-RAM.html#average-cpu-utilization-by-task",
+    "href": "results_CPU-RAM.html#average-cpu-utilization-by-task",
+    "title": "CPU and RAM usage",
+    "section": "Average CPU utilization by task",
+    "text": "Average CPU utilization by task"
+  },
+  {
+    "objectID": "results_CPU-RAM.html#average-memory-utilization-by-task",
+    "href": "results_CPU-RAM.html#average-memory-utilization-by-task",
+    "title": "CPU and RAM usage",
+    "section": "Average Memory utilization by task",
+    "text": "Average Memory utilization by task"
   },
   {
     "objectID": "results_table.html",

@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Piotr Tompalski">
-<meta name="dcterms.date" content="2024-08-03">
+<meta name="dcterms.date" content="2024-08-01">
 
-<title>Results - effect of tile size and storage type – LidarSpeedTests</title>
+<title>Results - influence of storage type – LidarSpeedTests</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -97,25 +97,44 @@ ul.task-list li input[type="checkbox"] {
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item dropdown ">
-    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-results" role="link" data-bs-toggle="dropdown" aria-expanded="false">
- <span class="menu-text">Results</span>
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-simple-tasks" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Simple tasks</span>
     </a>
-    <ul class="dropdown-menu" aria-labelledby="nav-menu-results">    
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-simple-tasks">    
         <li>
     <a class="dropdown-item" href="./results_basic.html">
- <span class="dropdown-text">Basic tasks</span></a>
+ <span class="dropdown-text">Figures</span></a>
   </li>  
         <li>
-    <a class="dropdown-item" href="./results_tileSizeStorage.html">
- <span class="dropdown-text">Infulence of tile size and storage type</span></a>
+    <a class="dropdown-item" href="./results_table.html">
+ <span class="dropdown-text">Tables</span></a>
   </li>  
         <li>
     <a class="dropdown-item" href="./results_CPU-RAM.html">
  <span class="dropdown-text">CPU and RAM usage</span></a>
   </li>  
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-complex-tasks" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Complex tasks</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-complex-tasks">    
+        <li class="dropdown-header">In preparation</li>
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-additional-results" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Additional results</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-additional-results">    
         <li>
-    <a class="dropdown-item" href="./results_table.html">
- <span class="dropdown-text">All results (tables)</span></a>
+    <a class="dropdown-item" href="./results_tileSize.html">
+ <span class="dropdown-text">Infulence of tile size</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./results_storage.html">
+ <span class="dropdown-text">Infulence of storage type</span></a>
   </li>  
     </ul>
   </li>
@@ -137,22 +156,15 @@ ul.task-list li input[type="checkbox"] {
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active">
-    <h2 id="toc-title">On this page</h2>
-   
-  <ul>
-  <li><a href="#influence-of-tile-size" id="toc-influence-of-tile-size" class="nav-link active" data-scroll-target="#influence-of-tile-size">Influence of tile size</a></li>
-  <li><a href="#influence-of-drivestorage-type" id="toc-influence-of-drivestorage-type" class="nav-link" data-scroll-target="#influence-of-drivestorage-type">Influence of drive/storage type</a></li>
-  </ul>
-<div class="toc-actions"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_tileSizeStorage.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+        
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Results - effect of tile size and storage type</h1>
+<h1 class="title">Results - influence of storage type</h1>
 </div>
 
 
@@ -169,10 +181,16 @@ ul.task-list li input[type="checkbox"] {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">August 3, 2024</p>
+      <p class="date">August 1, 2024</p>
     </div>
   </div>
   
+    <div>
+    <div class="quarto-title-meta-heading">Modified</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date-modified">August 14, 2024</p>
+    </div>
+  </div>
     
   </div>
   
@@ -181,19 +199,11 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<section id="influence-of-tile-size" class="level2">
-<h2 class="anchored" data-anchor-id="influence-of-tile-size">Influence of tile size</h2>
-<p>This benchmark was aimed to evaluate the influence of the tile size on processing time. In addition to the 1000 m tile size used in all standard benchmark runs, three additional sizes were tested: 200, 500, and 2000 m.</p>
-<p><img src="graphics/byTileSize.png" class="img-fluid"> <img src="graphics/byTileSizeRel.png" class="img-fluid"></p>
-</section>
-<section id="influence-of-drivestorage-type" class="level2">
-<h2 class="anchored" data-anchor-id="influence-of-drivestorage-type">Influence of drive/storage type</h2>
 <p>This benchmark was aimed to evaluate the influence of drive configuration on processing time. The benchmark involved reading data from a drive, processing it, and then saving the processed data (<code>normalization</code> task was used for this purpose). Two types of drives were tested: an internal SSD and a network folder on a server. Four distinct configurations were assessed: reading and writing both from the SSD (<code>SSD_SSD</code>), reading from the SSD and writing to the network folder (<code>SSD_NET</code>), reading from the network folder and writing to the SSD (<code>NET_SSD</code>), and reading and writing both from the network folder (<code>NET_NET</code>).</p>
 <p><a href="graphics/byDrives.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1"><img src="graphics/byDrives.png" class="img-fluid"></a></p>
 <p><a href="graphics/byDrivesRel.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2"><img src="graphics/byDrivesRel.png" class="img-fluid"></a></p>
 
 
-</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
@@ -617,7 +627,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 });
 </script>
 </div> <!-- /content -->
-<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_tileSizeStorage.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div></div></footer><script>var lightboxQuarto = GLightbox({"closeEffect":"zoom","openEffect":"zoom","loop":false,"descPosition":"bottom","selector":".lightbox"});
+<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_storage.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div></div></footer><script>var lightboxQuarto = GLightbox({"openEffect":"zoom","descPosition":"bottom","closeEffect":"zoom","selector":".lightbox","loop":false});
 (function() {
   let previousOnload = window.onload;
   window.onload = () => {

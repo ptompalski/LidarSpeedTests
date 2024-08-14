@@ -6,7 +6,8 @@ author:
 format: html
 engine: knitr
 lightbox: true
-date: today
+date: 08/01/2024
+date-modified: today
 ---
 
 ```{r, echo = FALSE, warning=FALSE, message=FALSE}
@@ -25,16 +26,14 @@ knitr::opts_chunk$set(
 
 
 ```
-  
+
 # LidarSpeedTests
 
-
-::: {.callout-warning}
+::: callout-warning
 This is an ongoing work and the results may contain errors.
 :::
 
-This repository is dedicated to evaluating the performance of various point cloud processing tools in handling typical airborne laser scanning (ALS) data processing tasks. The goal is to provide users with comparative insights into processing time, CPU, RAM, and disk usage across different tools and configurations. More importantly, benchmark results could help decide which processing parameters are most optimal given the dataset and workstation characteristics. 
-
+This repository is dedicated to evaluating the performance of various point cloud processing tools in handling typical airborne laser scanning (ALS) data processing tasks. The goal is to provide users with comparative insights into processing time, CPU, RAM, and disk usage across different tools and configurations. More importantly, benchmark results could help decide which processing parameters are most optimal given the dataset and workstation characteristics.
 
 ## Project Overview
 
@@ -42,12 +41,12 @@ Point cloud processing tools offer a range of functionalities, often with overla
 
 ## Benchmarking Methodology
 
-- **Uniform Task Performance**: Each tool is tested against standardized tasks to ensure comparable results.
-- **Resource Utilization**: We measure and record processing time, CPU and RAM usage. 
-- **Iterative Testing**: Tools are tested under various conditions to assess performance impacts:
-  - Different numbers of workers (CPU cores/threads)
-  - Various storage devices including local (SSD, HDD) and network drives
-  - Diverse input data characteristics
+-   **Uniform Task Performance**: Each tool is tested against standardized tasks to ensure comparable results.
+-   **Resource Utilization**: We measure and record processing time, CPU and RAM usage.
+-   **Iterative Testing**: Tools are tested under various conditions to assess performance impacts:
+    -   Different numbers of workers (CPU cores/threads)
+    -   Various storage devices including local (SSD, HDD) and network drives
+    -   Diverse input data characteristics
 
 ## Input Data
 
@@ -63,26 +62,28 @@ The average point density of the dataset is 13.6 pts/m². To facilitate a compre
 
 So far the benchmark focuses on lidar processing tools available in R (`lidR`, `lasR`), as well as `lastools`.
 
-- `lidR`: [github.com/r-lidar/lidR](https://github.com/r-lidar/lidR)
-- `lasR`: [github.com/r-lidar/lasR](https://github.com/r-lidar/lasR)
-- `lastools`: [rapidlasso.de/product-overview](https://rapidlasso.de/product-overview/)
+-   `lidR`: [github.com/r-lidar/lidR](https://github.com/r-lidar/lidR)
+-   `lasR`: [github.com/r-lidar/lasR](https://github.com/r-lidar/lasR)
+-   `lastools`: [rapidlasso.de/product-overview](https://rapidlasso.de/product-overview/)
 
 ## Benchmark Tasks
 
 Tasks are categorized into 'Simple' and 'Complex' to differentiate between single-step operations and multi-step processing pipelines, respectively.
 
 ### Simple Tasks
-- Ground classification
-- Digital Terrain Model (DTM) generation
-- Canaopy Height model (CHM) generation
-- Height normalization
-- Point cloud metrics calculation (two scenarios: single metric, multiple metrics)
 
+-   Ground classification
+-   Digital Terrain Model (DTM) generation
+-   Canaopy Height model (CHM) generation
+-   Height normalization
+-   Point cloud metrics calculation (two scenarios: single metric, multiple metrics)
 
 ### Complex Tasks (in progress)
-- a workflow consisting of the following tasks: Generate DTM, normalize heights, and calculate metrics.
-- ...
+
+-   a workflow consisting of the following tasks: Generate DTM, normalize heights, generate CHM
+-   ...
 
 ### Additional benchmarks:
-- Influence of tile size on processing time
-- Influence of drive configuration on processing time
+
+-   Influence of tile size on processing time
+-   Influence of drive configuration on processing time

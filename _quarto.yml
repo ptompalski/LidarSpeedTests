@@ -12,16 +12,23 @@ website:
     left:
       - href: index.qmd
         text: Home
-      - text: Results
+      - text: Simple tasks
         menu:
           - href: results_basic.qmd
-            text: Basic tasks
-          - href: results_tileSizeStorage.qmd
-            text: Infulence of tile size and storage type
+            text: Figures
+          - href: results_table.qmd
+            text: Tables
           - href: results_CPU-RAM.qmd 
             text: CPU and RAM usage
-          - href: results_table.qmd
-            text: All results (tables)
+      - text: Complex tasks
+        menu:
+          - text: In preparation
+      - text: Additional results
+        menu:
+          - href: results_tileSize.qmd
+            text: Infulence of tile size
+          - href: results_storage.qmd
+            text: Infulence of storage type
             
       # - href: data.qmd
       #   text: Data
@@ -44,5 +51,5 @@ format:
     css: styles.css
     toc: true
 
-editor: visual
+editor: source
 
