@@ -9,7 +9,7 @@
 <meta name="author" content="Piotr Tompalski">
 <meta name="dcterms.date" content="2024-08-15">
 
-<title>Results - complex tasks – LidarSpeedTests</title>
+<title>Complex tasks – LidarSpeedTests</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -163,15 +163,24 @@ ul.task-list li input[type="checkbox"] {
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#complex-task-1" id="toc-complex-task-1" class="nav-link active" data-scroll-target="#complex-task-1">Complex task 1</a>
+  <ul class="collapse">
+  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a></li>
+  </ul></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_complex.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Results - complex tasks</h1>
+<h1 class="title">Complex tasks</h1>
 </div>
 
 
@@ -206,9 +215,33 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
+<p>The complex tasks described below consist of multiple individual steps executed within a single processing workflow, closely simulating real-world scenarios. When processing point cloud data, routines often involve a series of tasks performed sequentially, where data is read, processed, and saved at each stage. However, <code>lasR</code> allows users to build processing pipelines where the input data is read only once. This approach significantly reduces the overall processing time.</p>
+<section id="complex-task-1" class="level2">
+<h2 class="anchored" data-anchor-id="complex-task-1">Complex task 1</h2>
+<p>This processing routine included three tasks: generate DEM, normalize the point cloud, and generate CHM. The following <code>lasR</code> pipeline was developed:</p>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>fout_laz &lt;- paste0(dir_out, "/*.laz") 
+fout_dtm &lt;- paste0(dir_out, "/*_dtm.tif")
+fout_chm &lt;- paste0(dir_out, "/*_chm.tif")
+del = triangulate(filter = keep_ground())
+norm = transform_with(del)
+dtm = rasterize(1, del, ofile = fout_dtm)
+chm = rasterize(1, "max", ofile = fout_chm)
+write = write_las(ofile = fout_laz)
+pipeline = del + norm + write + dtm + chm 
+ans = exec(pipeline, on = f, progress = TRUE)</code></pre>
+</div>
+</div>
+<p>The total processing time for data processed sequentially was calculated by summing the processing times of the three basic tasks included in the routine.</p>
+<section id="results" class="level3">
+<h3 class="anchored" data-anchor-id="results">Results</h3>
 <p><a href="graphics/result_tasks_complex1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1"><img src="graphics/result_tasks_complex1.png" class="img-fluid"></a></p>
+<p><a href="graphics/result_tasks_complex1_delta.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2"><img src="graphics/result_tasks_complex1_delta.png" class="img-fluid"></a></p>
 
 
+</section>
+</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
@@ -632,7 +665,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 });
 </script>
 </div> <!-- /content -->
-<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_complex.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div></div></footer><script>var lightboxQuarto = GLightbox({"selector":".lightbox","closeEffect":"zoom","loop":false,"openEffect":"zoom","descPosition":"bottom"});
+<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/ptompalski/LidarSpeedTests/blob/main/results_complex.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/ptompalski/LidarSpeedTests/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div></div></footer><script>var lightboxQuarto = GLightbox({"selector":".lightbox","closeEffect":"zoom","descPosition":"bottom","openEffect":"zoom","loop":false});
 (function() {
   let previousOnload = window.onload;
   window.onload = () => {

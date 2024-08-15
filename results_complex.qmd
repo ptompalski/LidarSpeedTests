@@ -1,5 +1,5 @@
 ---
-title: "Results - complex tasks"
+title: "Complex tasks"
 author:
   - name: Piotr Tompalski
     email: piotr.tompalski@nrcan-rncan.gc.ca
@@ -8,7 +8,28 @@ engine: knitr
 lightbox: true
 date: 08/15/2024
 date-modified: today
+code-block-bg: true
+code-block-border-left: "#31BAE9"
 ---
 
+The complex tasks described below consist of multiple individual steps executed within a single processing workflow, closely simulating real-world scenarios. When processing point cloud data, routines often involve a series of tasks performed sequentially, where data is read, processed, and saved at each stage. However, `lasR` allows users to build processing pipelines where the input data is read only once. This approach significantly reduces the overall processing time.
+
+## Complex task 1
+
+This processing routine included three tasks: generate DEM, normalize the point cloud, and generate CHM. The following `lasR` pipeline was developed:
+
+```{r, echo=F, message=F, warning=F}
+source("R/0_setup.R")
+x <- benchmark_tasks %>% filter(task_id == "complex_task1") %>% pull(task_call_lasR)
+x <- str_remove_all(string = x, pattern = "    ")
+cat(x)
+
+```
+The total processing time for data processed sequentially was calculated by summing the processing times of the three basic tasks included in the routine.
+
+### Results
 
 ![](graphics/result_tasks_complex1.png)
+
+
+![](graphics/result_tasks_complex1_delta.png)
