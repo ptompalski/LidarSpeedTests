@@ -10,6 +10,7 @@ date: 08/15/2024
 date-modified: today
 ---
 
+## Complex task 1 - detailed results 
 
 ```{r, echo=FALSE, message=F, warning=F}
 library(tidyverse)
@@ -96,7 +97,7 @@ theTable %>%
   
   ) %>%
   
-  opt_stylize(style = 1,color = "gray", add_row_striping = T)
+  opt_stylize(style = 1,color = "gray", add_row_striping = F)
 
 
 ```
