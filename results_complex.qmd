@@ -1,0 +1,14 @@
+---
+title: "Results - complex tasks"
+author:
+  - name: Piotr Tompalski
+    email: piotr.tompalski@nrcan-rncan.gc.ca
+format: html
+engine: knitr
+lightbox: true
+date: 08/15/2024
+date-modified: today
+---
+
+
+![](graphics/result_tasks_complex1.png)

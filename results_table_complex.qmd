@@ -1,0 +1,102 @@
+---
+title: "Complex tasks results (tables)"
+author:
+  - name: Piotr Tompalski
+    email: piotr.tompalski@nrcan-rncan.gc.ca
+format: html
+engine: knitr
+lightbox: true
+date: 08/15/2024
+date-modified: today
+---
+
+
+```{r, echo=FALSE, message=F, warning=F}
+library(tidyverse)
+library(gt)
+
+D <- readRDS("complex1.rds")
+
+DD <- D %>% 
+  ungroup() %>% 
+  select(tool, cores, density=density_points_rnd, processing_time, task_mode) %>%
+   mutate(density_labels = fct_reorder(
+    paste0("Density: ", round(density), " pts/m²"), density
+  )) %>% 
+  select(-density) %>%
+  mutate(processing_time = hms::as_hms(as_datetime(seconds_to_period(round(as.numeric(processing_time))))))
+
+
+DD <- DD %>% group_by(cores, density_labels) %>%
+  # filter(task=="Normalization") %>%
+  arrange(density_labels, cores) %>%
+  mutate(min_proc_time=min(processing_time, na.rm=T)) %>%
+  mutate(delta_proc_time = processing_time - min_proc_time,
+         delta_proc_time_perc = round(as.numeric(delta_proc_time) / as.numeric(min_proc_time) * 100,1)) %>%
+  select(-min_proc_time) %>%
+  #replace 0 with NA
+  mutate(across(contains("delta"), ~if_else(.x==0, NA, .x)))
+
+
+theTable <- 
+  DD %>%
+  ungroup() %>%
+  pivot_wider(names_from = c(tool, task_mode), values_from = c(processing_time, delta_proc_time, delta_proc_time_perc)) 
+
+
+theTable <- 
+  theTable %>% #arrange(density, cores) %>% 
+  group_by(density_labels) %>%
+  relocate(density_labels)  
+
+
+theTable %>% 
+  gt() %>%
+  
+  #merge columns related to processing time
+  
+  cols_merge(
+    columns = c(processing_time_lasR_pipe, delta_proc_time_lasR_pipe, delta_proc_time_perc_lasR_pipe),
+    pattern = "{1}<br><small><<+{2}s +{3}%>></small>"
+  ) %>%
+  
+  
+  cols_merge(
+    columns = c(processing_time_lidR_sequential, delta_proc_time_lidR_sequential, delta_proc_time_perc_lidR_sequential),
+    pattern = "{1}<br><small><<+{2}s +{3}%>></small>"
+  ) %>%
+  cols_merge(
+    columns = c(processing_time_lasR_sequential, delta_proc_time_lasR_sequential, delta_proc_time_perc_lasR_sequential),
+    pattern = "{1}<br><small><<+{2}s +{3}%>></small>"
+  ) %>%
+  cols_merge(
+      columns = c(processing_time_lastools_sequential, delta_proc_time_lastools_sequential, delta_proc_time_perc_lastools_sequential),
+    pattern = "{1}<br><small><<+{2}s +{3}%>></small>"
+  ) %>%
+  
+  tab_spanner(
+    label = "Processing time",
+    columns = c(processing_time_lasR_pipe, processing_time_lidR_sequential, processing_time_lasR_sequential, processing_time_lastools_sequential)
+  ) %>%
+  cols_label(
+    processing_time_lasR_pipe = "lasR (pipe)",
+    processing_time_lidR_sequential = "lidR",
+    processing_time_lasR_sequential = "lasR",
+    processing_time_lastools_sequential = "lastools"
+  )%>% 
+  
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  
+  cols_width(
+    cores ~ pct(5),
+    starts_with("processing_time_") ~ pct(20),
+  
+  ) %>%
+  
+  opt_stylize(style = 1,color = "gray", add_row_striping = T)
+
+
+```

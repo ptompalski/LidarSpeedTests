@@ -22,7 +22,10 @@ website:
             text: CPU and RAM usage
       - text: Complex tasks
         menu:
-          - text: In preparation
+          - href: results_complex.qmd
+            text: Figures
+          - href: results_table_complex.qmd
+            text: Tables
       - text: Additional results
         menu:
           - href: results_tileSize.qmd
