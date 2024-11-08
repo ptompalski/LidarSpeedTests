@@ -11,9 +11,6 @@ library(glue)
 library(benchmarkme)
 library(magrittr)
 
-clrs <- c("#4575b4", "#41ab5d", "#ffbc42")
-names(clrs) <- c("lasR", "lidR", "lastools")
-
 
 # PATHS, SETTINGS, TASKS
 lastools_path <- "C:/LAStools/bin"
@@ -21,59 +18,56 @@ lastools_path <- "C:/LAStools/bin"
 #benchmark results will be saved to:
 reports_path <- "results"
 
-# CPU, RAM, HDD etc usage reports will go to:
+# CPU, RAM, HDD etc usage reports will go to: (note, that this is disabled by default and requires additional powershell script to run)
 system_monitoring_path <- "system_monitoring"
 
 #workstation id
 workstation_id <- Sys.info()[4]
 
 
-geomSeries <- function(base, max) {
-  base^(0:floor(log(max, base)))
-}
+# specify the drives where the benchmark data is located, 
+# which drives to test etc. I had three entries here, because I wanted
+# to see how I/O speed influences processing speed. 
 
-# settings that determine the datasets to run the functions on, how many cores to use, and 
-# which drives to test.
 benchmark_settings <- list(
   
   drive_in =  c(
-    # SSD ="D:/"
-    SSD ="N:/",
-    HDD="G:/",
-    NET="//vic-fas1/projects_d/Tompalski/"
-    ),
+    SSD ="N:/"  
+    # HDD="G:/",
+    # NET="//vic-fas1/projects_d/Tompalski/"
+  ),
   
   drive_out = c(
-    # SSD ="D:/"
-    SSD ="N:/",
-    HDD="G:/",
-    NET="//vic-fas1/projects_d/Tompalski/"
-    ),
+    SSD ="N:/"
+    # HDD="G:/",
+    # NET="//vic-fas1/projects_d/Tompalski/"
+  ),
   
+  # specify cores here  
+  cores =  c(1, 2, 4, 8, 16, 32) ,
+
   
-  # cores =  c(1, 2, 4, 8, 16, 32, 64, 128) ,
-  cores =  geomSeries(2, parallel::detectCores()) ,
-  # cores =  c(1, 2, 4, seq(8, parallel::detectCores(), 8 )),
-  # cores =  c(1, 2, seq(4, parallel::detectCores(), 4 )) ,
-  
-  #subfolder with original point cloud (i.e. not normalized)
+  #subfolders with the data used in the benchmark
   datasets_org = c(
-    ALS_1000_1 = "benchmark_data2/1_org2/tile_1000_density_1",
-    ALS_1000_2 = "benchmark_data2/1_org2/tile_1000_density_2",
-    ALS_1000_5 = "benchmark_data2/1_org2/tile_1000_density_5",
-    ALS_1000_10 = "benchmark_data2/1_org2/tile_1000_density_10",
-    ALS_1000_20 = "benchmark_data2/1_org2/tile_1000_density_20"
-    # ALS_1000_50 = "benchmark_data2/1_org2/tile_1000_density_50"
+    ALS_1000_1 = "benchmark_data/1_org/tile_1000_density_1",
+    ALS_1000_2 = "benchmark_data/1_org/tile_1000_density_2",
+    ALS_1000_5 = "benchmark_data/1_org/tile_1000_density_5",
+    ALS_1000_10 = "benchmark_data/1_org/tile_1000_density_10",
+    ALS_1000_20 = "benchmark_data/1_org/tile_1000_density_20",
+    ALS_1000_50 = "benchmark_data/1_org/tile_1000_density_50"
     
-    ), 
+  ), 
   
   #subfolder with normalized point clouds, currently not used
   datasets_norm = c(
-    )
+    ALS_1000_1 = "currently/not/used"
+  )
 )
 
 
 # tasks to run during the benchmark. function calls for lidR, lasR, and lastools. 
+# should not require any changes
+
 benchmark_tasks <- 
   tribble(
     ~task_id, 
@@ -87,7 +81,7 @@ benchmark_tasks <-
     "normalization", 
     "Normalization",
     "lidR::normalize_height(las = ctg, algorithm = tin())", 
-    "ans = exec(pipeline = normalize() + write_las(fout), on = f, progress=TRUE)", 
+    "exec(pipeline = normalize() + write_las(fout), on = f)", 
     "lasheight64 -i {f_lastools} -odir {dir_out} -olaz -cores {cores} -replace_z -buffered 20", 
     "datasets_org",
     "laz",
@@ -95,7 +89,7 @@ benchmark_tasks <-
     "pixel_metrics_1a", 
     "Pixel metrics (simple)",
     "lidR::pixel_metrics(las = ctg, ~mean(Z), res = 20)", 
-    "ans = exec(pipeline = rasterize(20, 'z_mean', ofile = fout), on = f, progress=TRUE)",
+    "exec(pipeline = rasterize(20, 'z_mean', ofile = fout), on = f)",
     "lascanopy -i {f_lastools} -step 20 -avg -odir {dir_out} -otif -cores {cores} -buffered 20", 
     "datasets_org",
     "tif",
@@ -104,7 +98,7 @@ benchmark_tasks <-
     "pixel_metrics_2", 
     "Pixel metrics (complex)",
     "pixel_metrics(las = ctg, ~metrics_multiple(Z), res = 20)", 
-    "exec(pipeline = rasterize(20, c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95'), ofile = fout), on = f, progress=TRUE)", 
+    "exec(pipeline = rasterize(20, c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95'), ofile = fout), on = f)", 
     "lascanopy -i {f_lastools} -max -avg -std -cov -p 5 25 50 75 95 -odir {dir_out} -otif -cores {cores} -buffered 20", 
     "datasets_org",
     "tif",
@@ -112,7 +106,7 @@ benchmark_tasks <-
     "generate_DEM", 
     "Generate DEM",
     "rasterize_terrain(las = ctg, res = 1, algorithm = tin())", 
-    "exec(pipeline = dtm(res = 1, ofile = fout), on = f, progress=TRUE)", 
+    "exec(pipeline = dtm(res = 1, ofile = fout), on = f)", 
     "blast2dem -i {f_lastools} -otif -odir {dir_out} -step 1 -cores {cores}", #no need to buffer the tiles
     "datasets_org",
     "tif",
@@ -120,7 +114,7 @@ benchmark_tasks <-
     "generate_DSM1", #rasterizing highest point, no interpolation
     "Generate DSM (rasterize highest)",
     "rasterize_canopy(ctg, res = 1, algorithm = p2r())", 
-    "exec(pipeline = chm(1, tin=FALSE, ofile = fout), on = f, progress=TRUE)", 
+    "exec(pipeline = chm(1, tin=FALSE, ofile = fout), on = f)", 
     "lasgrid64 -i {f_lastools} -highest -otif -odir {dir_out} -step 1 -cores {cores} -buffered 20", 
     "datasets_org",
     "tif",
@@ -128,7 +122,7 @@ benchmark_tasks <-
     "generate_DSM2", #based on tin surface
     "Generate DSM (with TIN interpolation)",
     "rasterize_canopy(ctg, res = 1, algorithm = dsmtin())", 
-    "exec(pipeline = chm(1, tin=TRUE, ofile = fout), on = f, progress=TRUE)", 
+    "exec(pipeline = chm(1, tin=TRUE, ofile = fout), on = f)", 
     "", #requires lasthin + las2dem combo
     "datasets_org",
     "tif",
@@ -136,16 +130,50 @@ benchmark_tasks <-
     "tree_detection",
     "Detect treetops",
     "ttops <- locate_trees(ctg, lmf(ws = 5))",
-    "exec(pipeline = local_maximum(5), on = f, progress=TRUE)",
+    "lasR::exec(pipeline = local_maximum(5, ofile = fout), on = f)",
     "", #not possible with lastools
+    "datasets_org",
+    "gpkg",
+    
+    
+    "complex_task1",
+    "Complex task 1 (Normalization, DTM, CHM)",
+    "", #lidR
+    'fout_laz <- paste0(dir_out, "/*.laz") 
+    fout_dtm <- paste0(dir_out, "/*_dtm.tif")
+    fout_chm <- paste0(dir_out, "/*_chm.tif")
+    del = triangulate(filter = keep_ground())
+    norm = transform_with(del)
+    dtm = rasterize(1, del, ofile = fout_dtm)
+    chm = rasterize(1, "max", ofile = fout_chm)
+    write = write_las(ofile = fout_laz)
+    pipeline = del + norm + write + dtm + chm 
+    ans = exec(pipeline, on = f, progress = TRUE)', 
+    "",
+    "datasets_org",
+    "",
+    
+    "complex_task2",
+    "Complex task 2 (Normalization, DTM, CHM, pixel_metrics, tree_detection)",
+    "", #lidR
+    'fout_laz <- paste0(dir_out, "/*.laz") 
+    fout_dtm <- paste0(dir_out, "/*_dtm.tif")
+    fout_chm <- paste0(dir_out, "/*_chm.tif")
+    fout_metrics <- paste0(dir_out, "/*_metrics.tif")
+    del = triangulate(filter = keep_ground())
+    norm = transform_with(del)
+    dtm = rasterize(1, del, ofile = fout_dtm)
+    chm = rasterize(1, "max", ofile = fout_chm)
+    seed = local_maximum(5)
+    metrics = rasterize(20, c("z_max","z_mean","z_sd","z_above2","z_p5","z_p25","z_p50","z_p75","z_p95"),ofile=fout_metrics  )
+    write = write_las(ofile = fout_laz)
+    pipeline = del + norm + write + dtm + chm + metrics + seed
+    ans = exec(pipeline, on = f, progress = TRUE)', 
+    "",
     "datasets_org",
     ""
     
-    
-    
-    
   )
-
 
 
 

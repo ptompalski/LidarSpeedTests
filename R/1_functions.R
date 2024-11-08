@@ -136,7 +136,8 @@ benchmark_run <- function(task_id,
                           force_rerun_lidR = F,
                           force_rerun_lasR = F,
                           force_rerun_lastools = F,
-                          sysinfo
+                          sysinfo,
+                          resource_monitoring=F
 ) {
   
   
@@ -220,7 +221,7 @@ benchmark_run <- function(task_id,
   
   
   # function to exec lidR call
-  benchmark_run_lidR <- function(task_call_lidR) {
+  benchmark_run_lidR <- function(task_call_lidR, resource_monitoring) {
     
     cli::cli_h2("Running lidR")
     
@@ -231,13 +232,12 @@ benchmark_run <- function(task_id,
     x <- paste0("future::plan(future::multisession(workers = ", cores, "))")
     eval(parse(text = x))
     
-    #filename for system monitoring log
-    # output_fname1 <- glue("{workstation_id}_{task_id}_{run_id}_lidR")
     
     #start system resource monitoring (windows only, a powershell script run in the background)
+    if(resource_monitoring) {
     MonitoringProcess1 <- 
       callr::r_bg( function(x,y)  system2("powershell", args=c("-file",  "./cpu_ram_usage.ps1", x, y)), args = list(output_fname_lidR, system_monitoring_path)  )  
-    
+    }
     
     #record start time
     start_time_lidR <- Sys.time()
@@ -265,7 +265,7 @@ benchmark_run <- function(task_id,
     }
     
     #stop system monitoring
-    MonitoringProcess1$kill()
+    if(resource_monitoring) MonitoringProcess1$kill()
     
     #reset workers
     future::plan(future::sequential)
@@ -291,7 +291,7 @@ benchmark_run <- function(task_id,
   
   
   #function to exec lasR 
-  benchmark_run_lasR <- function(task_call_lasR) {
+  benchmark_run_lasR <- function(task_call_lasR, resource_monitoring) {
     
     cli::cli_h2("Running lasR")
     
@@ -306,8 +306,10 @@ benchmark_run <- function(task_id,
     output_fname2 <- glue("{workstation_id}_{task_id}_{run_id}_lasR")
     
     #start system resource monitoring (windows only, a powershell script run in the background)
+    if(resource_monitoring) {
     MonitoringProcess2 <- 
       callr::r_bg( function(x,y)  system2("powershell", args=c("-file",  "./cpu_ram_usage.ps1", x, y)), args = list(output_fname2, system_monitoring_path)  )  
+    }
     
     #wildcard output path for lasR
     fout <- paste0(dir_out, "/*.",benchmark_tasks_current$output_format)
@@ -327,7 +329,7 @@ benchmark_run <- function(task_id,
     finish_time_lasR <- Sys.time()
     
     #stop system monitoring
-    MonitoringProcess2$kill()
+    if(resource_monitoring) MonitoringProcess2$kill()
     
     cli::cli_alert_success("{finish_time_lasR-start_time_lasR} sec.")
     
@@ -357,7 +359,7 @@ benchmark_run <- function(task_id,
   
   
   #function to exec lastools
-  benchmark_run_lastools <- function(task_call_lastools) {
+  benchmark_run_lastools <- function(task_call_lastools, resource_monitoring) {
     
     cli::cli_h2("Running lastools")
     
@@ -371,8 +373,10 @@ benchmark_run <- function(task_id,
     command <- paste0(lastools_path, "/", task_call_lastools)
     
     #start system resource monitoring (windows only, a powershell script run in the background)
+    if(resource_monitoring) {
     MonitoringProcess3 <- 
       callr::r_bg( function(x,y)  system2("powershell", args=c("-file",  "./cpu_ram_usage.ps1", x, y)), args = list(output_fname3, system_monitoring_path)  )  
+    }
     
     start_time_lastools <- Sys.time()
     
@@ -389,7 +393,7 @@ benchmark_run <- function(task_id,
     finish_time_lastools <- Sys.time()
     
     #stop system monitoring
-    MonitoringProcess3$kill()
+    if(resource_monitoring) MonitoringProcess3$kill()
     
     cli::cli_alert_success("Finished in {finish_time_lastools-start_time_lastools} sec.")
     
@@ -442,7 +446,7 @@ benchmark_run <- function(task_id,
     if(force_rerun_lidR) file.remove(f_results)
     
     if(!file.exists(f_results)) {
-      benchmark_lidR_result <- benchmark_run_lidR(task_call_lidR = benchmark_tasks_current$task_call_lidR)  
+      benchmark_lidR_result <- benchmark_run_lidR(task_call_lidR = benchmark_tasks_current$task_call_lidR, resource_monitoring=resource_monitoring)  
       R <- bind_cols(benchmark_lidR_result, common_output)
       write.csv(R, file = f_results)
       
@@ -457,7 +461,7 @@ benchmark_run <- function(task_id,
     if(force_rerun_lasR) file.remove(f_results)
     
     if(!file.exists(f_results)) {
-      benchmark_lasR_result <- benchmark_run_lasR(task_call_lasR = benchmark_tasks_current$task_call_lasR) 
+      benchmark_lasR_result <- benchmark_run_lasR(task_call_lasR = benchmark_tasks_current$task_call_lasR, resource_monitoring=resource_monitoring) 
       R <- bind_cols(benchmark_lasR_result, common_output)
       write.csv(R, file = f_results)
       
@@ -472,7 +476,7 @@ benchmark_run <- function(task_id,
     if(force_rerun_lastools) file.remove(f_results)
     
     if(!file.exists(f_results)) {
-      benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools)
+      benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools, resource_monitoring=resource_monitoring)
       R <- bind_cols(benchmark_lastools_result, common_output)
       write.csv(R, file = f_results)
       
