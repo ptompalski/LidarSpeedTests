@@ -11,7 +11,7 @@ metrics_multiple <- function(z) {
   names(zq) <- paste0("zq", probs * 100)
   
   n <- length(z)
-  pzabove2 <- lidR:::fast_countover(z, 2)/n * 100
+  pzabove2 <- sum(z > 2, na.rm = TRUE)/n * 100
   
   m <- list(
     zmax=zmax,
@@ -279,24 +279,19 @@ benchmark_lastools_version <- function(lastools_path) {
 
 # gets info about the system, R, and the lidar related packages/software
 system_info <- function(lastools_path = NULL) {
-  system_details <- get_sys_details(byte_compiler = FALSE,
-                                    linear_algebra = FALSE, machine = FALSE)
-  pkgs <- system_details$installed_packages
-  package_version <- function(name) {
-    if (name %in% pkgs[, 1]) pkgs[which(pkgs[, 1] == name), 3] else NA_character_
-  }
+  system_details <- Sys.info()
   lastools_version <- if (is.null(lastools_path)) NA_real_ else benchmark_lastools_version(lastools_path)
   cpu_info <- benchmarkme::get_cpu()
   output <- list(
-    nodename = system_details$sys_info$nodename,
-    sysname = system_details$sys_info$sysname,
-    release = system_details$sys_info$release,
+    nodename = unname(system_details["nodename"]),
+    sysname = unname(system_details["sysname"]),
+    release = unname(system_details["release"]),
     cpu = cpu_info$model_name,
     cpu_threads = cpu_info$no_of_cores,
-    ram = get_ram(),
+    ram = unname(ps::ps_system_memory()[["total"]]),
     Rversion = R.version.string,
-    lidR_version = package_version("lidR"),
-    lasR_version = package_version("lasR"),
+    lidR_version = as.character(utils::packageVersion("lidR")),
+    lasR_version = as.character(utils::packageVersion("lasR")),
     lastools_version = lastools_version
   )
   
@@ -319,15 +314,20 @@ prepare_input <- function(dir_in, dir_out) {
 
 # get lidar data info
 benchmark_ALS_info <- function(x, dir_in) {
-  
-  info <- capture.output(summary(x)) # x is a lidR catalog object
-  total_point_count <- parse_number( info[5] )
-  density_points <- parse_number( info[6] )
-  density_pulses <- parse_number( info[7] )
-  
-  file_count <- nrow(x@data)
-  
-  input_data_size <- sum(fs::dir_info(dir_in)$size)  # total ctg size in GB
+  total_point_count <- lidR::npoints(x)
+  area <- as.numeric(sf::st_area(x))
+  if (length(area) != 1L || !is.finite(area) || area <= 0) {
+    stop("Catalog area must be finite and positive to calculate input densities.")
+  }
+  first_returns <- x[["Number.of.1st.return"]]
+  if (is.null(first_returns) || anyNA(first_returns)) {
+    stop("Catalog headers must contain Number.of.1st.return for pulse density.")
+  }
+  density_points <- total_point_count / area
+  density_pulses <- sum(first_returns) / area
+  file_count <- length(x[["filename"]])
+
+  input_data_size <- sum(fs::dir_info(dir_in)$size)
   
   return(list(
     total_point_count=total_point_count, 

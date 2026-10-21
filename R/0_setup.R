@@ -1,5 +1,3 @@
-# install.packages('lasR', repos = 'https://r-lidar.r-universe.dev')
-
 source("R/1_functions.R")
 
 library(lidR)
@@ -171,29 +169,3 @@ benchmark_runs <- if (is.null(benchmark_config)) {
 
 
 benchmark_combinations <- expand_grid(task_id = benchmark_tasks$task_id, run_id = benchmark_runs$ID)
-
-
-#overwrite the benchmarkme::get_ram() function, which is currently not working on some workstations.
-#corrected function below.
-get_ram <- function()
-{
-  os = R.version$os
-  ram = suppressWarnings(try(benchmarkme:::system_ram(os), silent = TRUE))
-  if (inherits(ram, "try-error") || length(ram) == 0L || any(is.na(ram))) {
-    message("\t Unable to detect your RAM. # nocov\n            Please raise an issue at https://github.com/csgillespie/benchmarkme")
-    ram = structure(NA, class = "ram")
-  }
-  else {
-    cleaned_ram = suppressWarnings(try(benchmarkme:::clean_ram(ram, os),
-                                       silent = TRUE))
-    if (inherits(cleaned_ram, "try-error") || length(ram) ==
-        0L) {
-      message("\t Unable to detect your RAM. # nocov\n            Please raise an issue at https://github.com/csgillespie/benchmarkme")
-      ram = structure(NA, class = "ram")
-    }
-    else {
-      ram = structure(cleaned_ram, class = "ram")
-    }
-  }
-  return(ram)
-}

@@ -28,9 +28,9 @@ opts
 thefont <- "Segoe UI"
 
 theme_clean <- theme_light(base_family = "Segoe UI") %+replace% 
-  theme(panel.border = element_rect(fill = NA, colour = "black", size = rel(1)),
+  theme(panel.border = element_rect(fill = NA, colour = "black", linewidth = rel(1)),
         panel.grid = element_blank(), 
-        axis.ticks = element_line(colour = "black", size = rel(0.5)),
+        axis.ticks = element_line(colour = "black", linewidth = rel(0.5)),
         legend.position = "bottom", strip.text = element_text(colour = "black"),
         strip.background = element_rect(fill = NA, colour = NA))
 

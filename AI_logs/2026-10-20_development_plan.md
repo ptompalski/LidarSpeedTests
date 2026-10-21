@@ -390,3 +390,78 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
 - Expected external decisions: target OS/R version (Chat 3), historical data and
   preparation sources (Chat 4), monitoring scope (Chat 9), full-run approval
   (Chat 12). Resolve each when needed rather than guessing now.
+
+### Chat 3 handoff (2026-10-21)
+
+- Implemented only Chat 3 and its directly required API compatibility changes,
+  tests, and documentation on the existing `dev` branch. No commits, pushes,
+  benchmark-data downloads, campaigns, or historical result/site changes.
+- The user confirmed **Linux and R 4.6.1** before runtime pinning. The observed
+  checkout is Ubuntu 26.04.1 LTS, x86-64, not the historical Windows benchmark
+  environment. README.md records this distinction and the native-library
+  baseline; neither renv nor matching R package versions establish equivalence
+  with historical machines.
+- Initialized renv 1.3.1 with an explicit `DESCRIPTION` manifest, including
+  script, Quarto, testthat, and fixture dependencies. Added `.R-version`,
+  `.Rprofile`, `renv.lock`, `renv/activate.R`, and `renv/settings.json`, with
+  generated library/cache exclusions. The supported classic lockfile format
+  retains compact package hashes; the complete lock has 153 package records.
+  Removed the `R/*` dependency-discovery exclusion.
+- Pinned lidR 4.3.3 and lasR 0.21.2. lasR's record retains the r-lidar
+  r-universe repository, GitHub source URL, and source commit
+  `a9ec6a5d656f413a47551a024d2e370054f28f8d`; it is not an unrecorded HEAD
+  installation. README.md documents activation, restoration, intentional
+  updates, native prerequisites, and Quarto 1.10.18. Strict restoration and
+  disabled version-upgrade retries prevent silent repository/version substitutes.
+- Added `R/check_environment.R` to check the R runtime, all locked package
+  versions, Quarto, and linked geospatial libraries without running workloads.
+  Package versions are compared as R versions, including hyphenated releases;
+  namespace failures retain their original error and point to restoration and
+  native prerequisites. Missing Quarto produces an actionable installation error.
+- Removed private lidR/benchmarkme helpers. The existing strict `Z > 2`
+  percentage now uses base R, with the same threshold/population and quantiles.
+  System metadata uses supported APIs and RAM bytes from `ps`. Catalog metadata
+  uses `lidR::npoints()`, `sf::st_area()`, and header accessors rather than
+  printed summaries: counts are exact, and point/first-return densities use
+  summed tile areas without display rounding or thousand/million scaling.
+  Invalid catalog area or unavailable first-return metadata fails explicitly.
+  Historical CSVs were not rewritten.
+- Updated the plotting helper's deprecated `size` arguments to `linewidth`,
+  preserving relative widths. Actual lidR algorithm and all nine lasR pipeline
+  constructors load with the selected APIs. Workload strings and semantics,
+  including the documented deprecated `chm()` alias, remain unchanged for Chat 5.
+- Added named testthat environment/API/metadata and isolated-restore cases.
+  Synthetic LAS fixtures distinguish total points from first returns and contain
+  more than 1,000 points to exercise the former summary-scaling problem.
+  Restoration uses a fresh temporary library plus the standard/recommended
+  packages bundled with the pinned R, not another project's dependency library.
+  Source restoration can take tens of minutes; the `chat3-environment` filter
+  omits that long check. The required standalone runner now activates renv even
+  under `--vanilla`; no other test framework was introduced.
+- Initial installation was blocked by missing CMake and HarfBuzz headers.
+  The user installed the documented prerequisites; native package installation
+  then succeeded and `renv::status()` reported a consistent environment.
+  Focused checks passed with 359 prior-chat and 121 Chat 3 expectations, without
+  failures, warnings, or skips. The initial full restore completed installation
+  but exposed an incorrect test assumption that R-bundled `KernSmooth` must be
+  inside the project library; that assertion was corrected.
+- **Final verification passed:** `Rscript --vanilla tests/testthat.R` completed
+  with **483 expectations, zero failures, zero warnings, and zero skips**,
+  including strict isolated restoration and loading every locked package at its
+  recorded version. The restore built from source and took about 18 minutes.
+  The final mixed-return metadata/runtime checks also passed separately (121
+  expectations). `Rscript --vanilla R/check_environment.R` succeeded with R
+  4.6.1, Quarto 1.10.18, GDAL 3.12.2, GEOS 3.14.1, and PROJ 9.7.1;
+  `renv::status()` reported no issues. Failed test runs returned a nonzero exit
+  status. No R restoration or focused API-compatibility blocker remains.
+- Remaining external limitations: no LAStools distribution, executable identity,
+  checksum set, or license/entitlement has been verified. README.md makes those
+  prerequisites explicit; the runner's missing-executable errors remain covered
+  by Chat 2 checks. Real benchmark point clouds and all-tool processing remain
+  unavailable/unrun. Windows execution, Linux monitoring, and report rendering
+  were not validated. The historical Segoe UI font and complete report pipeline
+  remain Chat 10 concerns; no font substitution or site regeneration was made.
+- The OS/R decision is resolved. Dataset provenance/preparation remains Chat 4;
+  comparable workload definitions and supported DSM migration remain Chat 5.
+- Next separate chat: Chat 4. Do not launch a data preparation run or campaign
+  as part of this completed Chat 3 work.

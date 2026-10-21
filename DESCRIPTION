@@ -1,0 +1,42 @@
+Package: LidarSpeedTests
+Title: LiDAR Benchmark Scripts and Reports
+Version: 0.0.0.9000
+Description: Dependency manifest for a script-based benchmark, not an R package.
+License: MIT
+Depends:
+    R (== 4.6.1)
+Imports:
+    benchmarkme,
+    callr,
+    cli,
+    curl,
+    dplyr,
+    forcats,
+    fs,
+    future,
+    ggplot2,
+    glue,
+    gt,
+    hms,
+    htmltools,
+    knitr,
+    lasR,
+    lidR,
+    lubridate,
+    magrittr,
+    processx,
+    ps,
+    purrr,
+    RColorBrewer,
+    readr,
+    renv,
+    rmarkdown,
+    sf,
+    stringr,
+    terra,
+    testthat,
+    tibble,
+    tidyr,
+    tidyverse,
+    withr
+Additional_repositories: https://r-lidar.r-universe.dev
