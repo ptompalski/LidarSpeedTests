@@ -165,7 +165,13 @@ test_that("setup definitions retain the workload matrix and validate selected in
     expect_equal(sum(vapply(setup$benchmark_tasks$task_call_lastools,
                            env$benchmark_call_is_empty, logical(1))), 4L)
     for (path in unique(setup$benchmark_runs$dir_in_org)) dir.create(path, recursive = TRUE)
-    selection <- data.frame(task_id = "pixel_metrics_2",
+    task_ids <- c("pixel_metrics_1a", "pixel_metrics_2", "generate_DEM")
+    calls <- setup$benchmark_tasks$task_call_lastools[
+      match(task_ids, setup$benchmark_tasks$task_id)
+    ]
+    expect_identical(vapply(calls, function(call) call$executable, character(1)),
+                     c("lascanopy64", "lascanopy64", "blast2dem64"))
+    selection <- data.frame(task_id = task_ids,
                             run_id = setup$benchmark_runs$ID[1L])
     expect_no_error(setup$benchmark_validate_selection(
       selection, setup$benchmark_tasks, setup$benchmark_runs, config

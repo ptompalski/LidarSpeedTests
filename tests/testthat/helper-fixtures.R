@@ -45,7 +45,7 @@ chat2_fixture <- function(envir = parent.frame()) {
   rscript <- file.path(R.home("bin"),
                        if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")
   suffix <- if (.Platform$OS.type == "windows") ".exe" else ""
-  for (name in c("probe", "lascanopy", "lasheight64", "blast2dem", "lasgrid64")) {
+  for (name in c("probe", "lascanopy64", "lasheight64", "blast2dem64", "lasgrid64")) {
     expect_true(file.copy(rscript, file.path(bin, paste0(name, suffix))))
   }
   probe <- file.path(bin, paste0("probe", suffix))

@@ -64,7 +64,7 @@ benchmark_tasks <-
     "Pixel metrics (simple)",
     "lidR::pixel_metrics(las = ctg, ~mean(Z), res = 20)", 
     "exec(pipeline = rasterize(20, 'z_mean', ofile = fout), on = f)",
-    list(executable = "lascanopy", args = c(
+    list(executable = "lascanopy64", args = c(
       "-i", "{inputs}", "-step", "20", "-avg", "-odir", "{output}",
       "-otif", "-cores", "{cores}", "-buffered", "20")),
     "datasets_org",
@@ -75,7 +75,7 @@ benchmark_tasks <-
     "Pixel metrics (complex)",
     "pixel_metrics(las = ctg, ~metrics_multiple(Z), res = 20)", 
     "exec(pipeline = rasterize(20, c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95'), ofile = fout), on = f)", 
-    list(executable = "lascanopy", args = c(
+    list(executable = "lascanopy64", args = c(
       "-i", "{inputs}", "-max", "-avg", "-std", "-cov", "-p",
       "5", "25", "50", "75", "95", "-odir", "{output}", "-otif",
       "-cores", "{cores}", "-buffered", "20")),
@@ -86,7 +86,7 @@ benchmark_tasks <-
     "Generate DEM",
     "rasterize_terrain(las = ctg, res = 1, algorithm = tin())", 
     "exec(pipeline = dtm(res = 1, ofile = fout), on = f)", 
-    list(executable = "blast2dem", args = c(
+    list(executable = "blast2dem64", args = c(
       "-i", "{inputs}", "-otif", "-odir", "{output}", "-step", "1",
       "-cores", "{cores}")), # no need to buffer the tiles
     "datasets_org",

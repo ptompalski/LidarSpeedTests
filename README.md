@@ -73,7 +73,7 @@ Before enabling it, obtain the appropriate Linux distribution from rapidlasso,
 verify the exact native executable names in `benchmark.example.R` and
 `R/0_setup.R`, and record distribution/version, source URL, binary SHA-256
 checksums, and license/entitlement. For example, use `sha256sum` on
-`lascanopy`, `lasheight64`, `lasgrid64`, and `blast2dem` in the configured
+`lascanopy64`, `lasheight64`, `lasgrid64`, and `blast2dem64` in the configured
 installation directory. The version-query helper alone does not establish binary
 identity or licensing. LAStools includes differently licensed components; do not
 assume that availability, a successful exit, or a demo executable permits an

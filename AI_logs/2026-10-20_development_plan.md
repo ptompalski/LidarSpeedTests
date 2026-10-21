@@ -465,3 +465,12 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   comparable workload definitions and supported DSM migration remain Chat 5.
 - Next separate chat: Chat 4. Do not launch a data preparation run or campaign
   as part of this completed Chat 3 work.
+- Follow-up at the user's request: inspected
+  `/home/ptompals/opt/lastools/bin`; `lascanopy64`, `lasheight64`, `lasgrid64`,
+  and `blast2dem64` all answered `-version` successfully with version 260914
+  (non-profit). Corrected both pixel-metric calls to `lascanopy64` and the DEM
+  call to `blast2dem64`, with matching fixtures and documentation. Focused Chat 2
+  and Chat 3 environment checks passed 303 expectations without failures,
+  warnings, or skips. No workload flags, machine configuration, license
+  entitlement, or campaign execution changed; distribution provenance and
+  executable checksums remain unverified.
