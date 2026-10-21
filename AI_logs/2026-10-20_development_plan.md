@@ -17,8 +17,17 @@ Do not claim completion when external inputs or runtime checks are unavailable.
 
 Work on `dev`; do not commit, push, download large datasets, or launch a full
 benchmark campaign without an explicit request. Preserve historical results and
-distinguish them from newly generated campaigns. Choose test tooling appropriate
-to this script-based repository; no test suite is currently tracked.
+distinguish them from newly generated campaigns.
+
+All automated testing for every chat must use **testthat**, even though this is
+a script-based repository rather than an R package. Add named `test_that()`
+cases with `expect_*()` assertions under `tests/testthat/test-*.R`, reusing
+temporary fixtures and cleanup helpers where appropriate. Do not introduce
+standalone `stopifnot()` regression scripts or another test framework. Run
+`Rscript --vanilla tests/testthat.R` from the repository root; failures must
+produce a nonzero exit status. Document dependencies, platform skips, and
+external-runtime limitations in the test guidance and handoff. Include
+`testthat` and test helper dependencies when establishing the Chat 3 environment.
 
 ## Chat 1: Preserve failures and represent unsupported workloads
 
@@ -363,6 +372,21 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   workload equivalence, campaign identity, artifact correctness, scheduling, and
   campaign-aware monitoring remain their separately planned chats.
 - Next separate chat: Chat 3.
+- Testing follow-up (2026-10-21): converted the Chat 1 and Chat 2 regression
+  scripts to named testthat cases in `tests/testthat/`, preserving subprocess,
+  compiler, configuration, scratch-safety, and resource-cleanup coverage.
+  Shared fixtures restore configuration, working directories, and future plans
+  and remove temporary artifacts; monitor fixtures have fallback process cleanup.
+  The old standalone script paths and commands above are historical records,
+  superseded by `Rscript --vanilla tests/testthat.R`. README.md documents
+  dependency installation, full/filtered runs, and platform limitations. This
+  remains a non-package repository; no benchmark code or runtime pin was changed.
+  The standalone runner passed on Linux/R 4.6.1 with 359 expectations and no
+  failures, warnings, or skips. Separate testthat assertions confirmed restoration
+  of the caller's working directory, configuration environment variable, and
+  future plan, plus removal of temporary fixture directories. Missing test
+  dependencies were installed only in this session's artifact library via
+  `R_LIBS_USER`; no project lockfile or runtime pin was introduced.
 - Expected external decisions: target OS/R version (Chat 3), historical data and
   preparation sources (Chat 4), monitoring scope (Chat 9), full-run approval
   (Chat 12). Resolve each when needed rather than guessing now.

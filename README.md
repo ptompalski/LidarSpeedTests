@@ -50,9 +50,35 @@ that health check does not validate utilization samples or counter accuracy.
 
 Review the selected combinations in `R/3_runBenchmarks.R` before sourcing it.
 Do not run a full campaign until inputs, dependencies, and workload contracts
-have been approved. Focused checks can be run without point clouds or LAStools:
+have been approved.
+
+## Tests
+
+All automated tests use `testthat`, without making this repository an R package.
+Install the focused suite's dependencies in your R library:
+
+```r
+install.packages(c(
+  "testthat", "withr", "dplyr", "readr", "tidyr", "purrr", "forcats",
+  "stringr", "glue", "magrittr", "cli", "processx", "future", "fs", "ps"
+))
+```
+
+Run the suite from the repository root; failures produce a nonzero exit status:
 
 ```sh
-Rscript --vanilla tests/chat1_regression.R
-Rscript --vanilla tests/chat2_regression.R
+Rscript --vanilla tests/testthat.R
 ```
+
+Tests are in `tests/testthat/test-*.R`; shared temporary fixtures are in
+`tests/testthat/helper-fixtures.R`. To run just one chat's tests from the root:
+
+```sh
+Rscript --vanilla -e 'testthat::test_dir("tests/testthat", filter = "chat1", stop_on_failure = TRUE)'
+```
+
+The suite requires no machine-local benchmark configuration, point clouds,
+geospatial packages, or LAStools installation. It uses Rscript subprocesses and
+small catalog/monitor stand-ins, not real geodata processing. Unix-specific shell,
+permission, and symlink checks are explicitly skipped on Windows; permission
+checks also skip when the current user bypasses the tested restrictions.
