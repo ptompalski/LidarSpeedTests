@@ -24,40 +24,269 @@ metrics_multiple <- function(z) {
 }
 
 
-dir_out_reset <- function(dir_out) {
-  if(dir.exists(dir_out)) fs::dir_delete(dir_out)
-  fs::dir_create(dir_out)
+benchmark_directory <- function(path, label, writable = FALSE) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) ||
+      !nzchar(path) || !dir.exists(path)) {
+    stop(label, " must be an existing directory: ", paste(path, collapse = ", "))
+  }
+  path <- normalizePath(path, winslash = "/", mustWork = TRUE)
+  if (file.access(path, if (writable) 2 else 4) != 0) {
+    stop(label, " is not ", if (writable) "writable: " else "readable: ", path)
+  }
+  if (.Platform$OS.type != "windows" && file.access(path, 1) != 0) {
+    stop(label, " is not searchable: ", path)
+  }
+  path
 }
 
-#gets info about the system, R, and the lidar related packages/software
-system_info <- function(lastools_path="C:/LAStools/bin") {
-  
-  system_details <- 
-    get_sys_details(byte_compiler = F, 
-                    linear_algebra = F, 
-                    machine = F)
-  
-  pkgs <- system_details$installed_packages 
-  
-  #get lidR, lasR, and lastools versions (if installed)
-  lidR_version <- lasR_version <- lastools_version <- NA
-  
-  if("lidR" %in% pkgs[,1]) {
-    lidR_version <- pkgs[which(pkgs[,1]=="lidR"),3]
-  } 
-  
-  if("lasR" %in% pkgs[,1]) {
-    lasR_version <- pkgs[which(pkgs[,1]=="lasR"),3]
-  } 
-  
-  # lastools_path <- "C:/LAStools/bin"
-  if(dir.exists(lastools_path)) {
-    a <- system(paste0(lastools_path,"/las2las.exe -version"), intern = T)  
-    lastools_version <- as.numeric(gsub("\\D", "", a))
+benchmark_path_equal <- function(a, b) {
+  if (.Platform$OS.type == "windows") {
+    a <- tolower(a)
+    b <- tolower(b)
   }
-  
+  identical(a, b)
+}
+
+benchmark_path_within <- function(path, parent) {
+  if (.Platform$OS.type == "windows") {
+    path <- tolower(path)
+    parent <- tolower(parent)
+  }
+  identical(path, parent) || startsWith(path, paste0(sub("/+$", "", parent), "/"))
+}
+
+benchmark_paths_overlap <- function(a, b) {
+  benchmark_path_within(a, b) || benchmark_path_within(b, a)
+}
+
+benchmark_validate_scratch_root <- function(root, protected_paths) {
+  root <- benchmark_directory(root, "Scratch root")
+  home <- normalizePath(path.expand("~"), winslash = "/", mustWork = TRUE)
+  if (benchmark_path_equal(root, dirname(root)) ||
+      grepl("^[A-Za-z]:/?$|^//[^/]+/[^/]+/?$", root) ||
+      benchmark_path_equal(root, home) ||
+      benchmark_path_equal(root, normalizePath(getwd(), winslash = "/"))) {
+    stop("Scratch root cannot be a filesystem root, home, or working directory.")
+  }
+  benchmark_directory(root, "Scratch root", writable = TRUE)
+  for (path in protected_paths) {
+    path <- benchmark_directory(path, "Protected path")
+    if (benchmark_paths_overlap(root, path)) {
+      stop("Scratch root overlaps an input or report directory: ", path)
+    }
+  }
+  root
+}
+
+benchmark_load_config <- function(
+    path = Sys.getenv("LIDAR_BENCHMARK_CONFIG", "benchmark.local.R"),
+    required = TRUE) {
+  if (!file.exists(path)) {
+    if (!required && !nzchar(Sys.getenv("LIDAR_BENCHMARK_CONFIG"))) return(NULL)
+    stop("Missing benchmark configuration: ", path,
+         ". Copy benchmark.example.R to benchmark.local.R and edit its paths.")
+  }
+  config <- dget(path)
+  if (!is.list(config)) stop("Benchmark configuration must be a list.")
+  config
+}
+
+benchmark_validate_config <- function(config) {
+  if (!is.list(config)) stop("An explicit benchmark configuration is required.")
+  for (field in c("input_roots", "scratch_roots")) {
+    paths <- config[[field]]
+    if (!is.character(paths) || !length(paths) || is.null(names(paths)) ||
+        anyNA(names(paths)) || anyDuplicated(names(paths)) ||
+        any(!grepl("^[A-Za-z0-9-]+$", names(paths)))) {
+      stop(field, " must be directories named with unique drive labels (letters, digits, hyphens).")
+    }
+    config[[field]] <- vapply(paths, benchmark_directory, character(1),
+                              label = field, writable = field == "scratch_roots")
+  }
+  config$reports_path <- benchmark_directory(config$reports_path, "Reports", TRUE)
+  for (input in config$input_roots) {
+    if (benchmark_paths_overlap(input, config$reports_path)) {
+      stop("Reports must not overlap input directories.")
+    }
+  }
+  if (!is.numeric(config$cores) || !length(config$cores) ||
+      anyNA(config$cores) || any(!is.finite(config$cores)) ||
+      any(config$cores < 1 | config$cores != floor(config$cores))) {
+    stop("cores must contain positive integers.")
+  }
+  if (!is.character(config$tools) || !length(config$tools) ||
+      anyNA(config$tools) || anyDuplicated(config$tools) ||
+      any(!config$tools %in% c("lidR", "lasR", "lastools"))) {
+    stop("tools must explicitly select lidR, lasR, and/or lastools.")
+  }
+  if (!is.logical(config$resource_monitoring) ||
+      length(config$resource_monitoring) != 1L || is.na(config$resource_monitoring)) {
+    stop("resource_monitoring must be TRUE or FALSE.")
+  }
+  if (config$resource_monitoring) {
+    config <- benchmark_validate_monitor(config)
+  }
+  protected <- c(config$input_roots, config$reports_path,
+                 if (config$resource_monitoring) config$system_monitoring_path)
+  config$scratch_roots <- vapply(config$scratch_roots, benchmark_validate_scratch_root,
+                                 character(1), protected_paths = protected)
+  if ("lastools" %in% config$tools) {
+    config$lastools_path <- benchmark_directory(config$lastools_path, "LAStools")
+  }
+  benchmark_file_component(config$workstation_id, "workstation_id")
+  config
+}
+
+benchmark_make_runs <- function(settings, config) {
+  runs <- expand.grid(
+    dataset = names(settings$datasets_org), cores = config$cores,
+    drive_out = names(config$scratch_roots), drive_in = names(config$input_roots),
+    stringsAsFactors = FALSE
+  )
+  runs <- runs[c("drive_in", "drive_out", "cores", "dataset")]
+  runs$ID <- with(runs, paste(dataset, cores, drive_in, drive_out, sep = "_"))
+  runs$dir_in_org <- file.path(
+    config$input_roots[runs$drive_in], settings$datasets_org[runs$dataset]
+  )
+  norm <- settings$datasets_norm[runs$dataset]
+  runs$dir_in_norm <- ifelse(
+    is.na(norm), NA_character_, file.path(config$input_roots[runs$drive_in], norm)
+  )
+  runs$scratch_root <- unname(config$scratch_roots[runs$drive_out])
+  runs
+}
+
+benchmark_validate_run_paths <- function(config, dir_in, scratch_root) {
+  dir_in <- benchmark_directory(dir_in, "Benchmark input")
+  if (!any(vapply(config$input_roots, function(root) {
+    benchmark_path_within(dir_in, root)
+  }, logical(1)))) {
+    stop("Benchmark input is outside the configured input roots: ", dir_in)
+  }
+  scratch_root <- benchmark_validate_scratch_root(
+    scratch_root, c(config$input_roots, config$reports_path, dir_in,
+                    if (config$resource_monitoring) config$system_monitoring_path)
+  )
+  if (!any(vapply(config$scratch_roots, benchmark_path_equal, logical(1), b = scratch_root))) {
+    stop("Run scratch root is not configured: ", scratch_root)
+  }
+  invisible(NULL)
+}
+
+benchmark_resolve_executable <- function(executable) {
+  if (!is.character(executable) || length(executable) != 1L ||
+      is.na(executable) || !nzchar(executable)) {
+    stop("An executable path or name is required.")
+  }
+  path <- if (grepl("[/\\\\]", executable)) executable else unname(Sys.which(executable))
+  if (!nzchar(path) || !file.exists(path) || dir.exists(path) ||
+      (.Platform$OS.type != "windows" && file.access(path, 1) != 0)) {
+    stop("Executable is missing or not executable: ", executable)
+  }
+  normalizePath(path, winslash = "/", mustWork = TRUE)
+}
+
+benchmark_lastools_executable <- function(lastools_path, executable) {
+  if (!is.character(executable) || length(executable) != 1L || is.na(executable) ||
+      !grepl("^[A-Za-z0-9_-]+$", executable)) {
+    stop("LAStools executable must be an explicit tool name, without paths or arguments.")
+  }
+  suffix <- if (.Platform$OS.type == "windows") ".exe" else ""
+  benchmark_resolve_executable(file.path(
+    benchmark_directory(lastools_path, "LAStools"), paste0(executable, suffix)
+  ))
+}
+
+benchmark_process <- function(executable, args = character()) {
+  executable <- benchmark_resolve_executable(executable)
+  if (!is.character(args) || anyNA(args)) stop("Process arguments must be character values.")
+  processx::run(executable, args, error_on_status = FALSE, cleanup_tree = TRUE)
+}
+
+.benchmark_scratch_owners <- new.env(parent = emptyenv())
+
+benchmark_scratch_identity <- function(path) {
+  as.list(fs::file_info(path, follow = FALSE)[c("device_id", "inode", "birth_time")])
+}
+
+benchmark_scratch_create <- function(root, protected_paths) {
+  root <- benchmark_validate_scratch_root(root, protected_paths)
+  path <- tempfile("lidar-run-", tmpdir = root)
+  if (!dir.create(path, mode = "0700")) {
+    stop("Could not create run-owned scratch directory: ", path)
+  }
+  owner <- list(path = path, root = root, protected_paths = protected_paths,
+                identity = benchmark_scratch_identity(path))
+  assign(path, owner, envir = .benchmark_scratch_owners)
+  owner
+}
+
+benchmark_check_scratch_tree <- function(path) {
+  canonical <- normalizePath(path, winslash = "/", mustWork = TRUE)
+  if (!benchmark_path_equal(path, canonical) || isTRUE(fs::is_link(path))) {
+    stop("Refusing scratch cleanup through a symbolic link or redirected path: ", path)
+  }
+  if (dir.exists(path)) {
+    children <- list.files(path, all.files = TRUE, no.. = TRUE, full.names = TRUE)
+    for (child in children) benchmark_check_scratch_tree(child)
+  }
+  invisible(NULL)
+}
+
+benchmark_scratch_cleanup <- function(owner) {
+  if (!is.list(owner) || !is.character(owner$path) || length(owner$path) != 1L ||
+      is.na(owner$path) || !exists(owner$path, .benchmark_scratch_owners, inherits = FALSE) ||
+      !identical(owner, get(owner$path, .benchmark_scratch_owners, inherits = FALSE))) {
+    stop("Refusing cleanup of an unowned scratch directory.")
+  }
+  root <- benchmark_validate_scratch_root(owner$root, owner$protected_paths)
+  if (!benchmark_path_equal(dirname(owner$path), root) ||
+      !startsWith(basename(owner$path), "lidar-run-")) {
+    stop("Refusing cleanup outside the run-owned scratch directory.")
+  }
+  if (!identical(owner$identity, benchmark_scratch_identity(owner$path))) {
+    stop("Refusing scratch cleanup: directory identity changed: ", owner$path)
+  }
+  benchmark_check_scratch_tree(owner$path)
+  if (unlink(owner$path, recursive = TRUE) != 0L || dir.exists(owner$path)) {
+    stop("Could not remove run-owned scratch directory: ", owner$path)
+  }
+  rm(list = owner$path, envir = .benchmark_scratch_owners)
+  invisible(NULL)
+}
+
+benchmark_file_component <- function(value, label) {
+  if (!is.character(value) || length(value) != 1L || is.na(value) ||
+      !nzchar(value) || value %in% c(".", "..") ||
+      grepl("[/\\\\:<>\"|?*]|[[:cntrl:]]", value)) {
+    stop(label, " must be a filename component, not a path.")
+  }
+  value
+}
+
+benchmark_lastools_version <- function(lastools_path) {
+  version <- benchmark_process(benchmark_lastools_executable(lastools_path, "las2las"),
+                               "-version")
+  if (version$status != 0L) {
+    stop("LAStools version query failed (", version$status, "): ",
+         version$stdout, version$stderr)
+  }
+  text <- trimws(paste0(version$stdout, version$stderr))
+  digits <- gsub("\\D", "", text)
+  if (!nzchar(digits)) stop("Cannot identify LAStools version from: ", text)
+  as.numeric(digits)
+}
+
+# gets info about the system, R, and the lidar related packages/software
+system_info <- function(lastools_path = NULL) {
+  system_details <- get_sys_details(byte_compiler = FALSE,
+                                    linear_algebra = FALSE, machine = FALSE)
+  pkgs <- system_details$installed_packages
+  package_version <- function(name) {
+    if (name %in% pkgs[, 1]) pkgs[which(pkgs[, 1] == name), 3] else NA_character_
+  }
+  lastools_version <- if (is.null(lastools_path)) NA_real_ else benchmark_lastools_version(lastools_path)
   cpu_info <- benchmarkme::get_cpu()
-  
   output <- list(
     nodename = system_details$sys_info$nodename,
     sysname = system_details$sys_info$sysname,
@@ -66,9 +295,9 @@ system_info <- function(lastools_path="C:/LAStools/bin") {
     cpu_threads = cpu_info$no_of_cores,
     ram = get_ram(),
     Rversion = R.version.string,
-    lidR_version = lidR_version,
-    lasR_version = lasR_version,
-    lastools_version=lastools_version
+    lidR_version = package_version("lidR"),
+    lasR_version = package_version("lasR"),
+    lastools_version = lastools_version
   )
   
   return(output)
@@ -126,364 +355,389 @@ check_results <- function(path) {
   
 }
 
-benchmark_run <- function(task_id, 
-                          run_id,
-                          run_lidR = T, 
-                          run_lasR = T, 
-                          run_lastools = T, 
-                          benchmark_tasks, 
-                          benchmark_runs,
-                          force_rerun_lidR = F,
-                          force_rerun_lasR = F,
-                          force_rerun_lastools = F,
-                          sysinfo,
-                          resource_monitoring=F
-) {
-  
-  
-  
-  system_info <- function(lastools_path="C:/LAStools/bin") {
-    
-    system_details <- 
-      get_sys_details(byte_compiler = F, 
-                      linear_algebra = F, 
-                      machine = F)
-    
-    pkgs <- system_details$installed_packages 
-    
-    #get lidR, lasR, and lastools versions (if installed)
-    lidR_version <- lasR_version <- lastools_version <- NA
-    
-    if("lidR" %in% pkgs[,1]) {
-      lidR_version <- pkgs[which(pkgs[,1]=="lidR"),3]
-    } 
-    
-    if("lasR" %in% pkgs[,1]) {
-      lasR_version <- pkgs[which(pkgs[,1]=="lasR"),3]
-    } 
-    
-    # lastools_path <- "C:/LAStools/bin"
-    if(dir.exists(lastools_path)) {
-      a <- system(paste0(lastools_path,"/las2las.exe -version"), intern = T)  
-      lastools_version <- as.numeric(gsub("\\D", "", a))
-    }
-    
-    cpu_info <- benchmarkme::get_cpu()
-    
-    output <- list(
-      nodename = system_details$sys_info$nodename,
-      sysname = system_details$sys_info$sysname,
-      release = system_details$sys_info$release,
-      cpu = cpu_info$model_name,
-      cpu_threads = cpu_info$no_of_cores,
-      ram = get_ram(),
-      Rversion = R.version.string,
-      lidR_version = lidR_version,
-      lasR_version = lasR_version,
-      lastools_version=lastools_version
-    )
-    
-    return(output)
-  }
-  
-  
-  cli::cli_h1("Benchmark run started: {task_id}, {run_id}")
-  
-  #get task calls based on task id
-  benchmark_tasks_current  <- benchmark_tasks[benchmark_tasks$task_id==task_id,]
-  
-  #get run info based on run_id
-  benchmark_runs_current <- benchmark_runs[benchmark_runs$ID == run_id,]
-  
-  cores <- benchmark_runs_current$cores
-  
-  # dir_in required to run the task depends on the data_type (normalized or original)
-  if(benchmark_tasks_current$data_type == "datasets_org") dir_in <- benchmark_runs_current$dir_in_org
-  if(benchmark_tasks_current$data_type == "datasets_norm") dir_in <- benchmark_runs_current$dir_in_norm
-  
-  dir_out <- benchmark_runs_current$dir_out
-  
-  #system info
-  sys <- sysinfo
-  
-  # prepare input
-  ctg <- prepare_input(dir_in = dir_in, dir_out = dir_out)
-  f <- ctg@data$filename #file list for lasR
-  f_lastools <- paste(f, collapse = " ") #file list for lastools
-  
-  #point cloud info
-  d_info <- benchmark_ALS_info(ctg, dir_in = dir_in)
-  
-  #output file names
-  output_fname_lidR <- glue("{workstation_id}_{task_id}_{run_id}_{sys$lidR_version}_lidR")
-  output_fname_lasR <- glue("{workstation_id}_{task_id}_{run_id}_{sys$lasR_version}_lasR")
-  output_fname_lastools <- glue("{workstation_id}_{task_id}_{run_id}_{sys$lastools_version}_lastools")
-  
-  
-  # function to exec lidR call
-  benchmark_run_lidR <- function(task_call_lidR, resource_monitoring) {
-    
-    cli::cli_h2("Running lidR")
-    
-    #reset output dir
-    dir_out_reset(dir_out)
-    
-    #setup future multisession 
-    x <- paste0("future::plan(future::multisession(workers = ", cores, "))")
-    eval(parse(text = x))
-    
-    
-    #start system resource monitoring (windows only, a powershell script run in the background)
-    if(resource_monitoring) {
-    MonitoringProcess1 <- 
-      callr::r_bg( function(x,y)  system2("powershell", args=c("-file",  "./cpu_ram_usage.ps1", x, y)), args = list(output_fname_lidR, system_monitoring_path)  )  
-    }
-    
-    #record start time
-    start_time_lidR <- Sys.time()
-    
-    result_lidR <- tryCatch(expr = {
-      eval(parse(text = task_call_lidR))
-    },
-    error=function(e) { 
-      message('An Error Occurred')
-      print(e)
-      return("ERROR")
-    }
-    )
-    
-    #record finish time
-    finish_time_lidR <- Sys.time()
-    
-    #display time elapsed
-    cli::cli_alert_success("Finished in {finish_time_lidR-start_time_lidR} sec.")
-    
-    # record if run was successful
-    is_successful_lidR <- 1
-    if(is.character(result_lidR) & length(result_lidR)==1) {
-      if(result_lidR == "ERROR") is_successful_lidR <- 0
-    }
-    
-    #stop system monitoring
-    if(resource_monitoring) MonitoringProcess1$kill()
-    
-    #reset workers
-    future::plan(future::sequential)
-    
-    check_results_lidR <- check_results(dir_out)
-    
-    return(
-      c(
-        list(
-          tool = "lidR",
-          success=is_successful_lidR,
-          start_time =  start_time_lidR,
-          finish_time= finish_time_lidR
-        ),
-        check_results_lidR
-      )
-    )
-    
-    Sys.sleep(5)
-    
-  }
-  
-  
-  
-  #function to exec lasR 
-  benchmark_run_lasR <- function(task_call_lasR, resource_monitoring) {
-    
-    cli::cli_h2("Running lasR")
-    
-    #reset output dir
-    dir_out_reset(dir_out)
-    
-    #set parallel strategy (note: more strategies need to be tested)
-    unset_parallel_strategy() 
-    set_parallel_strategy(concurrent_files(ncores = cores))
-    
-    #filename for system monitoring log
-    output_fname2 <- glue("{workstation_id}_{task_id}_{run_id}_lasR")
-    
-    #start system resource monitoring (windows only, a powershell script run in the background)
-    if(resource_monitoring) {
-    MonitoringProcess2 <- 
-      callr::r_bg( function(x,y)  system2("powershell", args=c("-file",  "./cpu_ram_usage.ps1", x, y)), args = list(output_fname2, system_monitoring_path)  )  
-    }
-    
-    #wildcard output path for lasR
-    fout <- paste0(dir_out, "/*.",benchmark_tasks_current$output_format)
-    
-    start_time_lasR <- Sys.time()
-    
-    result_lasR <- tryCatch(expr = {
-      eval(parse(text = task_call_lasR))
-    },
-    error=function(e) {
-      message('An Error Occurred')
-      print(e)
-      return("ERROR")
-    }
-    )
-    
-    finish_time_lasR <- Sys.time()
-    
-    #stop system monitoring
-    if(resource_monitoring) MonitoringProcess2$kill()
-    
-    cli::cli_alert_success("{finish_time_lasR-start_time_lasR} sec.")
-    
-    is_successful_lasR <- 1
-    if(is.character(result_lasR) & length(result_lasR)==1) {
-      if(result_lasR == "ERROR") is_successful_lasR <- 0
-    }
-    
-    check_results_lasR <- check_results(dir_out)
-    
-    return(
-      c(
-        list(
-          tool = "lasR",
-          success=is_successful_lasR,
-          start_time =  start_time_lasR,
-          finish_time= finish_time_lasR
-        ),
-        check_results_lasR
-      )
-    )
-    
-    
-    Sys.sleep(5)
-  }
-  
-  
-  
-  #function to exec lastools
-  benchmark_run_lastools <- function(task_call_lastools, resource_monitoring) {
-    
-    cli::cli_h2("Running lastools")
-    
-    #filename for system monitoring log
-    output_fname3 <- glue("{workstation_id}_{task_id}_{run_id}_lastools")
-    
-    #reset output dir
-    dir_out_reset(dir_out)
-    
-    #lastools command to execute 
-    command <- paste0(lastools_path, "/", task_call_lastools)
-    
-    #start system resource monitoring (windows only, a powershell script run in the background)
-    if(resource_monitoring) {
-    MonitoringProcess3 <- 
-      callr::r_bg( function(x,y)  system2("powershell", args=c("-file",  "./cpu_ram_usage.ps1", x, y)), args = list(output_fname3, system_monitoring_path)  )  
-    }
-    
-    start_time_lastools <- Sys.time()
-    
-    result_lastools <- tryCatch(expr = {
-      system(glue::glue(command)) #glue is crucial here because of the {} inside the call
-    },
-    error=function(e) {
-      message('An Error Occurred')
-      print(e)
-      return("ERROR")
-    }
-    )
-    
-    finish_time_lastools <- Sys.time()
-    
-    #stop system monitoring
-    if(resource_monitoring) MonitoringProcess3$kill()
-    
-    cli::cli_alert_success("Finished in {finish_time_lastools-start_time_lastools} sec.")
-    
-    is_successful_lastools <- 1
-    if(is.character(result_lastools) & length(result_lastools)==1) {
-      if(result_lastools == "ERROR") is_successful_lastools <- 0
-    }
-    
-    check_results_lastools <- check_results(dir_out)
-    
-    O <-     
-      c(
-        list(
-          tool = "lastools",
-          success = is_successful_lastools,
-          start_time =  start_time_lastools,
-          finish_time= finish_time_lastools
-        ),
-        check_results_lastools
-      )
-    
-    
-    return(O)
-    
-    
-    Sys.sleep(5)
-  }
-  
-  ######
-  
-  
-  
-  
-  benchmark_lidR_result <- benchmark_lasR_result <- benchmark_lastools_result <- NA
-  
-  common_output <- 
-    tibble(
-      task_id=task_id,
-      run_id = run_id,
-      cores = cores) %>%
-    bind_cols(
-      # as_tibble(sys),
-      sysinfo,
-      as_tibble(d_info)
-    )
-  
-  if(run_lidR) {
-    f_results <- glue::glue("{reports_path}/{output_fname_lidR}.csv")
-    
-    if(force_rerun_lidR) file.remove(f_results)
-    
-    if(!file.exists(f_results)) {
-      benchmark_lidR_result <- benchmark_run_lidR(task_call_lidR = benchmark_tasks_current$task_call_lidR, resource_monitoring=resource_monitoring)  
-      R <- bind_cols(benchmark_lidR_result, common_output)
-      write.csv(R, file = f_results)
-      
-    } else {
-      cli::cli_warn(glue::glue("Output already exist: {f_results}"))
-    }
-  }
-  
-  if(run_lasR) {
-    f_results <- glue::glue("{reports_path}/{output_fname_lasR}.csv")
-    
-    if(force_rerun_lasR) file.remove(f_results)
-    
-    if(!file.exists(f_results)) {
-      benchmark_lasR_result <- benchmark_run_lasR(task_call_lasR = benchmark_tasks_current$task_call_lasR, resource_monitoring=resource_monitoring) 
-      R <- bind_cols(benchmark_lasR_result, common_output)
-      write.csv(R, file = f_results)
-      
-    } else {
-      cli::cli_warn(glue::glue("Output already exist: {f_results}"))
-    }
-  }
-  
-  if(run_lastools) {
-    f_results <- glue::glue("{reports_path}/{output_fname_lastools}.csv")
-    
-    if(force_rerun_lastools) file.remove(f_results)
-    
-    if(!file.exists(f_results)) {
-      benchmark_lastools_result <- benchmark_run_lastools(task_call_lastools = benchmark_tasks_current$task_call_lastools, resource_monitoring=resource_monitoring)
-      R <- bind_cols(benchmark_lastools_result, common_output)
-      write.csv(R, file = f_results)
-      
-    } else {
-      cli::cli_warn(glue::glue("Output already exist: {f_results}"))
-    }
-  }
-  
+benchmark_call_is_empty <- function(task_call) {
+  length(task_call) == 0L ||
+    (is.character(task_call) && length(task_call) == 1L &&
+       (is.na(task_call) || !nzchar(trimws(task_call))))
 }
 
+benchmark_validate_lastools_call <- function(task_call) {
+  if (!is.list(task_call) || !is.character(task_call$executable) ||
+      length(task_call$executable) != 1L || is.na(task_call$executable) ||
+      !is.character(task_call$args) || anyNA(task_call$args)) {
+    stop("LAStools calls must be list(executable = 'tool', args = c(...)), not shell commands.")
+  }
+  invisible(NULL)
+}
+
+benchmark_lastools_command <- function(task_call, envir) {
+  benchmark_validate_lastools_call(task_call)
+  values <- list(
+    "{inputs}" = get("f", envir = envir),
+    "{output}" = get("dir_out", envir = envir),
+    "{cores}" = as.character(get("cores", envir = envir))
+  )
+  args <- as.character(unlist(lapply(task_call$args, function(arg) {
+    if (arg %in% names(values)) return(values[[arg]])
+    if (grepl("[{}]", arg)) stop("Unknown LAStools argument placeholder: ", arg)
+    arg
+  }), use.names = FALSE))
+  list(
+    executable = benchmark_lastools_executable(
+      get("lastools_path", envir = envir), task_call$executable
+    ),
+    args = args
+  )
+}
+
+benchmark_execute_call <- function(task_call, tool, envir = parent.frame()) {
+  result <- list(
+    tool = tool,
+    success = 0L,
+    execution_status = "skipped",
+    diagnostic = NA_character_,
+    exit_status = NA_integer_,
+    stdout = NA_character_,
+    stderr = NA_character_,
+    start_time = as.POSIXct(NA),
+    finish_time = as.POSIXct(NA)
+  )
+
+  if (benchmark_call_is_empty(task_call)) {
+    result$diagnostic <- paste0("Unsupported workload: no ", tool, " call defined.")
+    message(result$diagnostic)
+    return(c(result, list(output_file_count = NA_integer_,
+                          output_total_size = NA_character_)))
+  }
+
+  diagnostics <- character()
+  result$start_time <- Sys.time()
+  result$execution_status <- "failed"
+  tryCatch(
+    withCallingHandlers({
+      if (tool == "lastools") {
+        command <- benchmark_lastools_command(task_call, envir)
+        process <- benchmark_process(command$executable, command$args)
+        result$exit_status <- as.integer(process$status)
+        result$stdout <- process$stdout
+        result$stderr <- process$stderr
+        if (process$status != 0L) {
+          stop(paste0("LAStools exited with status ", process$status, ".\n",
+                      process$stdout, process$stderr))
+        }
+      } else {
+        eval(parse(text = task_call), envir = envir)
+      }
+      result$success <- 1L
+      result$execution_status <- "succeeded"
+    }, warning = function(w) {
+      diagnostics <<- c(diagnostics, conditionMessage(w))
+    }),
+    error = function(e) {
+      diagnostics <<- c(diagnostics, conditionMessage(e))
+      message(tool, ": ", conditionMessage(e))
+    }
+  )
+  result$finish_time <- Sys.time()
+  if (length(diagnostics)) {
+    result$diagnostic <- paste(unique(diagnostics), collapse = "\n")
+  }
+  result
+}
+
+benchmark_validate_monitor <- function(config) {
+  if (.Platform$OS.type != "windows") {
+    stop("Resource monitoring is Windows-only; set resource_monitoring = FALSE on this platform.")
+  }
+  config$system_monitoring_path <- benchmark_directory(
+    config$system_monitoring_path, "Monitoring reports", TRUE
+  )
+  if (any(vapply(config$input_roots, benchmark_paths_overlap, logical(1),
+                 b = config$system_monitoring_path))) {
+    stop("Monitoring reports must not overlap input directories.")
+  }
+  if (!is.character(config$monitor_script) || length(config$monitor_script) != 1L ||
+      is.na(config$monitor_script) || !file.exists(config$monitor_script) ||
+      dir.exists(config$monitor_script)) {
+    stop("Monitoring script is missing: ", config$monitor_script)
+  }
+  config$monitor_script <- normalizePath(config$monitor_script, winslash = "/")
+  config$powershell <- benchmark_resolve_executable(config$powershell)
+  config
+}
+
+benchmark_start_monitor <- function(config, label) {
+  config <- benchmark_validate_monitor(config)
+  label <- benchmark_file_component(label, "Monitor label")
+  stdout <- file.path(config$system_monitoring_path, paste0(label, "-stdout.log"))
+  stderr <- file.path(config$system_monitoring_path, paste0(label, "-stderr.log"))
+  monitor <- processx::process$new(
+    config$powershell,
+    c("-NoProfile", "-NonInteractive", "-File", config$monitor_script,
+      label, config$system_monitoring_path),
+    stdout = stdout, stderr = stderr, cleanup_tree = TRUE
+  )
+  ready <- FALSE
+  on.exit(if (!ready) {
+    monitor$kill_tree()
+    monitor$wait(5000)
+  })
+  deadline <- Sys.time() + 10
+  repeat {
+    monitor$wait(100)
+    if (file.exists(stderr) && file.info(stderr)$size > 0) {
+      stop("Monitoring process reported startup errors: ",
+           paste(readLines(stderr, warn = FALSE), collapse = "\n"))
+    }
+    if (!monitor$is_alive()) stop("Monitoring process exited during startup.")
+    if (file.exists(stdout) && file.info(stdout)$size > 0) break
+    if (Sys.time() >= deadline) {
+      stop("Monitoring process produced no startup output; inspect ", stdout, " and ", stderr)
+    }
+  }
+  ready <- TRUE
+  monitor
+}
+
+benchmark_stop_monitor <- function(monitor) {
+  was_alive <- monitor$is_alive()
+  monitor$kill_tree()
+  monitor$wait(5000)
+  if (monitor$is_alive()) stop("Could not stop the monitoring process tree.")
+  if (!was_alive) stop("Monitoring process exited before workload cleanup.")
+  invisible(NULL)
+}
+
+benchmark_cleanup <- function(actions) {
+  errors <- character()
+  for (action in rev(actions)) {
+    tryCatch(action(), error = function(e) {
+      errors <<- c(errors, conditionMessage(e))
+    })
+  }
+  if (length(errors)) stop("Benchmark cleanup failed: ", paste(errors, collapse = "; "))
+  invisible(NULL)
+}
+
+benchmark_failed_result <- function(tool, error, result = NULL) {
+  if (is.null(result)) {
+    result <- list(
+      tool = tool, exit_status = NA_integer_, stdout = NA_character_, stderr = NA_character_,
+      start_time = as.POSIXct(NA), finish_time = as.POSIXct(NA),
+      output_file_count = NA_integer_, output_total_size = NA_character_
+    )
+  }
+  result$success <- 0L
+  result$execution_status <- "failed"
+  diagnostics <- c(result$diagnostic, conditionMessage(error))
+  result$diagnostic <- paste(diagnostics[!is.na(diagnostics)], collapse = "\n")
+  message(tool, ": ", conditionMessage(error))
+  result
+}
+
+benchmark_with_resources <- function(tool, cores, config, label, run) {
+  cleanup <- list()
+  cleaned <- FALSE
+  on.exit(if (!cleaned) benchmark_cleanup(cleanup))
+  result <- tryCatch({
+    if (tool == "lidR") {
+      previous_plan <- future::plan()
+      cleanup[[length(cleanup) + 1L]] <- function() future::plan(previous_plan)
+      future::plan(future::multisession, workers = cores)
+    }
+    if (tool == "lasR") {
+      cleanup[[length(cleanup) + 1L]] <- function() unset_parallel_strategy()
+      unset_parallel_strategy()
+      set_parallel_strategy(concurrent_files(ncores = cores))
+    }
+    if (config$resource_monitoring) {
+      monitor <- benchmark_start_monitor(config, label)
+      cleanup[[length(cleanup) + 1L]] <- function() benchmark_stop_monitor(monitor)
+    }
+    run()
+  }, error = function(e) benchmark_failed_result(tool, e))
+  cleanup_error <- tryCatch({
+    benchmark_cleanup(cleanup)
+    NULL
+  }, error = identity)
+  cleaned <- TRUE
+  if (inherits(cleanup_error, "error")) {
+    result <- benchmark_failed_result(tool, cleanup_error, result)
+    attr(result, "resources_cleaned") <- FALSE
+  }
+  result
+}
+
+compile_execution_outcomes <- function(results) {
+  # Legacy CSVs have only the numeric success flag.
+  if (!"execution_status" %in% names(results)) {
+    results$execution_status <- NA_character_
+  }
+  missing_status <- is.na(results$execution_status)
+  results$execution_status[missing_status] <- ifelse(
+    is.na(results$success[missing_status]), "unknown",
+    ifelse(results$success[missing_status] == 1, "succeeded", "failed")
+  )
+  if (!"diagnostic" %in% names(results)) results$diagnostic <- NA_character_
+  if (!"exit_status" %in% names(results)) results$exit_status <- NA_integer_
+
+  results$processing_time <- difftime(
+    results$finish_time, results$start_time, units = "secs"
+  )
+  results$short_duration <- as.numeric(results$processing_time) < 0.1
+  results
+}
+
+benchmark_run_tool <- function(tool, task_call, context, config, label) {
+  if (benchmark_call_is_empty(task_call)) {
+    return(benchmark_execute_call(task_call, tool, context))
+  }
+  context <- list2env(as.list(context), parent = parent.env(context))
+  scratch <- benchmark_scratch_create(
+    context$scratch_root,
+    c(config$input_roots, config$reports_path, context$dir_in,
+      if (config$resource_monitoring) config$system_monitoring_path)
+  )
+  cleaned <- FALSE
+  on.exit(if (!cleaned) benchmark_scratch_cleanup(scratch))
+  result <- NULL
+  result <- tryCatch({
+    context$dir_out <- scratch$path
+    context$ctg <- prepare_input(context$dir_in, context$dir_out)
+    context$f <- context$ctg@data$filename
+    if (!length(context$f) || anyNA(context$f) || any(!file.exists(context$f)) ||
+        any(file.access(context$f, 4) != 0)) {
+      stop("Input catalog has no files or references missing/unreadable files.")
+    }
+    context$f <- normalizePath(context$f, winslash = "/", mustWork = TRUE)
+    if (any(!vapply(context$f, benchmark_path_within, logical(1), parent = context$dir_in))) {
+      stop("Input catalog references files outside its validated input directory.")
+    }
+    context$fout <- paste0(context$dir_out, "/*.", context$output_format)
+    result <- benchmark_with_resources(tool, context$cores, config, label, function() {
+      benchmark_execute_call(task_call, tool, context)
+    })
+    counts <- check_results(context$dir_out)
+    result[names(counts)] <- counts
+    result
+  }, error = function(e) benchmark_failed_result(tool, e, result))
+  cleanup_error <- if (identical(attr(result, "resources_cleaned"), FALSE)) {
+    simpleError(paste0("Scratch retained because resource cleanup failed: ", scratch$path))
+  } else {
+    tryCatch({
+      benchmark_scratch_cleanup(scratch)
+      NULL
+    }, error = identity)
+  }
+  cleaned <- TRUE
+  if (inherits(cleanup_error, "error")) {
+    result <- benchmark_failed_result(tool, cleanup_error, result)
+  }
+  result
+}
+
+benchmark_selected_run <- function(task_id, run_id, benchmark_tasks, benchmark_runs) {
+  task <- benchmark_tasks[benchmark_tasks$task_id == task_id, , drop = FALSE]
+  run <- benchmark_runs[benchmark_runs$ID == run_id, , drop = FALSE]
+  if (nrow(task) != 1L || nrow(run) != 1L) {
+    stop("Each task_id and run_id must identify exactly one task and run.")
+  }
+  if (!is.numeric(run$cores) || length(run$cores) != 1L || is.na(run$cores) ||
+      !is.finite(run$cores) || run$cores < 1 || run$cores != floor(run$cores)) {
+    stop("Run cores must be a positive integer.")
+  }
+  input_column <- switch(
+    task$data_type, datasets_org = "dir_in_org", datasets_norm = "dir_in_norm",
+    stop("Unknown task data_type: ", task$data_type)
+  )
+  list(task = task, run = run, dir_in = run[[input_column]])
+}
+
+benchmark_validate_selection <- function(selection, tasks, runs, config) {
+  config <- benchmark_validate_config(config)
+  for (i in seq_len(nrow(selection))) {
+    selected <- benchmark_selected_run(selection$task_id[i], selection$run_id[i], tasks, runs)
+    if (!selected$run$cores %in% config$cores) stop("Run cores are not configured.")
+    benchmark_validate_run_paths(config, selected$dir_in, selected$run$scratch_root)
+    for (tool in config$tools) {
+      call <- selected$task[[paste0("task_call_", tool)]][[1L]]
+      if (tool == "lastools" && !benchmark_call_is_empty(call)) {
+        benchmark_validate_lastools_call(call)
+        benchmark_lastools_executable(config$lastools_path, call$executable)
+      }
+    }
+  }
+  invisible(config)
+}
+
+benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
+                          run_lasR = "lasR" %in% config$tools,
+                          run_lastools = "lastools" %in% config$tools,
+                          benchmark_tasks, benchmark_runs,
+                          force_rerun_lidR = FALSE, force_rerun_lasR = FALSE,
+                          force_rerun_lastools = FALSE, sysinfo,
+                          resource_monitoring = config$resource_monitoring, config) {
+  config$resource_monitoring <- resource_monitoring
+  config <- benchmark_validate_config(config)
+  selected <- benchmark_selected_run(task_id, run_id, benchmark_tasks, benchmark_runs)
+  task <- selected$task
+  run <- selected$run
+  if (!run$cores %in% config$cores) stop("Run cores are not configured.")
+  benchmark_validate_run_paths(config, selected$dir_in, run$scratch_root)
+  enabled <- c(lidR = run_lidR, lasR = run_lasR, lastools = run_lastools)
+  if (!is.logical(enabled) || length(enabled) != 3L || anyNA(enabled)) {
+    stop("Tool run flags must each be TRUE or FALSE.")
+  }
+  if (any(!names(enabled)[enabled] %in% config$tools)) {
+    stop("Requested tools must be explicitly enabled in config$tools.")
+  }
+  force <- c(lidR = force_rerun_lidR, lasR = force_rerun_lasR,
+             lastools = force_rerun_lastools)
+  if (!is.logical(force) || length(force) != 3L || anyNA(force)) {
+    stop("Force-rerun flags must each be TRUE or FALSE.")
+  }
+  for (tool in names(enabled)[enabled]) {
+    call <- task[[paste0("task_call_", tool)]][[1L]]
+    if (tool == "lastools" && !benchmark_call_is_empty(call)) {
+      benchmark_validate_lastools_call(call)
+      benchmark_lastools_executable(config$lastools_path, call$executable)
+    }
+  }
+  cli::cli_h1("Benchmark run started: {task_id}, {run_id}")
+  context <- new.env(parent = environment())
+  context$dir_in <- benchmark_directory(selected$dir_in, "Benchmark input")
+  context$scratch_root <- run$scratch_root
+  context$cores <- run$cores
+  context$lastools_path <- config$lastools_path
+  context$output_format <- task$output_format
+  metadata <- NULL
+  for (tool in names(enabled)[enabled]) {
+    call <- task[[paste0("task_call_", tool)]][[1L]]
+    version_column <- if (tool == "lastools") "lastools_version" else paste0(tool, "_version")
+    version <- as.character(sysinfo[[version_column]])
+    parts <- list(config$workstation_id, task_id, run_id, version, tool)
+    invisible(lapply(parts, benchmark_file_component, label = "Result filename"))
+    label <- paste(unlist(parts), collapse = "_")
+    report <- file.path(config$reports_path, paste0(label, ".csv"))
+    if (file.exists(report) && !force[[tool]]) {
+      cli::cli_warn("Output already exists: {report}")
+      next
+    }
+    cli::cli_h2("Running {tool}")
+    if (is.null(metadata) && !benchmark_call_is_empty(call)) {
+      input_catalog <- catalog(context$dir_in)
+      metadata <- benchmark_ALS_info(input_catalog, context$dir_in)
+    }
+    result <- tryCatch(
+      benchmark_run_tool(tool, call, context, config, label),
+      error = function(e) benchmark_failed_result(tool, e)
+    )
+    common <- c(list(task_id = task_id, run_id = run_id, cores = run$cores),
+                as.list(sysinfo), metadata)
+    write.csv(as.data.frame(c(result, common)), report)
+    if (result$success == 1L) {
+      cli::cli_alert_success("Finished in {result$finish_time-result$start_time} sec.")
+    }
+  }
+  invisible(NULL)
+}

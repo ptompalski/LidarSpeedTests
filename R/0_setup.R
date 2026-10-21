@@ -1,5 +1,7 @@
 # install.packages('lasR', repos = 'https://r-lidar.r-universe.dev')
 
+source("R/1_functions.R")
+
 library(lidR)
 library(fs)
 library(sf)
@@ -12,40 +14,12 @@ library(benchmarkme)
 library(magrittr)
 
 
-# PATHS, SETTINGS, TASKS
-lastools_path <- "C:/LAStools/bin"
-
-#benchmark results will be saved to:
-reports_path <- "results"
-
-# CPU, RAM, HDD etc usage reports will go to: (note, that this is disabled by default and requires additional powershell script to run)
-system_monitoring_path <- "system_monitoring"
-
-#workstation id
-workstation_id <- Sys.info()[4]
-
-
-# specify the drives where the benchmark data is located, 
-# which drives to test etc. I had three entries here, because I wanted
-# to see how I/O speed influences processing speed. 
+# Machine-local configuration is optional for reading historical reports.
+# The runner requires and validates it before processing.
+benchmark_config <- benchmark_load_config(required = FALSE)
+reports_path <- if (is.null(benchmark_config)) "results" else benchmark_config$reports_path
 
 benchmark_settings <- list(
-  
-  drive_in =  c(
-    SSD ="N:/"  
-    # HDD="G:/",
-    # NET="//vic-fas1/projects_d/Tompalski/"
-  ),
-  
-  drive_out = c(
-    SSD ="N:/"
-    # HDD="G:/",
-    # NET="//vic-fas1/projects_d/Tompalski/"
-  ),
-  
-  # specify cores here  
-  cores =  c(1, 2, 4, 8, 16, 32) ,
-
   
   #subfolders with the data used in the benchmark
   datasets_org = c(
@@ -82,7 +56,9 @@ benchmark_tasks <-
     "Normalization",
     "lidR::normalize_height(las = ctg, algorithm = tin())", 
     "exec(pipeline = normalize() + write_las(fout), on = f)", 
-    "lasheight64 -i {f_lastools} -odir {dir_out} -olaz -cores {cores} -replace_z -buffered 20", 
+    list(executable = "lasheight64", args = c(
+      "-i", "{inputs}", "-odir", "{output}", "-olaz", "-cores", "{cores}",
+      "-replace_z", "-buffered", "20")),
     "datasets_org",
     "laz",
     
@@ -90,7 +66,9 @@ benchmark_tasks <-
     "Pixel metrics (simple)",
     "lidR::pixel_metrics(las = ctg, ~mean(Z), res = 20)", 
     "exec(pipeline = rasterize(20, 'z_mean', ofile = fout), on = f)",
-    "lascanopy -i {f_lastools} -step 20 -avg -odir {dir_out} -otif -cores {cores} -buffered 20", 
+    list(executable = "lascanopy", args = c(
+      "-i", "{inputs}", "-step", "20", "-avg", "-odir", "{output}",
+      "-otif", "-cores", "{cores}", "-buffered", "20")),
     "datasets_org",
     "tif",
     
@@ -99,7 +77,10 @@ benchmark_tasks <-
     "Pixel metrics (complex)",
     "pixel_metrics(las = ctg, ~metrics_multiple(Z), res = 20)", 
     "exec(pipeline = rasterize(20, c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95'), ofile = fout), on = f)", 
-    "lascanopy -i {f_lastools} -max -avg -std -cov -p 5 25 50 75 95 -odir {dir_out} -otif -cores {cores} -buffered 20", 
+    list(executable = "lascanopy", args = c(
+      "-i", "{inputs}", "-max", "-avg", "-std", "-cov", "-p",
+      "5", "25", "50", "75", "95", "-odir", "{output}", "-otif",
+      "-cores", "{cores}", "-buffered", "20")),
     "datasets_org",
     "tif",
     
@@ -107,7 +88,9 @@ benchmark_tasks <-
     "Generate DEM",
     "rasterize_terrain(las = ctg, res = 1, algorithm = tin())", 
     "exec(pipeline = dtm(res = 1, ofile = fout), on = f)", 
-    "blast2dem -i {f_lastools} -otif -odir {dir_out} -step 1 -cores {cores}", #no need to buffer the tiles
+    list(executable = "blast2dem", args = c(
+      "-i", "{inputs}", "-otif", "-odir", "{output}", "-step", "1",
+      "-cores", "{cores}")), # no need to buffer the tiles
     "datasets_org",
     "tif",
     
@@ -115,7 +98,9 @@ benchmark_tasks <-
     "Generate DSM (rasterize highest)",
     "rasterize_canopy(ctg, res = 1, algorithm = p2r())", 
     "exec(pipeline = chm(1, tin=FALSE, ofile = fout), on = f)", 
-    "lasgrid64 -i {f_lastools} -highest -otif -odir {dir_out} -step 1 -cores {cores} -buffered 20", 
+    list(executable = "lasgrid64", args = c(
+      "-i", "{inputs}", "-highest", "-otif", "-odir", "{output}", "-step", "1",
+      "-cores", "{cores}", "-buffered", "20")),
     "datasets_org",
     "tif",
     
@@ -123,7 +108,7 @@ benchmark_tasks <-
     "Generate DSM (with TIN interpolation)",
     "rasterize_canopy(ctg, res = 1, algorithm = dsmtin())", 
     "exec(pipeline = chm(1, tin=TRUE, ofile = fout), on = f)", 
-    "", #requires lasthin + las2dem combo
+    NULL, # requires lasthin + las2dem combo
     "datasets_org",
     "tif",
     
@@ -131,7 +116,7 @@ benchmark_tasks <-
     "Detect treetops",
     "ttops <- locate_trees(ctg, lmf(ws = 5))",
     "lasR::exec(pipeline = local_maximum(5, ofile = fout), on = f)",
-    "", #not possible with lastools
+    NULL, # not possible with lastools
     "datasets_org",
     "gpkg",
     
@@ -149,7 +134,7 @@ benchmark_tasks <-
     write = write_las(ofile = fout_laz)
     pipeline = del + norm + write + dtm + chm 
     ans = exec(pipeline, on = f, progress = TRUE)', 
-    "",
+    NULL,
     "datasets_org",
     "",
     
@@ -169,7 +154,7 @@ benchmark_tasks <-
     write = write_las(ofile = fout_laz)
     pipeline = del + norm + write + dtm + chm + metrics + seed
     ans = exec(pipeline, on = f, progress = TRUE)', 
-    "",
+    NULL,
     "datasets_org",
     ""
     
@@ -177,39 +162,12 @@ benchmark_tasks <-
 
 
 
-# no need to change anything below
-
-#create dirs if not exist
-if(!dir.exists(reports_path)) dir.create(reports_path)
-if(!dir.exists(system_monitoring_path)) dir.create(system_monitoring_path)
-
-
-benchmark_runs_org <- 
-  expand_grid(drive_in=benchmark_settings$drive_in, 
-              drive_out=benchmark_settings$drive_out, 
-              cores=benchmark_settings$cores,
-              data_path=benchmark_settings$datasets_org
-  ) %>%
-  mutate(dir_in_org = paste0(drive_in, data_path),
-         dir_out = paste0(drive_out, "TEMP/bench_data_out")) %>%
-  mutate(ID = paste(names(data_path),cores, names(drive_in), names(drive_out), sep="_")) %>%
-  relocate(ID, dir_in_org, dir_out)
-
-benchmark_runs_norm <- 
-  expand_grid(drive_in=benchmark_settings$drive_in, 
-              drive_out=benchmark_settings$drive_out, 
-              cores=benchmark_settings$cores,
-              data_path=benchmark_settings$datasets_norm
-  ) %>%
-  mutate(dir_in_norm = paste0(drive_in, data_path),
-         dir_out = paste0(drive_out, "TEMP/bench_data_out")) %>%
-  mutate(ID = paste(names(data_path),cores, names(drive_in), names(drive_out), sep="_")) %>%
-  relocate(ID, dir_in_norm, dir_out)
-
-benchmark_runs <- 
-  left_join(benchmark_runs_org, 
-            select(benchmark_runs_norm, ID, dir_in_norm)
-  ) %>% relocate(ID, dir_in_org, dir_in_norm)
+benchmark_runs <- if (is.null(benchmark_config)) {
+  tibble(ID = character(), dir_in_org = character(), dir_in_norm = character(),
+         scratch_root = character(), cores = integer())
+} else {
+  benchmark_make_runs(benchmark_settings, benchmark_config)
+}
 
 
 benchmark_combinations <- expand_grid(task_id = benchmark_tasks$task_id, run_id = benchmark_runs$ID)

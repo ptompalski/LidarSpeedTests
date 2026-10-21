@@ -1,6 +1,7 @@
 # compile results
 
 source("R/0_setup.R")
+source("R/1_functions.R")
 source("R/99_plotSettings.R")
 library(magrittr)
 
@@ -11,6 +12,11 @@ csv_spec <- cols(
   ...1 = col_skip(),
   tool = col_character(),
   success = col_double(),
+  execution_status = col_character(),
+  diagnostic = col_character(),
+  exit_status = col_integer(),
+  stdout = col_character(),
+  stderr = col_character(),
   start_time = col_datetime(format = ""),
   finish_time = col_datetime(format = ""),
   output_file_count = col_double(),
@@ -43,13 +49,22 @@ f <- list.files(reports_path, full.names = T, pattern = "csv$")
 
 
 #read all csv files - this takes some time, can be probably parallelized with furrr but I was too lazy 
-r <- f %>% map(~read_csv(.x, col_types = csv_spec, show_col_types = FALSE)) %>% bind_rows() 
+r <- f %>% map(function(path) {
+  column_names <- names(read_csv(
+    path, n_max = 0, col_types = cols(.default = col_character()),
+    show_col_types = FALSE
+  ))
+  # New outcome columns are optional in historical CSVs.
+  file_spec <- csv_spec
+  file_spec$cols <- file_spec$cols[intersect(names(file_spec$cols), column_names)]
+  read_csv(path, col_types = file_spec, show_col_types = FALSE)
+}) %>% bind_rows()
 
 
 
 
-# calculating processing time
-r <- r %>% mutate(processing_time = finish_time - start_time) 
+# Preserve execution outcomes and flag short elapsed times independently.
+r <- compile_execution_outcomes(r)
 
 #reorder factors (tool names)
 r$tool <- factor(r$tool, levels=c("lidR", "lasR", "lastools"))
@@ -81,9 +96,6 @@ r <- r %>%
   mutate(total_points_calc = custom_number_format(total_points_calc))
 
 r <- r %>% mutate(data_labels = paste0(input_data_size, "B; ", total_points_calc, " pts"))
-
-# revise `success` - if the processing time is less than 0.1 sec then change success to 0
-r <- r %>% mutate(success = if_else(success==1 & as.numeric(processing_time) < 0.1, 0, 1)) #
 
 r <- r %>% separate(run_id, into=c(NA, "tile_size", NA, NA, "dir1", "dir2"))
 
@@ -162,11 +174,15 @@ r <- r %>% group_by(tool, task_id, tile_size, cores, density_points_rnd, dir1, d
 #identify failed runs
 # find out what is the expected output file count for each tool/task
 r_expected <- r %>% group_by(tool, task_id) %>% 
-  dplyr::summarise(expected_output_file_count = max(output_file_count))
+  dplyr::summarise(expected_output_file_count =
+                     if (all(is.na(output_file_count))) NA_real_
+                     else max(output_file_count, na.rm = TRUE))
 
 r <- 
   r %>% left_join(r_expected) %>% 
-  mutate(success = if_else(output_file_count < expected_output_file_count, 0,success))
+  mutate(success = if_else(
+    !is.na(output_file_count) & !is.na(expected_output_file_count) &
+      output_file_count < expected_output_file_count, 0, success))
 
 
 
@@ -184,6 +200,3 @@ saveRDS(r, file = "r.rds")
 
 
   
-
-
-

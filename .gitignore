@@ -52,3 +52,6 @@ rsconnect/
 #all individual results files
 /results
 /system_monitoring
+
+# Machine-local benchmark paths/settings
+/benchmark.local.R
