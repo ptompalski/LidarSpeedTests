@@ -752,7 +752,8 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
                           benchmark_tasks, benchmark_runs,
                           force_rerun_lidR = FALSE, force_rerun_lasR = FALSE,
                           force_rerun_lastools = FALSE, sysinfo,
-                          resource_monitoring = config$resource_monitoring, config) {
+                          resource_monitoring = config$resource_monitoring, config,
+                          campaign, repetition_id = 1L) {
   config$resource_monitoring <- resource_monitoring
   config <- benchmark_validate_config(config)
   selected <- benchmark_selected_run(task_id, run_id, benchmark_tasks, benchmark_runs)
@@ -779,6 +780,13 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
       benchmark_lastools_executable(config$lastools_path, call$executable)
     }
   }
+  if (missing(campaign)) stop("An explicit campaign is required; use benchmark_campaign().")
+  benchmark_repetition_id(repetition_id)
+  benchmark_campaign_check(campaign, benchmark_tasks, benchmark_runs, config)
+  if (!any(campaign$manifest$identity$selection$task_id == task_id &
+           campaign$manifest$identity$selection$run_id == run_id)) {
+    stop("Task/run is not in the campaign selection.")
+  }
   cli::cli_h1("Benchmark run started: {task_id}, {run_id}")
   context <- new.env(parent = environment())
   context$dir_in <- benchmark_directory(selected$dir_in, "Benchmark input")
@@ -789,23 +797,24 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
   metadata <- NULL
   for (tool in names(enabled)[enabled]) {
     call <- task[[paste0("task_call_", tool)]][[1L]]
-    version_column <- if (tool == "lastools") "lastools_version" else paste0(tool, "_version")
-    version <- as.character(sysinfo[[version_column]])
-    parts <- list(config$workstation_id, task_id, run_id, version, tool)
+    parts <- list(campaign$manifest$campaign_id, task_id, run_id, tool)
     invisible(lapply(parts, benchmark_file_component, label = "Result filename"))
     label <- paste(unlist(parts), collapse = "_")
-    report <- file.path(config$reports_path, paste0(label, ".csv"))
-    if (file.exists(report) && !force[[tool]]) {
-      cli::cli_warn("Output already exists: {report}")
+    if (!force[[tool]] &&
+        benchmark_campaign_completed(campaign, task_id, run_id, tool, repetition_id)) {
+      cli::cli_inform("Matching campaign work is already complete: {label}")
       next
     }
     cli::cli_h2("Running {tool}")
-    if (is.null(metadata) && !benchmark_call_is_empty(call)) {
-      input_catalog <- catalog(context$dir_in)
-      metadata <- benchmark_ALS_info(input_catalog, context$dir_in)
-    }
+    attempt <- benchmark_attempt_start(campaign, task_id, run_id, tool, repetition_id)
     result <- tryCatch(
-      benchmark_run_tool(tool, call, context, config, label),
+      {
+        if (is.null(metadata) && !benchmark_call_is_empty(call)) {
+          input_catalog <- catalog(context$dir_in)
+          metadata <- benchmark_ALS_info(input_catalog, context$dir_in)
+        }
+        benchmark_run_tool(tool, call, context, config, attempt$record$attempt_id)
+      },
       error = function(e) benchmark_failed_result(tool, e)
     )
     common <- c(list(task_id = task_id, run_id = run_id, cores = run$cores),
@@ -818,10 +827,290 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
       common <- c(common, contract[c("workload_contract", "comparison_status",
                                     "comparison_group", "comparison_note")])
     }
-    write.csv(as.data.frame(c(result, common)), report)
+    benchmark_attempt_finish(attempt, c(result, common))
     if (result$success == 1L) {
       cli::cli_alert_success("Finished in {result$finish_time-result$start_time} sec.")
     }
   }
   invisible(NULL)
+}
+
+benchmark_repetition_id <- function(value) {
+  if (!is.numeric(value) || length(value) != 1L || is.na(value) ||
+      !is.finite(value) || value < 1 || value != floor(value)) {
+    stop("repetition_id must be one positive integer.")
+  }
+  invisible(value)
+}
+
+benchmark_checksums <- function(paths) {
+  paths <- sort(unique(paths))
+  if (any(!file.exists(paths)) || any(dir.exists(paths)) ||
+      any(file.access(paths, 4) != 0)) stop("Cannot checksum missing/unreadable files.")
+  sums <- tools::md5sum(paths)
+  if (anyNA(sums)) stop("File checksum failed.")
+  data.frame(path = paths, bytes = unname(file.info(paths)$size),
+             md5 = unname(sums), stringsAsFactors = FALSE)
+}
+
+benchmark_object_md5 <- function(object) {
+  path <- tempfile("campaign-identity-")
+  on.exit(unlink(path))
+  saveRDS(object, path, version = 3)
+  unname(tools::md5sum(path))
+}
+
+benchmark_campaign_identity <- function(selection, tasks, runs, config, repo_root) {
+  config <- benchmark_validate_config(config)
+  if (!is.data.frame(selection) || !all(c("task_id", "run_id") %in% names(selection)) ||
+      !nrow(selection) || anyNA(selection[c("task_id", "run_id")]) ||
+      anyDuplicated(selection[c("task_id", "run_id")])) {
+    stop("Campaign selection must contain unique, nonmissing task_id/run_id pairs.")
+  }
+  selection <- as.data.frame(selection[c("task_id", "run_id")], stringsAsFactors = FALSE)
+  selection <- selection[order(selection$task_id, selection$run_id), , drop = FALSE]
+  rownames(selection) <- NULL
+  benchmark_validate_selection(selection, tasks, runs, config)
+  tasks <- as.data.frame(tasks[tasks$task_id %in% selection$task_id, , drop = FALSE])
+  tasks <- tasks[order(tasks$task_id), , drop = FALSE]
+  rownames(tasks) <- NULL
+  runs <- as.data.frame(runs[runs$ID %in% selection$run_id, , drop = FALSE])
+  runs <- runs[order(runs$ID), , drop = FALSE]
+  rownames(runs) <- NULL
+  inputs <- unique(vapply(seq_len(nrow(selection)), function(i) {
+    benchmark_selected_run(selection$task_id[i], selection$run_id[i], tasks, runs)$dir_in
+  }, character(1)))
+  datasets <- lapply(sort(inputs), function(path) {
+    files <- list.files(path, full.names = TRUE, all.files = TRUE, no.. = TRUE,
+                        recursive = TRUE)
+    files <- files[!dir.exists(files)]
+    list(directory = normalizePath(path, winslash = "/", mustWork = TRUE),
+         files = benchmark_checksums(files))
+  })
+  git <- function(args) {
+    result <- benchmark_process("git", c("-C", repo_root, args))
+    if (result$status != 0L) stop("Cannot identify campaign code: ", result$stderr)
+    trimws(result$stdout)
+  }
+  code_paths <- c(list.files(file.path(repo_root, "R"), "\\.R$", full.names = TRUE),
+                  file.path(repo_root, c("DESCRIPTION", "WORKLOADS.md")))
+  code <- list(
+    revision = git(c("rev-parse", "HEAD")),
+    dirty = nzchar(git(c("status", "--porcelain", "--untracked-files=all", "--",
+                        "R", "DESCRIPTION", "WORKLOADS.md", "renv.lock"))),
+    files = benchmark_checksums(code_paths)
+  )
+  lock_path <- file.path(repo_root, "renv.lock")
+  lock <- renv::lockfile_read(lock_path)
+  packages <- lapply(sort(names(lock$Packages)), function(package) {
+    path <- normalizePath(find.package(package), winslash = "/", mustWork = TRUE)
+    list(package = package, version = as.character(utils::packageVersion(package)),
+         files = benchmark_checksums(c(
+           file.path(path, "DESCRIPTION"),
+           list.files(file.path(path, "R"), full.names = TRUE, recursive = TRUE),
+           list.files(file.path(path, "libs"), full.names = TRUE, recursive = TRUE)
+         )))
+  })
+  native <- list()
+  if ("lastools" %in% config$tools) {
+    calls <- tasks$task_call_lastools
+    for (call in calls) {
+      if (benchmark_call_is_empty(call)) next
+      executable <- benchmark_lastools_executable(config$lastools_path, call$executable)
+      version <- benchmark_process(executable, "-version")
+      if (version$status != 0L || !nzchar(trimws(paste0(version$stdout, version$stderr)))) {
+        stop("Native tool version query failed: ", executable, "\n",
+             version$stdout, version$stderr)
+      }
+      native[[call$executable]] <- list(
+        executable = benchmark_checksums(executable),
+        version = paste0(version$stdout, version$stderr)
+      )
+    }
+    native <- native[sort(names(native))]
+  }
+  storage <- ps::ps_disk_partitions(all = TRUE)
+  storage$mountpoint <- chartr("\\", "/", storage$mountpoint)
+  storage_paths <- c(config$input_roots, config$scratch_roots, config$reports_path,
+                     vapply(datasets, `[[`, character(1), "directory"))
+  storage <- storage[vapply(storage$mountpoint, function(mountpoint) {
+    any(vapply(storage_paths, benchmark_path_within, logical(1), parent = mountpoint))
+  }, logical(1)), , drop = FALSE]
+  storage <- storage[order(storage$mountpoint, storage$device), , drop = FALSE]
+  rownames(storage) <- NULL
+  list(
+    schema = 1L, selection = selection, tasks = tasks, runs = runs, config = config,
+    code = code, datasets = datasets, lockfile = benchmark_checksums(lock_path),
+    environment = list(
+      R = R.version, R_executable = benchmark_checksums(if (.Platform$OS.type == "windows") {
+        file.path(R.home("bin"), "R.exe")
+      } else {
+        file.path(R.home("bin"), "exec", "R")
+      }),
+      packages = packages, native = native, OS = Sys.info(),
+      cpu = benchmarkme::get_cpu(), RAM_bytes = unname(ps::ps_system_memory()[["total"]]),
+      storage_mounts = storage,
+      geospatial = sf::sf_extSoftVersion(), libraries = extSoftVersion(),
+      session_libraries = sessionInfo()$BLAS,
+      parallelism = list(
+        cores = config$cores, runs = runs[c("ID", "cores")],
+        policy = "lidR multisession; lasR concurrent_files; LAStools -cores",
+        environment = Sys.getenv(c("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                                   "MKL_NUM_THREADS", "RCPP_PARALLEL_NUM_THREADS"))
+      )
+    )
+  )
+}
+
+benchmark_campaign <- function(campaign_id, selection, tasks, runs, config,
+                               repo_root = getwd()) {
+  benchmark_file_component(campaign_id, "campaign_id")
+  repo_root <- normalizePath(repo_root, winslash = "/", mustWork = TRUE)
+  identity <- benchmark_campaign_identity(selection, tasks, runs, config, repo_root)
+  root <- file.path(identity$config$reports_path, "campaigns")
+  if (!dir.exists(root) && !dir.create(root)) stop("Cannot create campaign root: ", root)
+  path <- file.path(root, campaign_id)
+  manifest_path <- file.path(path, "manifest.rds")
+  if (dir.exists(path)) {
+    if (!file.exists(manifest_path)) stop("Incomplete campaign creation: ", path)
+    manifest <- readRDS(manifest_path)
+    if (!identical(manifest$campaign_id, campaign_id) ||
+        !identical(manifest$identity_id, benchmark_object_md5(manifest$identity)) ||
+        !identical(manifest$identity, identity)) {
+      stop("Incompatible campaign identity; use a new campaign_id. No work was resumed.")
+    }
+  } else {
+    if (!dir.create(path)) stop("Cannot reserve campaign directory: ", path)
+    manifest <- list(
+      campaign_id = campaign_id, created_at = Sys.time(), repo_root = repo_root,
+      identity_id = benchmark_object_md5(identity), identity = identity
+    )
+    saveRDS(manifest, manifest_path)
+    if (!dir.create(file.path(path, "attempts"))) stop("Cannot create attempts directory.")
+  }
+  list(path = path, manifest = manifest)
+}
+
+benchmark_campaign_check <- function(campaign, tasks, runs, config) {
+  stored <- readRDS(file.path(campaign$path, "manifest.rds"))
+  if (!identical(stored, campaign$manifest) ||
+      !identical(stored$identity_id, benchmark_object_md5(stored$identity))) {
+    stop("Campaign manifest changed or is corrupt.")
+  }
+  current <- benchmark_campaign_identity(stored$identity$selection, tasks, runs,
+                                          config, stored$repo_root)
+  if (!identical(current, stored$identity)) {
+    changed <- names(current)[!vapply(names(current), function(field) {
+      identical(current[[field]], stored$identity[[field]])
+    }, logical(1))]
+    stop("Incompatible campaign identity; changed: ", paste(changed, collapse = ", "),
+         ". Use a new campaign_id.\n",
+         paste(all.equal(stored$identity, current), collapse = "\n"))
+  }
+  invisible(NULL)
+}
+
+benchmark_attempt_start <- function(campaign, task_id, run_id, tool, repetition_id) {
+  benchmark_repetition_id(repetition_id)
+  if (!tool %in% campaign$manifest$identity$config$tools ||
+      !any(campaign$manifest$identity$selection$task_id == task_id &
+           campaign$manifest$identity$selection$run_id == run_id)) {
+    stop("Attempt is outside the campaign selection.")
+  }
+  root <- file.path(campaign$path, "attempts")
+  path <- tempfile("attempt-", tmpdir = root)
+  if (!dir.create(path)) stop("Cannot reserve unique attempt: ", path)
+  record <- list(
+    campaign_id = campaign$manifest$campaign_id,
+    identity_id = campaign$manifest$identity_id,
+    repetition_id = repetition_id, attempt_id = basename(path),
+    task_id = task_id, run_id = run_id, tool = tool, recorded_at = Sys.time()
+  )
+  saveRDS(record, file.path(path, "started.rds"))
+  list(path = path, record = record)
+}
+
+benchmark_attempt_finish <- function(attempt, result) {
+  path <- file.path(attempt$path, "result.csv")
+  lock <- file.path(attempt$path, "completion-lock")
+  if (!dir.create(lock, showWarnings = FALSE)) stop("Attempt completion already reserved.")
+  if (file.exists(path)) stop("Refusing to overwrite immutable attempt: ", path)
+  record <- c(attempt$record, result[setdiff(names(result), names(attempt$record))])
+  pending <- file.path(attempt$path, "result.pending.csv")
+  write.csv(as.data.frame(record), pending, row.names = FALSE)
+  if (!file.rename(pending, path)) stop("Cannot publish attempt result: ", path)
+  saveRDS(benchmark_checksums(path)$md5, file.path(attempt$path, "completed.rds"))
+  invisible(path)
+}
+
+benchmark_read_attempt <- function(attempt, manifest) {
+  started <- readRDS(file.path(attempt, "started.rds"))
+  result <- file.path(attempt, "result.csv")
+  receipt <- file.path(attempt, "completed.rds")
+  if (!file.exists(result) || !file.exists(receipt)) {
+    stop("Incomplete attempt retained at ", attempt, "; no completion record. ",
+         "Compilation is blocked rather than omitting it.")
+  }
+  if (!identical(readRDS(receipt), benchmark_checksums(result)$md5)) {
+    stop("Attempt checksum does not match its immutable completion record: ", attempt)
+  }
+  spec <- readr::cols(
+    .default = readr::col_character(), success = readr::col_double(),
+    repetition_id = readr::col_double(), cores = readr::col_double(),
+    cpu_threads = readr::col_double(), ram = readr::col_double(),
+    total_point_count = readr::col_double(), density_pulses = readr::col_double(),
+    file_count = readr::col_double(),
+    start_time = readr::col_datetime(), finish_time = readr::col_datetime(),
+    recorded_at = readr::col_datetime(), output_file_count = readr::col_double(),
+    exit_status = readr::col_integer(), density_points = readr::col_double()
+  )
+  header <- names(readr::read_csv(
+    result, n_max = 0, col_types = readr::cols(.default = readr::col_character()),
+    show_col_types = FALSE
+  ))
+  spec$cols <- spec$cols[intersect(names(spec$cols), header)]
+  record <- readr::read_csv(result, col_types = spec, show_col_types = FALSE)
+  if (nrow(readr::problems(record))) stop("Malformed attempt CSV: ", result)
+  if (nrow(record) != 1L || !identical(record$campaign_id, manifest$campaign_id) ||
+      !identical(record$identity_id, manifest$identity_id) ||
+      !identical(record$attempt_id, basename(attempt)) ||
+      any(vapply(c("campaign_id", "identity_id", "attempt_id", "tool", "task_id", "run_id"),
+                 function(field) !identical(record[[field]], started[[field]]), logical(1))) ||
+      !identical(record$repetition_id, as.numeric(started$repetition_id)) ||
+      !record$tool %in% manifest$identity$config$tools ||
+      !any(manifest$identity$selection$task_id == record$task_id &
+           manifest$identity$selection$run_id == record$run_id)) {
+    stop("Attempt identity does not match its campaign/start record: ", attempt)
+  }
+  benchmark_repetition_id(record$repetition_id)
+  record
+}
+
+benchmark_read_campaign <- function(reports_path, campaign_id) {
+  benchmark_file_component(campaign_id, "campaign_id")
+  path <- file.path(reports_path, "campaigns", campaign_id)
+  manifest <- readRDS(file.path(path, "manifest.rds"))
+  if (!identical(manifest$campaign_id, campaign_id) ||
+      !identical(manifest$identity_id, benchmark_object_md5(manifest$identity))) {
+    stop("Campaign manifest changed or is corrupt.")
+  }
+  attempts <- list.dirs(file.path(path, "attempts"), recursive = FALSE, full.names = TRUE)
+  records <- lapply(attempts, benchmark_read_attempt, manifest = manifest)
+  result <- dplyr::bind_rows(records)
+  if (nrow(result) && anyDuplicated(result$attempt_id)) stop("Duplicate attempt IDs.")
+  result
+}
+
+benchmark_campaign_completed <- function(campaign, task_id, run_id, tool, repetition_id) {
+  # An interrupted attempt must not prevent an explicit retry.
+  paths <- list.files(file.path(campaign$path, "attempts"), "^completed\\.rds$",
+                      recursive = TRUE, full.names = TRUE)
+  any(vapply(paths, function(path) {
+    record <- benchmark_read_attempt(dirname(path), campaign$manifest)
+    identical(as.character(record$task_id), task_id) &&
+      identical(as.character(record$run_id), run_id) &&
+      identical(as.character(record$tool), tool) &&
+      identical(as.numeric(record$repetition_id), as.numeric(repetition_id)) &&
+      record$execution_status %in% c("succeeded", "skipped")
+  }, logical(1)))
 }

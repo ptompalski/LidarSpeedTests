@@ -15,9 +15,19 @@ B <-  benchmark_combinations %>% filter(task_id == "pixel_metrics_2")
 
 # Validate every selected input and executable before processing any workload.
 benchmark_validate_selection(B, benchmark_tasks, benchmark_runs, benchmark_config)
-sysinfo <- as_tibble(system_info(
-  lastools_path = if ("lastools" %in% benchmark_config$tools) benchmark_config$lastools_path else NULL
-))
+campaign_id <- Sys.getenv("LIDAR_CAMPAIGN_ID")
+if (!nzchar(campaign_id)) stop("Set LIDAR_CAMPAIGN_ID explicitly before running.")
+campaign <- benchmark_campaign(
+  campaign_id, B, benchmark_tasks, benchmark_runs, benchmark_config
+)
+sysinfo <- as_tibble(system_info())
+native <- campaign$manifest$identity$environment$native
+if (length(native)) {
+  # Use the exact selected executables, not an unrelated las2las installation.
+  sysinfo$lastools_version <- paste(vapply(names(native), function(name) {
+    paste0(name, ": ", trimws(native[[name]]$version))
+  }, character(1)), collapse = "\n")
+}
 
 
 #loop over all benchmark_combinations
@@ -28,8 +38,7 @@ for (i in seq_len(nrow(B))) {
   
   benchmark_run(task_id = b$task_id, run_id = b$run_id, 
                 benchmark_tasks = benchmark_tasks, benchmark_runs = benchmark_runs,
-                sysinfo = sysinfo, config = benchmark_config)
+                sysinfo = sysinfo, config = benchmark_config,
+                campaign = campaign, repetition_id = 1L)
   
 }
-
-

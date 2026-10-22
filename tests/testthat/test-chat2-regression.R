@@ -315,11 +315,12 @@ test_that("dispatch records outputs and diagnostics while protecting inputs and 
     ), "absent-tool")
     expect_length(list.files(scratch, all.files = TRUE, no.. = TRUE), 0L)
     expect_length(list.files(reports), 0L)
+    campaign <- fixture_campaign(env, tasks, runs, config)
     env$benchmark_run(
       "native_fixture", runs$ID, benchmark_tasks = tasks, benchmark_runs = runs,
-      sysinfo = data.frame(lastools_version = 1), config = config
+      sysinfo = data.frame(lastools_version = 1), config = config, campaign = campaign
     )
-    result_file <- file.path(reports, "fixture_native_fixture_ALS_1000_1_1_SSD_SSD_1_lastools.csv")
+    result_file <- fixture_attempt_files(reports)
     recorded <- read.csv(result_file)
     expect_equal(recorded$success, 0L)
     expect_equal(recorded$exit_status, 7L)
@@ -330,10 +331,13 @@ test_that("dispatch records outputs and diagnostics while protecting inputs and 
     expect_identical(tools::md5sum(files), sentinel)
     success_tasks <- tasks
     success_tasks$task_call_lastools[[1L]]$args[3L] <- "0"
+    success_campaign <- fixture_campaign(env, success_tasks, runs, config, "success")
     env$benchmark_run(
       "native_fixture", runs$ID, benchmark_tasks = success_tasks, benchmark_runs = runs,
-      sysinfo = data.frame(lastools_version = 1), config = config, force_rerun_lastools = TRUE
+      sysinfo = data.frame(lastools_version = 1), config = config,
+      campaign = success_campaign, force_rerun_lastools = TRUE
     )
+    result_file <- setdiff(fixture_attempt_files(reports), result_file)
     recorded <- read.csv(result_file)
     expect_equal(recorded$success, 1L)
     expect_equal(recorded$exit_status, 0L)
@@ -342,10 +346,13 @@ test_that("dispatch records outputs and diagnostics while protecting inputs and 
     expect_length(list.files(scratch, all.files = TRUE, no.. = TRUE), 0L)
     expect_identical(tools::md5sum(files), sentinel)
     env$check_results <- function(...) stop("intentional output inspection failure")
+    previous <- fixture_attempt_files(reports)
     env$benchmark_run(
       "native_fixture", runs$ID, benchmark_tasks = tasks, benchmark_runs = runs,
-      sysinfo = data.frame(lastools_version = 1), config = config, force_rerun_lastools = TRUE
+      sysinfo = data.frame(lastools_version = 1), config = config,
+      campaign = campaign, force_rerun_lastools = TRUE
     )
+    result_file <- setdiff(fixture_attempt_files(reports), previous)
     recorded <- read.csv(result_file)
     expect_equal(recorded$success, 0L)
     expect_equal(recorded$exit_status, 7L)
@@ -358,10 +365,13 @@ test_that("dispatch records outputs and diagnostics while protecting inputs and 
       attr(result, "resources_cleaned") <- FALSE
       result
     }
+    previous <- fixture_attempt_files(reports)
     env$benchmark_run(
       "native_fixture", runs$ID, benchmark_tasks = tasks, benchmark_runs = runs,
-      sysinfo = data.frame(lastools_version = 1), config = config, force_rerun_lastools = TRUE
+      sysinfo = data.frame(lastools_version = 1), config = config,
+      campaign = campaign, force_rerun_lastools = TRUE
     )
+    result_file <- setdiff(fixture_attempt_files(reports), previous)
     retained <- list.files(scratch, full.names = TRUE)
     recorded <- read.csv(result_file)
     expect_length(retained, 1L)

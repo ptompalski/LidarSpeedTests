@@ -106,8 +106,8 @@ Workload definitions and relative dataset paths are in `R/0_setup.R`. Copy
 paths, core counts, and explicit tool selection. Alternatively, set
 `LIDAR_BENCHMARK_CONFIG` to a trusted R file containing the same `list(...)`.
 Run scripts from the repository root; relative configuration paths resolve there.
-No machine configuration is required merely to select the default historical
-`results` directory in the compiler.
+No machine configuration is required to read the default `results` directory.
+Compilation requires explicit campaign selection or explicit legacy mode below.
 
 Create report and scratch directories yourself before running. Input roots must
 contain the datasets declared in setup. Input, report, and scratch trees must not
@@ -151,6 +151,65 @@ that health check does not validate utilization samples or counter accuracy.
 Review the selected combinations in `R/3_runBenchmarks.R` before sourcing it.
 Do not run a full campaign until inputs, dependencies, and workload contracts
 have been approved.
+
+### Campaign identity and immutable attempts (Chat 6)
+
+For an authorized run, set `LIDAR_CAMPAIGN_ID` to a new filename-safe identifier
+before sourcing the runner. The selection `B`, selected task definitions/run
+matrix, validated machine configuration, code revision and execution-source dirty
+state/checksums, `renv.lock` checksum, actual R/package versions and installed
+R-code/native-library checksums, selected native executable checksums and raw
+`-version` output, OS/CPU/RAM and relevant storage mounts/devices/filesystems,
+geospatial libraries, and parallelism policy/core
+counts/thread environment are frozen in
+`<reports_path>/campaigns/<campaign_id>/manifest.rds`. Every file in each selected
+input directory (including LAX indexes) is checksummed. MD5 is a byte-identity
+check, not a security signature or proof of dataset/tool provenance or licensing.
+Reusing the ID requires an exact match; changes require a new ID, not an edited
+manifest. Paths and hardware are deliberately part of identity.
+
+`benchmark_campaign(id, B, benchmark_tasks, benchmark_runs, benchmark_config)`
+creates or resumes that manifest. Pass its returned handle as `campaign` to
+`benchmark_run()`. Identity is recomputed before dispatch, even when existing work
+could otherwise be skipped. This involves reading all selected input bytes and
+installed package code, outside timing, and can be expensive; it does not trust
+file size/mtime as a checksum cache. Do not modify inputs/environment during a
+running call. Thread counts currently record the existing execution policy and
+environment; explicit thread scheduling/balanced order remains Chat 8.
+
+Each invocation has an explicit positive integer `repetition_id` (default `1`;
+the runner still schedules only repetition 1). Each tool attempt reserves a
+unique directory under `attempts/` containing `started.rds`, an atomic
+`result.csv`, and a checksum receipt `completed.rds`. Campaign, identity,
+repetition and attempt IDs accompany the outcomes, timing, diagnostics and
+metadata. Successful and explicitly skipped work resumes without re-execution;
+failures retry automatically. Existing `force_rerun_*` flags append another
+attempt, never overwrite one. Metadata/preparation failures also get attempt
+records. Interrupted/uncompleted attempts remain on disk and never count as
+completed work. A retry gets its own ID; it does not erase the interrupted
+attempt. Compilation explicitly blocks on incomplete attempts rather than
+silently omitting them; preserve that campaign for diagnosis and use a new
+campaign for reporting if interruption recovery is needed. Completion is
+single-writer per attempt, and reading detects changed result bytes/identities.
+
+Compile only one explicitly selected campaign:
+
+```sh
+LIDAR_CAMPAIGN_ID=approved-pilot Rscript --vanilla -e \
+  'source("renv/activate.R"); source("R/4_compileResults.R")'
+```
+
+This writes `compiled.rds` inside that campaign, retaining **all attempts and
+repetitions**, including failed retries. It never chooses package versions per
+task or deduplicates retries. Raw manifests/attempts are not overwritten.
+For historical top-level CSVs, explicitly unset `LIDAR_CAMPAIGN_ID` and set
+`LIDAR_RESULTS_MODE=legacy`; that separate path writes the historical `r.rds`,
+labels records `legacy-unidentified`, and retains every recorded version rather
+than guessing the newest. Legacy mode refuses campaign-schema CSVs. Neither
+mode silently falls back to the other or pools campaigns. Report rebuilding/
+attempt selection for publication remains Chat 10; old report pages are not yet
+campaign-aware. The historical maximum-output-count heuristic remains pending
+Chat 7 and is not artifact validation.
 
 ## Workload contracts (Chat 5)
 
@@ -360,9 +419,10 @@ Tests are in `tests/testthat/test-*.R`; shared temporary fixtures are in
 Rscript --vanilla -e 'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "chat1", stop_on_failure = TRUE)'
 ```
 
-Chat 1/2 tests require no machine-local configuration, geospatial packages,
-point clouds, or LAStools installation. They use Rscript subprocesses and small
-catalog/monitor stand-ins. Chat 3 additionally loads the full pinned stack, checks
+Chat 1/2 tests require no machine-local configuration, point clouds, or LAStools
+installation. They use Rscript subprocesses and small catalog/monitor stand-ins;
+since Chat 6, dispatch fixtures also fingerprint the full pinned package stack
+and geospatial library versions for campaign identity. Chat 3 checks
 Quarto, constructs real lasR pipelines without executing them, and writes tiny
 synthetic LAS fixtures for the public lidR metadata interfaces. It restores into
 a fresh temporary library using the lockfile and the normal renv cache; this is
@@ -399,3 +459,14 @@ the pinned-lasR normalization defect. It requires the pinned geospatial stack,
 uses temporary synthetic data, and does not run LAStools or a campaign. Native
 processing, Windows and neighboring real-tile numerical equivalence are not
 established by these checks.
+
+Chat 6 (`filter = "chat6"`) uses temporary input/index bytes and native-executable
+copies, fixture-only native version responses, and the installed pinned package
+stack. It checks manifest identity, actual source/lockfile/native-byte changes,
+thread environment changes, resume/repetition IDs, append-only retries and
+diagnostics, completion integrity, campaign-only compilation and explicit legacy
+separation. Git revision queries are read-only; source-change tests hash a
+temporary checkout stand-in, never edit the real installed packages or inputs.
+The updated Chat 1/2/5 fixtures also cover campaign-aware dispatch. These tests
+do not establish real LAStools version/provenance/license validity, Windows
+behavior, numerical correctness or readiness to run a benchmark campaign.

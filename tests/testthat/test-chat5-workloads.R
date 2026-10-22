@@ -235,13 +235,17 @@ test_that("blocked runner attempts retain the contract and native blocker diagno
     env$catalog <- function(...) stop("Blocked attempts must not read point clouds")
     env$prepare_input <- function(...) stop("Blocked attempts must not prepare inputs")
     before <- list.files(scratch, all.files = TRUE)
+    campaign <- env$benchmark_campaign(
+      "blocked", data.frame(task_id = "normalization", run_id = run$ID),
+      setup$benchmark_tasks, setup$benchmark_runs, config, repo_root = repo
+    )
     env$benchmark_run(
       task_id = "normalization", run_id = run$ID,
       run_lidR = FALSE, run_lasR = TRUE, run_lastools = FALSE,
       benchmark_tasks = setup$benchmark_tasks, benchmark_runs = setup$benchmark_runs,
-      sysinfo = list(lasR_version = "0.21.2"), config = config
+      sysinfo = list(lasR_version = "0.21.2"), config = config, campaign = campaign
     )
-    files <- list.files(reports, "\\.csv$", full.names = TRUE)
+    files <- fixture_attempt_files(reports)
     expect_length(files, 1L)
     result <- read.csv(files)
     expect_identical(result$execution_status, "skipped")

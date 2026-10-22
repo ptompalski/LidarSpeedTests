@@ -695,3 +695,89 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   lasR normalization blocker. Keep lasR normalization and both complex tasks
   disabled and recorded as blocked/skipped; do not waive correctness or claim
   those workloads are validated. No runtime change or further task was started.
+
+### Chat 6 handoff (2026-10-21)
+
+- Implemented only Chat 6 and directly required tests/documentation on the
+  existing `dev` branch. No commits, pushes, dependency changes, benchmark-data
+  downloads/preparation, real campaigns or historical result/site changes.
+  The user-owned untracked `_OLD/` directory remains untouched.
+- Added explicit `benchmark_campaign()` creation/resume and a required campaign
+  handle for `benchmark_run()`. The runner requires `LIDAR_CAMPAIGN_ID`; its
+  existing selected matrix and tool order remain unchanged. Repetition IDs are
+  positive integers (the runner still schedules only repetition 1). Balanced
+  scheduling, warm-ups/cache policy and explicit native-thread control remain
+  Chat 8, not implemented here.
+- Each campaign freezes an RDS manifest under
+  `<reports_path>/campaigns/<campaign_id>/`: exact selected task/run definitions,
+  validated configuration/paths, Git revision and execution-source dirty state,
+  source checksums, every selected input-directory file checksum (including
+  indexes), lockfile checksum, actual R/package versions and R/native-library
+  file checksums, selected LAStools binary checksums/raw version responses,
+  OS/CPU/RAM, relevant storage mounts/devices/filesystems, linked-library
+  versions and current parallelism/core/thread
+  environment. Renamed/symlink-resolved renv library paths are canonicalized so
+  namespace loading alone cannot falsely change identity.
+- Creation/resume and dispatch recompute identity, including full input bytes;
+  incompatible code, data, indexes, configuration, environment or selection
+  requires a new campaign ID before existing results can be reused. These
+  conservative checks are outside timing and can be expensive on full data;
+  there is no mtime/size-only checksum cache. Do not modify inputs/environment
+  during a running call. MD5 identifies bytes, not provenance/license validity
+  or a security signature. Raw source/tool provenance blockers are not waived.
+- Each attempt reserves a unique directory with a start record, an atomically
+  published result CSV and completion checksum receipt. Results link campaign,
+  identity, repetition and attempt IDs. Failed retries, forced reruns, skipped
+  workloads and metadata/preparation failures retain separate records.
+  Successful/explicitly skipped work can resume; failed work retries without
+  overwriting any previous CSV. Duplicate completion is refused and readers
+  check result bytes against the completion receipt/start/campaign identities.
+  Interruptions retain incomplete attempt directories; they are never counted
+  as completed work. Compilation explicitly blocks on them rather than hiding
+  them. Preserve such campaigns for diagnosis and use a new campaign for
+  reporting; an interruption-reconciliation UI is not implemented.
+- Compilation requires one explicit `LIDAR_CAMPAIGN_ID`, writes campaign-local
+  `compiled.rds`, and retains every attempt/repetition rather than deduplicating
+  retries. Historical top-level CSVs require `LIDAR_RESULTS_MODE=legacy` with no
+  campaign ID, are labeled `legacy-unidentified`, and reject campaign-schema
+  records. Removed all per-task "newest version" selection instead of keeping
+  a legacy version-ranking path; both `0.9.10` and `0.10.0` are retained.
+  Neither mode can silently fall back to or mix with the other. The historical
+  output-count heuristic remains explicitly pending Chat 7; compiled rows are
+  not correctness certification or publication-ready aggregates.
+- Native version metadata in the runner now comes from the exact selected
+  manifest executables rather than an additional unrelated `las2las` query.
+  Existing raw diagnostics, blocked/skipped Chat 5 contracts and scratch/worker
+  cleanup behavior are preserved. No disabled lasR normalization/complex task
+  was re-enabled.
+- Added named testthat campaign tests and adapted directly affected Chat 1/2/5
+  fixtures. Coverage includes stable identity, actual dirty-source/lockfile/
+  input/index/native-byte changes, thread-environment changes, native-query
+  failures, duplicate selection/completion, missing campaign IDs, matching
+  resume, repetitions, automatic/forced retries, preserved metadata failures,
+  completion integrity, single-campaign compilation, retained legacy versions,
+  mixed-schema rejection and retained incomplete attempts. All files are tiny
+  temporary fixtures; native version responses are fixture-only stand-ins.
+- **Final affected checks passed:** warnings-as-errors run of
+  `testthat::test_dir("tests/testthat", filter = "chat[12]|chat3-environment|chat5|chat6", stop_on_failure = TRUE)`
+  after renv activation produced **875 passing expectations, zero failures,
+  warnings or skips**; Chat 6 contributes 99 expectations.
+  **Full-suite verification passed:** the required
+  `Rscript --vanilla tests/testthat.R` exited zero after about 20.5 minutes,
+  including strict isolated restoration, with **1,044 passing expectations,
+  zero failures/warnings and one explicit skip**. The skip is the opt-in
+  external historical-file check (`LIDAR_RECOVERED_INPUT_ROOT` was unset);
+  no real-input verification is claimed. The full run began before the last
+  legacy-version assertion/storage-metadata addition; the final affected rerun
+  above verifies the final affected tree with warnings promoted to errors.
+  `Rscript --vanilla R/check_environment.R` succeeded with R 4.6.1, Quarto
+  1.10.18, GDAL 3.12.2, GEOS 3.14.1 and PROJ 9.7.1. `git diff --check` passed.
+- **Remaining external blockers:** no real campaign or native LAStools
+  processing was authorized/run; executable distribution/entitlement,
+  recovered-input CRS/units/license/repair provenance and runner layout
+  integration, native/neighboring-tile artifact correctness, Windows behavior,
+  and the pinned lasR normalization defect remain as previously recorded.
+  Campaign-aware artifact validation, scheduling, monitoring and publication
+  rebuilding remain Chats 7-10. Campaign identity does not resolve or certify
+  any of those inputs, outputs or workload-equivalence limitations.
+- Stop after this handoff; do not start Chat 7 or run a benchmark campaign.

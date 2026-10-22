@@ -49,6 +49,15 @@ chat2_fixture <- function(envir = parent.frame()) {
     expect_true(file.copy(rscript, file.path(bin, paste0(name, suffix))))
   }
   probe <- file.path(bin, paste0("probe", suffix))
+  original_process <- env$benchmark_process
+  env$benchmark_process <- function(executable, args = character()) {
+    if (identical(args, "-version") &&
+        sub("\\.exe$", "", basename(executable)) %in%
+          c("probe", "lascanopy64", "lasheight64", "blast2dem64", "lasgrid64")) {
+      return(list(status = 0L, stdout = "fixture native 1.0\n", stderr = ""))
+    }
+    original_process(executable, args)
+  }
   script <- file.path(test_dir, "native process fixture.R")
   writeLines(c(
     "args <- commandArgs(TRUE)",
@@ -83,4 +92,15 @@ with_chat2_fixture <- function(code) {
   envir <- environment()
   list2env(chat2_fixture(envir), envir = envir)
   eval(substitute(code), envir)
+}
+
+fixture_campaign <- function(env, tasks, runs, config, id = "fixture") {
+  selection <- expand.grid(task_id = tasks$task_id, run_id = runs$ID,
+                           stringsAsFactors = FALSE)
+  env$benchmark_campaign(id, selection, tasks, runs, config, repo_root = repo)
+}
+
+fixture_attempt_files <- function(reports) {
+  list.files(file.path(reports, "campaigns"), "^result\\.csv$",
+             recursive = TRUE, full.names = TRUE)
 }

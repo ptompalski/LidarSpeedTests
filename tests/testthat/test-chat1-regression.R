@@ -78,21 +78,23 @@ test_that("empty-call dispatch writes skipped CSVs before preparing inputs or sc
     reports_path = reports, cores = 1L, tools = c("lidR", "lasR", "lastools"),
     lastools_path = R.home("bin"), workstation_id = "fixture", resource_monitoring = FALSE
   )
-  runner_env$benchmark_run(
-    task_id = "unsupported", run_id = "ALS_1000_1_1_SSD_SSD",
-    benchmark_tasks = data.frame(
+  tasks <- data.frame(
       task_id = "unsupported", data_type = "datasets_org", output_format = "",
       task_call_lidR = "", task_call_lasR = " \n ", task_call_lastools = NA_character_
-    ),
-    benchmark_runs = data.frame(
+    )
+  runs <- data.frame(
       ID = "ALS_1000_1_1_SSD_SSD", cores = 1,
       dir_in_org = input, scratch_root = scratch
-    ),
+    )
+  campaign <- fixture_campaign(runner_env, tasks, runs, config)
+  runner_env$benchmark_run(
+    task_id = "unsupported", run_id = "ALS_1000_1_1_SSD_SSD",
+    benchmark_tasks = tasks, benchmark_runs = runs, campaign = campaign,
     sysinfo = tibble(lidR_version = "1.0.0", lasR_version = "1.0.0",
                      lastools_version = 1),
     config = config
   )
-  skip_files <- list.files(reports, full.names = TRUE)
+  skip_files <- fixture_attempt_files(reports)
   expect_length(skip_files, 3L)
   for (file in skip_files) {
     record <- read.csv(file)
@@ -143,6 +145,7 @@ test_that("the compiler preserves mixed-schema outcomes, streams, and output fai
     nodename = "fixture", density_points = 1, input_data_size = "100",
     lidR_version = "1.0.0", lasR_version = "1.0.0", lastools_version = 1
   )
+  fixture$lasR_version[c(5, 9)] <- c("0.9.10", "0.10.0")
   for (i in seq_len(nrow(fixture))) {
     record <- fixture[i, ]
     if (i >= 5L) {
@@ -171,6 +174,8 @@ test_that("the compiler preserves mixed-schema outcomes, streams, and output fai
     if (file == "R/99_plotSettings.R") return(eval(formatter[[1L]], compiler_env))
     sys.source(file.path(repo, file), compiler_env)
   }
+  sys.source(file.path(repo, "R/1_functions.R"), compiler_env)
+  withr::local_envvar(c(LIDAR_CAMPAIGN_ID = NA_character_, LIDAR_RESULTS_MODE = "legacy"))
   withr::local_dir(test_dir)
   sys.source(file.path(repo, "R/4_compileResults.R"), compiler_env)
   compiled <- readRDS("r.rds")
@@ -182,6 +187,10 @@ test_that("the compiler preserves mixed-schema outcomes, streams, and output fai
     filter(tool == "lasR", task_id == "shared", cores == 4)
   unsupported <- compiler_env$r %>% filter(task_id == "unsupported")
   expect_equal(nrow(compiler_env$r), nrow(fixture))
+  expect_setequal(
+    compiler_env$r$lasR_version[compiler_env$r$task_id == "shared"],
+    c("0.9.10", "0.10.0", "1.0.0")
+  )
   expect_identical(compiled$success[c(1:5, 7:8)], fixture$success[c(1:5, 7:8)])
   expect_true(compiled$short_duration[2L])
   expect_true(compiled$short_duration[3L])
