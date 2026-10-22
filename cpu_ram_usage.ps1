@@ -1,3 +1,6 @@
+# Historical Windows-only whole-machine logger, not used by the campaign runner.
+# It has no attempt identity, timed boundaries, or managed shutdown protocol.
+# Chat 9 campaigns use the Linux /proc backend in R/1_functions.R instead.
 param(
 [string]$fname,
 [string]$odir

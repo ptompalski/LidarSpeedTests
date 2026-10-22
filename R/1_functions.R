@@ -186,6 +186,7 @@ benchmark_validate_config <- function(config) {
       length(config$resource_monitoring) != 1L || is.na(config$resource_monitoring)) {
     stop("resource_monitoring must be TRUE or FALSE.")
   }
+  config$monitoring <- benchmark_monitoring_config(config$monitoring)
   if (config$resource_monitoring) {
     config <- benchmark_validate_monitor(config)
   }
@@ -619,37 +620,102 @@ benchmark_execute_call <- function(task_call, tool, envir = parent.frame()) {
 }
 
 benchmark_validate_monitor <- function(config) {
-  if (.Platform$OS.type != "windows") {
-    stop("Resource monitoring is Windows-only; set resource_monitoring = FALSE on this platform.")
+  config$monitoring <- benchmark_monitoring_config(config$monitoring)
+  if (!identical(unname(Sys.info()[["sysname"]]), "Linux") ||
+      !all(file.access(c("/proc/stat", "/proc/meminfo"), 4) == 0)) {
+    stop("Resource monitoring unavailable: requires Linux with readable /proc/stat and /proc/meminfo; ",
+         "set resource_monitoring = FALSE to run explicitly without monitoring.")
   }
-  config$system_monitoring_path <- benchmark_directory(
-    config$system_monitoring_path, "Monitoring reports", TRUE
-  )
-  if (any(vapply(config$input_roots, benchmark_paths_overlap, logical(1),
-                 b = config$system_monitoring_path))) {
-    stop("Monitoring reports must not overlap input directories.")
-  }
-  if (!is.character(config$monitor_script) || length(config$monitor_script) != 1L ||
-      is.na(config$monitor_script) || !file.exists(config$monitor_script) ||
-      dir.exists(config$monitor_script)) {
-    stop("Monitoring script is missing: ", config$monitor_script)
-  }
-  config$monitor_script <- normalizePath(config$monitor_script, winslash = "/")
-  config$powershell <- benchmark_resolve_executable(config$powershell)
+  # Samples belong to immutable attempts, not the historical shared output tree.
+  config$system_monitoring_path <- config$reports_path
   config
 }
 
-benchmark_start_monitor <- function(config, label) {
+benchmark_monitoring_config <- function(policy = NULL) {
+  defaults <- list(scope = "whole-machine", interval_seconds = 1)
+  if (is.null(policy)) policy <- list()
+  if (!is.list(policy) || (length(policy) &&
+      (is.null(names(policy)) || anyNA(names(policy)) || anyDuplicated(names(policy)) ||
+       any(!names(policy) %in% names(defaults))))) {
+    stop("monitoring must be a named list of supported policy fields.")
+  }
+  defaults[names(policy)] <- policy
+  if (!identical(defaults$scope, "whole-machine")) {
+    stop("monitoring$scope must be whole-machine; process-tree monitoring is not implemented.")
+  }
+  interval <- defaults$interval_seconds
+  if (!is.numeric(interval) || length(interval) != 1L || is.na(interval) ||
+      !is.finite(interval) || interval < 0.05 || interval > 60) {
+    stop("monitoring$interval_seconds must be a finite number between 0.05 and 60.")
+  }
+  defaults
+}
+
+benchmark_monitor_collect <- function(path, attempt_id, interval) {
+  snapshot <- function() {
+    cpu <- scan(text = sub("^cpu +", "", readLines("/proc/stat", n = 1L)),
+                quiet = TRUE)
+    memory <- readLines("/proc/meminfo")
+    memory_value <- function(key) {
+      line <- grep(paste0("^", key, ":"), memory, value = TRUE)
+      if (length(line) != 1L) stop("Missing Linux memory counter: ", key)
+      as.numeric(strsplit(trimws(sub("^[^:]+:", "", line)), " +")[[1L]][1L]) * 1024
+    }
+    total <- memory_value("MemTotal")
+    available <- memory_value("MemAvailable")
+    if (length(cpu) < 8L || any(!is.finite(cpu)) || !is.finite(total) ||
+        !is.finite(available) || total <= 0 || available < 0 || available > total) {
+      stop("Invalid Linux resource counters.")
+    }
+    list(epoch = as.numeric(Sys.time()), elapsed = unname(proc.time()[["elapsed"]]),
+         total = sum(cpu[1:8]), idle = sum(cpu[c(4, 5)]),
+         ram_total = total, ram_available = available)
+  }
+  output <- file.path(path, "monitor-samples.csv")
+  previous <- snapshot()
+  file.create(file.path(path, "monitor-ready"))
+  repeat {
+    Sys.sleep(min(interval, 0.05))
+    stopping <- file.exists(file.path(path, "monitor-stop"))
+    if (unname(proc.time()[["elapsed"]]) - previous$elapsed < interval && !stopping) next
+    current <- snapshot()
+    ticks <- current$total - previous$total
+    if (ticks <= 0 || current$elapsed <= previous$elapsed ||
+        current$epoch <= previous$epoch) stop("Non-increasing resource counters or clock.")
+    busy <- ticks - (current$idle - previous$idle)
+    if (busy < 0 || busy > ticks) stop("Invalid Linux CPU counter delta.")
+    row <- data.frame(
+      attempt_id = attempt_id, scope = "whole-machine", platform = "Linux",
+      timestamp_units = "seconds since Unix epoch UTC", cpu_units = "percent",
+      ram_units = "bytes", sampling_interval_seconds = interval,
+      interval_start_epoch = previous$epoch, interval_end_epoch = current$epoch,
+      observed_interval_seconds = current$elapsed - previous$elapsed,
+      cpu_percent = 100 * busy / ticks,
+      ram_used_bytes = current$ram_total - current$ram_available,
+      ram_available_bytes = current$ram_available, ram_total_bytes = current$ram_total
+    )
+    write.table(row, output, sep = ",", row.names = FALSE,
+                col.names = !file.exists(output), append = file.exists(output))
+    previous <- current
+    if (stopping) break
+  }
+  invisible(NULL)
+}
+
+benchmark_start_monitor <- function(config, label, path) {
   config <- benchmark_validate_monitor(config)
   label <- benchmark_file_component(label, "Monitor label")
-  stdout <- file.path(config$system_monitoring_path, paste0(label, "-stdout.log"))
-  stderr <- file.path(config$system_monitoring_path, paste0(label, "-stderr.log"))
-  monitor <- processx::process$new(
-    config$powershell,
-    c("-NoProfile", "-NonInteractive", "-File", config$monitor_script,
-      label, config$system_monitoring_path),
-    stdout = stdout, stderr = stderr, cleanup_tree = TRUE
+  path <- benchmark_directory(path, "Attempt monitoring", TRUE)
+  if (length(list.files(path, "^monitor-"))) stop("Refusing to overwrite monitoring files.")
+  monitor <- callr::r_bg(
+    benchmark_monitor_collect,
+    args = list(path = path, attempt_id = label,
+                interval = config$monitoring$interval_seconds),
+    stdout = file.path(path, "monitor-stdout.log"),
+    stderr = file.path(path, "monitor-stderr.log"),
+    supervise = TRUE
   )
+  attr(monitor, "monitor_path") <- path
   ready <- FALSE
   on.exit(if (!ready) {
     monitor$kill_tree()
@@ -657,15 +723,14 @@ benchmark_start_monitor <- function(config, label) {
   })
   deadline <- Sys.time() + 10
   repeat {
-    monitor$wait(100)
-    if (file.exists(stderr) && file.info(stderr)$size > 0) {
-      stop("Monitoring process reported startup errors: ",
-           paste(readLines(stderr, warn = FALSE), collapse = "\n"))
+    monitor$wait(20)
+    if (!monitor$is_alive()) {
+      monitor$get_result()
+      stop("Monitoring process exited during startup.")
     }
-    if (!monitor$is_alive()) stop("Monitoring process exited during startup.")
-    if (file.exists(stdout) && file.info(stdout)$size > 0) break
+    if (file.exists(file.path(path, "monitor-ready"))) break
     if (Sys.time() >= deadline) {
-      stop("Monitoring process produced no startup output; inspect ", stdout, " and ", stderr)
+      stop("Monitoring process produced no readiness receipt; inspect ", path)
     }
   }
   ready <- TRUE
@@ -673,12 +738,79 @@ benchmark_start_monitor <- function(config, label) {
 }
 
 benchmark_stop_monitor <- function(monitor) {
-  was_alive <- monitor$is_alive()
-  monitor$kill_tree()
+  on.exit(if (monitor$is_alive()) {
+    monitor$kill_tree()
+    monitor$wait(5000)
+  })
+  if (!monitor$is_alive()) {
+    monitor$get_result()
+    stop("Monitoring process exited before workload cleanup.")
+  }
+  if (!file.create(file.path(attr(monitor, "monitor_path"), "monitor-stop"))) {
+    stop("Cannot request monitor shutdown.")
+  }
   monitor$wait(5000)
-  if (monitor$is_alive()) stop("Could not stop the monitoring process tree.")
-  if (!was_alive) stop("Monitoring process exited before workload cleanup.")
+  if (monitor$is_alive()) stop("Monitoring process did not stop within five seconds.")
+  monitor$get_result()
   invisible(NULL)
+}
+
+benchmark_monitor_summary <- function(samples, start, finish, attempt_id) {
+  numeric_fields <- c("interval_start_epoch", "interval_end_epoch",
+                      "observed_interval_seconds", "cpu_percent", "ram_used_bytes",
+                      "ram_available_bytes", "ram_total_bytes", "sampling_interval_seconds")
+  if (!nrow(samples) || !all(c(numeric_fields, "attempt_id", "scope", "platform",
+                               "timestamp_units", "cpu_units", "ram_units") %in% names(samples)) ||
+      anyNA(samples) || any(samples$attempt_id != attempt_id) ||
+      any(samples$scope != "whole-machine" | samples$platform != "Linux") ||
+      any(samples$timestamp_units != "seconds since Unix epoch UTC" |
+          samples$cpu_units != "percent" | samples$ram_units != "bytes") ||
+      any(!vapply(samples[numeric_fields], is.numeric, logical(1))) ||
+      any(!is.finite(as.matrix(samples[numeric_fields]))) ||
+      any(samples$interval_end_epoch <= samples$interval_start_epoch) ||
+      any(samples$observed_interval_seconds <= 0) ||
+      any(samples$cpu_percent < 0 | samples$cpu_percent > 100) ||
+      any(samples$ram_used_bytes < 0 | samples$ram_available_bytes < 0 |
+          samples$ram_total_bytes <= 0) ||
+      any(samples$ram_used_bytes + samples$ram_available_bytes != samples$ram_total_bytes) ||
+      length(unique(samples$sampling_interval_seconds)) != 1L ||
+      any(samples$sampling_interval_seconds < 0.05 | samples$sampling_interval_seconds > 60) ||
+      (nrow(samples) > 1L && any(
+        samples$interval_start_epoch[-1L] != head(samples$interval_end_epoch, -1L)))) {
+    stop("Malformed or unattributable monitoring samples.")
+  }
+  if (length(start) != 1L || length(finish) != 1L || !is.finite(start) ||
+      !is.finite(finish) || finish <= start) stop("Invalid monitoring timed interval.")
+  weights <- pmax(0, pmin(samples$interval_end_epoch, finish) -
+                    pmax(samples$interval_start_epoch, start))
+  keep <- weights > 0
+  covered <- sum(weights)
+  if (!any(keep)) stop("Monitoring samples do not overlap the timed workload.")
+  list(
+    monitoring_status = if (covered >= (finish - start) - 1e-5) "available" else "partial",
+    monitoring_sample_count = sum(keep), monitoring_covered_seconds = covered,
+    monitoring_coverage_fraction = min(1, covered / (finish - start)),
+    cpu_mean_percent = weighted.mean(samples$cpu_percent[keep], weights[keep]),
+    cpu_peak_percent = max(samples$cpu_percent[keep]),
+    ram_mean_used_bytes = weighted.mean(samples$ram_used_bytes[keep], weights[keep]),
+    ram_peak_used_bytes = max(samples$ram_used_bytes[keep])
+  )
+}
+
+benchmark_monitor_finish <- function(monitor, result, label) {
+  path <- attr(monitor, "monitor_path")
+  samples_path <- file.path(path, "monitor-samples.csv")
+  samples <- read.csv(samples_path, stringsAsFactors = FALSE)
+  start <- as.numeric(result$start_time)
+  finish <- as.numeric(result$finish_time)
+  summary <- benchmark_monitor_summary(samples, start, finish, label)
+  report <- list(schema = "chat9-v1", attempt_id = label,
+                 timed_start_epoch = start, timed_finish_epoch = finish,
+                 samples_md5 = benchmark_checksums(samples_path)$md5, summary = summary)
+  report_path <- file.path(path, "monitor-report.rds")
+  saveRDS(report, report_path)
+  c(list(monitoring_report_md5 = benchmark_checksums(report_path)$md5,
+         monitoring_timed_start_epoch = start, monitoring_timed_finish_epoch = finish), summary)
 }
 
 benchmark_cleanup <- function(actions) {
@@ -723,9 +855,10 @@ benchmark_validate_thread_runtime <- function() {
   invisible(NULL)
 }
 
-benchmark_with_resources <- function(tool, cores, config, label, run) {
+benchmark_with_resources <- function(tool, cores, config, label, run, monitor_path = NULL) {
   cleanup <- list()
   cleaned <- FALSE
+  monitoring <- list(monitoring_status = if (config$resource_monitoring) "unavailable" else "disabled")
   on.exit(if (!cleaned) benchmark_cleanup(cleanup))
   result <- tryCatch({
     benchmark_validate_thread_runtime()
@@ -772,8 +905,13 @@ benchmark_with_resources <- function(tool, cores, config, label, run) {
       }
     }
     if (config$resource_monitoring) {
-      monitor <- benchmark_start_monitor(config, label)
-      cleanup[[length(cleanup) + 1L]] <- function() benchmark_stop_monitor(monitor)
+      monitor <- benchmark_start_monitor(config, label, monitor_path)
+      cleanup[[length(cleanup) + 1L]] <- function() {
+        benchmark_stop_monitor(monitor)
+        if (!is.na(result$start_time) && !is.na(result$finish_time)) {
+          monitoring <<- benchmark_monitor_finish(monitor, result, label)
+        }
+      }
     }
     run()
   }, error = function(e) benchmark_failed_result(tool, e))
@@ -782,6 +920,7 @@ benchmark_with_resources <- function(tool, cores, config, label, run) {
     NULL
   }, error = identity)
   cleaned <- TRUE
+  result[names(monitoring)] <- monitoring
   if (inherits(cleanup_error, "error")) {
     result <- benchmark_failed_result(tool, cleanup_error, result)
     attr(result, "resources_cleaned") <- FALSE
@@ -812,6 +951,10 @@ compile_execution_outcomes <- function(results) {
   results$validated_success <- results$execution_status == "succeeded" &
     results$success == 1 & results$validation_status == "passed"
   if (!"phase" %in% names(results)) results$phase <- "measurement"
+  if (!"monitoring_status" %in% names(results)) {
+    results$monitoring_status <- "unavailable-historical"
+  }
+  results$monitoring_status[is.na(results$monitoring_status)] <- "unavailable-historical"
   results$measurement_eligible <- results$phase == "measurement" & results$validated_success
 
   results$processing_time <- difftime(
@@ -855,7 +998,7 @@ benchmark_run_tool <- function(tool, task_call, context, config, label) {
     } else NULL
     result <- benchmark_with_resources(tool, context$cores, config, label, function() {
       benchmark_execute_call(task_call, tool, context)
-    })
+    }, monitor_path = context$monitor_path)
     counts <- tryCatch(
       check_results(context$dir_out, manifest, context$task_id, tool, result),
       error = function(e) {
@@ -1020,6 +1163,7 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
     attempt <- benchmark_attempt_start(campaign, task_id, run_id, tool, repetition_id,
                                         phase, schedule_index, tool_position)
     context$validation_report <- file.path(attempt$path, "validation.rds")
+    context$monitor_path <- attempt$path
     result <- tryCatch(
       {
         if (is.null(metadata) && !benchmark_call_is_empty(call)) {
@@ -1030,12 +1174,24 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
       },
       error = function(e) benchmark_failed_result(tool, e)
     )
+    if (is.null(result$monitoring_status)) {
+      result$monitoring_status <- if (config$resource_monitoring) "not_run" else "disabled"
+    }
     common <- c(list(task_id = task_id, run_id = run_id, cores = run$cores,
                      workers = if (tool == "lastools") 1L else run$cores,
                      native_threads = if (tool == "lastools") run$cores else 1L,
                      blas_threads = 1L,
                      cache_policy = config$scheduling$cache_policy,
                      cooldown_seconds = config$scheduling$cooldown_seconds,
+                     monitoring_scope = config$monitoring$scope,
+                     monitoring_platform = unname(Sys.info()[["sysname"]]),
+                     monitoring_interval_seconds = config$monitoring$interval_seconds,
+                     monitoring_diagnostic = switch(result$monitoring_status,
+                       disabled = "Monitoring explicitly disabled.",
+                       not_run = "Workload did not reach monitor setup.",
+                       unavailable = "Monitoring failed; see execution diagnostic and monitor logs.",
+                       partial = "Samples cover only part of the timed interval.",
+                       "Whole-machine utilization includes unrelated activity and monitor overhead."),
                      timing_boundary = "workload call only; includes tool I/O and persistence"),
                 as.list(sysinfo), metadata)
     if ("workload_contract" %in% names(task)) {
@@ -1289,6 +1445,14 @@ benchmark_read_attempt <- function(attempt, manifest) {
     workers = readr::col_integer(), native_threads = readr::col_integer(),
     blas_threads = readr::col_integer(),
     cooldown_seconds = readr::col_double(),
+    monitoring_interval_seconds = readr::col_double(),
+    monitoring_timed_start_epoch = readr::col_double(),
+    monitoring_timed_finish_epoch = readr::col_double(),
+    monitoring_sample_count = readr::col_integer(),
+    monitoring_covered_seconds = readr::col_double(),
+    monitoring_coverage_fraction = readr::col_double(),
+    cpu_mean_percent = readr::col_double(), cpu_peak_percent = readr::col_double(),
+    ram_mean_used_bytes = readr::col_double(), ram_peak_used_bytes = readr::col_double(),
     cpu_threads = readr::col_double(), ram = readr::col_double(),
     total_point_count = readr::col_double(), density_pulses = readr::col_double(),
     file_count = readr::col_double(),
@@ -1334,6 +1498,36 @@ benchmark_read_attempt <- function(attempt, manifest) {
   } else if ("validation_status" %in% names(record) &&
              record$validation_status == "passed") {
     stop("Passed validation requires an immutable validation report: ", attempt)
+  }
+  if ("monitoring_report_md5" %in% names(record) && !is.na(record$monitoring_report_md5)) {
+    report_path <- file.path(attempt, "monitor-report.rds")
+    samples_path <- file.path(attempt, "monitor-samples.csv")
+    if (!file.exists(report_path) ||
+        !identical(benchmark_checksums(report_path)$md5, record$monitoring_report_md5)) {
+      stop("Monitoring report checksum does not match its attempt: ", attempt)
+    }
+    report <- readRDS(report_path)
+    if (!identical(report$schema, "chat9-v1") ||
+        !identical(report$attempt_id, record$attempt_id) ||
+        !isTRUE(all.equal(c(report$timed_start_epoch, report$timed_finish_epoch),
+                         c(record$monitoring_timed_start_epoch,
+                           record$monitoring_timed_finish_epoch), tolerance = 1e-14)) ||
+        !file.exists(samples_path) ||
+        !identical(benchmark_checksums(samples_path)$md5, report$samples_md5)) {
+      stop("Monitoring samples/identity do not match their immutable report: ", attempt)
+    }
+    summary <- benchmark_monitor_summary(
+      read.csv(samples_path, stringsAsFactors = FALSE),
+      report$timed_start_epoch, report$timed_finish_epoch, record$attempt_id
+    )
+    if (!identical(summary, report$summary) ||
+        !isTRUE(all.equal(as.list(record[names(summary)]), summary,
+                          tolerance = 1e-12, check.attributes = FALSE))) {
+      stop("Monitoring summary does not match its samples/attempt: ", attempt)
+    }
+  } else if ("monitoring_status" %in% names(record) &&
+             record$monitoring_status %in% c("available", "partial")) {
+    stop("Available monitoring requires an immutable monitoring report: ", attempt)
   }
   record
 }

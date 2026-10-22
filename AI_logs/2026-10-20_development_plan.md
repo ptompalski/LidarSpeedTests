@@ -958,3 +958,93 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   disabled. Campaign-aware resource monitoring and publication rebuilding
   remain Chats 9-10; an authorized pilot remains Chat 11.
 - Stop after this handoff. Do not start Chat 9 or run a real benchmark campaign.
+
+### Chat 9 handoff (2026-10-22)
+
+- Implemented only Chat 9 and directly required configuration, attempt ingestion,
+  testthat regressions and documentation on the existing `dev` branch. The
+  user-owned `_OLD/` directory remains untouched. No commits, pushes,
+  dependency/runtime changes, benchmark-data downloads/preparation, real
+  campaigns, historical-result rewrites or published-site changes.
+- **Confirmed decision:** the user selected Linux and whole-machine monitoring
+  now, with an explicit scope setting for future process-tree support. Added
+  validated `monitoring = list(scope = "whole-machine", interval_seconds = 1)`;
+  these are also the defaults for older configurations. Intervals from 0.05
+  through 60 seconds are accepted. `process-tree` is explicitly rejected until
+  implemented; it is not an alias for whole-machine measurements. Enabled
+  monitoring on unsupported platforms or without readable Linux `/proc` fails
+  explicitly. Monitoring-disabled workload execution remains available.
+- Replaced the runner's Windows PowerShell invocation with a supervised R
+  subprocess reading `/proc/stat` and `/proc/meminfo`. The PowerShell file is
+  retained and marked historical, not silently repurposed as a campaign logger.
+  Legacy PowerShell/script/shared-output settings no longer select a backend.
+  Monitoring configuration is frozen by existing campaign identity rules;
+  changed monitoring/code requires a new campaign, not resuming old identities.
+- Each attempt retains raw CSV samples, monitor stdout/stderr, readiness/stop
+  receipts and `monitor-report.rds` beside its execution/validation records.
+  Samples include attempt ID, Linux/whole-machine scope, UTC Unix-epoch interval
+  endpoints, requested and observed sampling intervals, units and CPU/RAM
+  values. Attribution to campaign, tool, repetition and warm-up/measurement
+  phase follows the containing immutable attempt; raw samples do not invent
+  process-specific attribution.
+- CPU is aggregate busy percent on a 0-100 whole-machine scale, excluding idle
+  and iowait and avoiding double-counted guest ticks. RAM is
+  `MemTotal - MemAvailable`, in bytes, with available/total retained. These are
+  explicitly different definitions from the historical Windows counters.
+  Unrelated jobs, services, file cache and monitor overhead affect measurements;
+  serial harness execution does not certify machine idleness or isolation.
+- Startup requires a counter snapshot/readiness receipt before workload timing.
+  Normal success and intentional failure both request a final sample and clean
+  exit before validation, scratch cleanup and cooldown. Unexpected monitor death,
+  invalid/missing samples or shutdown timeout fail explicitly. A timeout
+  force-terminates/reaps the monitor tree; existing cleanup-failure diagnostics
+  and scratch-retention behavior are preserved. Supervision covers normal
+  parent termination, not an OS/machine crash; incomplete attempts stay blocked
+  from compilation.
+- Deterministic CPU/RAM summaries clip sample intervals to exact subsecond timed
+  boundaries. Means use overlap-duration weights; peaks are maxima of
+  overlapping samples. Coverage seconds/fraction and sample count are explicit,
+  with `partial` status for incomplete coverage and failure for no overlap.
+  CPU is an interval average and RAM an endpoint snapshot held over that
+  interval; clipping is an estimate and cannot establish instantaneous workload
+  attribution or capture every short peak. A stable system clock is required.
+  Setup/shutdown and summary generation remain outside timing.
+- The report stores exact timed epochs, raw-sample checksum and summary; its
+  checksum and numeric summary/boundaries are bound into the immutable result.
+  Campaign ingestion verifies report/sample bytes and attempt identity and
+  recomputes summaries. It retains monitored failures and warm-ups without
+  changing execution/validation or measurement-eligibility rules. Disabled,
+  pre-monitor/skipped, failed-monitor and historical monitoring are explicitly
+  `disabled`, `not_run`, `unavailable` and `unavailable-historical`, respectively;
+  missing monitoring is never represented by zero CPU/RAM.
+- **Affected checks passed:** warnings-as-errors
+  `Rscript --vanilla -e 'source("renv/activate.R"); options(warn = 2); testthat::test_dir("tests/testthat", filter = "chat[269]", reporter = "summary", stop_on_failure = TRUE)'`
+  exited zero with no failures, warnings or skips. Controlled native-process
+  stand-ins (Rscript, not LAStools) exercised actual success/exit-7 failure,
+  attributable samples, full timed coverage, deterministic recomputation,
+  immutable-file tampering detection, input protection, released locks and empty
+  scratch. Monitor handles were no longer alive after both outcomes. Further
+  cases cover monitor death, startup failure, unresponsive-shutdown termination,
+  configuration identity, malformed samples, units, clipping and partial coverage.
+  Chat 2 lifecycle checks now exercise the Linux backend instead of bypassing
+  a Windows-only validator.
+- `Rscript --vanilla R/check_environment.R` passed with R 4.6.1, Quarto 1.10.18,
+  GDAL 3.12.2, GEOS 3.14.1 and PROJ 9.7.1. `git diff --check` passed.
+- **Required full-suite verification passed:** the final execution code's
+  `Rscript --vanilla tests/testthat.R` exited zero in **1,399.8 seconds**
+  (about 23.3 minutes), including strict isolated restoration:
+  **1,711 passing expectations, zero failures/warnings and one explicit skip**.
+  Chat 9 contributes 111 passing expectations. The skip is the opt-in read-only
+  historical-input case because `LIDAR_RECOVERED_INPUT_ROOT` was unset; no
+  real-input verification is claimed. Only handoff documentation changed after
+  the run.
+- **Remaining blockers/limitations:** no scoped Linux-monitoring blocker was
+  found in controlled checks. Process-tree and Windows monitoring are not
+  implemented/supported for this campaign. Existing Chat 7 correctness failures,
+  disabled lasR normalization/complex tasks, recovered-input CRS/units/license/
+  repair provenance and layout integration, native LAStools entitlement/
+  provenance/acceptance, real-input and cold-cache/thermal limitations remain.
+  No real campaign, licensed native processing, machine-isolation certification
+  or reporting acceptance is claimed. `CPU-RAM.rds`, figures and publication
+  rebuilding remain Chat 10; an authorized pilot remains Chat 11.
+- Stop after this handoff. Do not start Chat 10 or run a real benchmark campaign.

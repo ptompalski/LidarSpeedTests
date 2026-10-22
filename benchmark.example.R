@@ -13,8 +13,7 @@ list(
   lastools_path = "/path/to/LAStools/bin",
   workstation_id = unname(Sys.info()[["nodename"]]),
   resource_monitoring = FALSE,
-  # Monitoring is Windows-only and never silently enabled or substituted.
-  system_monitoring_path = "system_monitoring",
-  powershell = "powershell",
-  monitor_script = "cpu_ram_usage.ps1"
+  # Linux /proc only. Samples/reports live inside each immutable attempt.
+  # process-tree is reserved for future implementation, not a supported scope.
+  monitoring = list(scope = "whole-machine", interval_seconds = 1)
 )

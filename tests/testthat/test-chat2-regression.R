@@ -29,10 +29,12 @@ test_that("configuration loading and path validation fail explicitly for unsafe 
     invalid <- config
     invalid$cores <- c(0, NA_real_)
     expect_error(env$benchmark_validate_config(invalid), "positive integers")
-    if (.Platform$OS.type != "windows") {
-      invalid <- config
-      invalid$resource_monitoring <- TRUE
-      expect_error(env$benchmark_validate_config(invalid), "Windows-only")
+    invalid <- config
+    invalid$resource_monitoring <- TRUE
+    if (identical(unname(Sys.info()[["sysname"]]), "Linux")) {
+      expect_no_error(env$benchmark_validate_config(invalid))
+    } else {
+      expect_error(env$benchmark_validate_config(invalid), "monitoring unavailable")
     }
     expect_no_error(env$benchmark_validate_run_paths(config, input, scratch))
     expect_error(env$benchmark_validate_run_paths(config, test_dir, scratch), "outside")
@@ -185,65 +187,55 @@ test_that("setup definitions retain the workload matrix and validate selected in
 })
 
 test_that("monitor startup and stop manage real process lifecycles", {
-  skip_on_os("windows")
+  skip_if_not(identical(unname(Sys.info()[["sysname"]]), "Linux"))
   with_chat2_fixture({
-    monitor_script <- file.path(test_dir, "monitor stand-in.R")
-    writeLines(c("cat('ready\\n'); flush.console()", "Sys.sleep(60)"), monitor_script)
-    # Bypass only the Windows validator, not the production lifecycle code.
-    env$benchmark_validate_monitor <- function(config) config
-    wrapper <- file.path(bin, "monitor stand-in")
-    writeLines(c("#!/bin/sh",
-                 paste("exec", shQuote(rscript), "--vanilla", shQuote(monitor_script))),
-               wrapper)
-    Sys.chmod(wrapper, "0755")
     monitor_output <- file.path(test_dir, "monitor logs")
     dir.create(monitor_output)
-    monitor_config <- list(
-      powershell = wrapper, monitor_script = monitor_script,
-      system_monitoring_path = monitor_output
-    )
-    started <- env$benchmark_start_monitor(monitor_config, "startup")
+    monitor_config <- config
+    monitor_config$resource_monitoring <- TRUE
+    started <- env$benchmark_start_monitor(monitor_config, "startup", monitor_output)
     withr::defer(if (started$is_alive()) started$kill_tree())
     expect_true(started$is_alive())
-    expect_true(any(grepl("ready", readLines(file.path(monitor_output, "startup-stdout.log")))))
+    expect_true(file.exists(file.path(monitor_output, "monitor-ready")))
     env$benchmark_stop_monitor(started)
     expect_false(started$is_alive())
-    writeLines(c("#!/bin/sh", "printf 'monitor startup fixture failed\\n' >&2", "sleep 60"),
-               wrapper)
-    expect_error(env$benchmark_start_monitor(monitor_config, "startup-error"),
+    expect_true(file.exists(file.path(monitor_output, "monitor-samples.csv")))
+    expect_error(env$benchmark_start_monitor(monitor_config, "startup", monitor_output),
+                 "overwrite")
+    error_output <- file.path(test_dir, "monitor error")
+    dir.create(error_output)
+    env$benchmark_monitor_collect <- function(...) stop("monitor startup fixture failed")
+    expect_error(env$benchmark_start_monitor(monitor_config, "startup-error", error_output),
                  "monitor startup fixture failed")
   })
 })
 
 test_that("worker, monitor, and strategy cleanup retain failures and restore state", {
+  skip_if_not(identical(unname(Sys.info()[["sysname"]]), "Linux"))
   with_chat2_fixture({
     old_plan <- future::plan()
     withr::defer(future::plan(old_plan))
-    monitor_script <- file.path(test_dir, "monitor stand-in.R")
-    writeLines(c("cat('ready\\n'); flush.console()", "Sys.sleep(60)"), monitor_script)
     monitor <- NULL
     withr::defer(if (!is.null(monitor) && monitor$is_alive()) monitor$kill_tree())
-    env$benchmark_start_monitor <- function(config, label) {
-      monitor <<- processx::process$new(
-        rscript, c("--vanilla", monitor_script), stdout = "|", stderr = "|",
-        cleanup_tree = TRUE
-      )
-      monitor$poll_io(5000)
+    original_start <- env$benchmark_start_monitor
+    env$benchmark_start_monitor <- function(config, label, path) {
+      monitor <<- original_start(config, label, path)
       expect_true(monitor$is_alive())
-      expect_identical(monitor$read_output_lines(), "ready")
       monitor
     }
     future::plan(future::sequential)
     worker <- NULL
     monitored_config <- config
     monitored_config$resource_monitoring <- TRUE
+    monitor_output <- file.path(test_dir, "worker monitor")
+    dir.create(monitor_output)
     failed_resources <- env$benchmark_with_resources(
       "lidR", I(1L), monitored_config, "fixture", function() {
         pid <- future::value(future::future(Sys.getpid()))
         expect_false(identical(pid, Sys.getpid()))
         worker <<- ps::ps_handle(pid)
         stop("intentional worker failure")
-      }
+      }, monitor_path = monitor_output
     )
     expect_identical(failed_resources$success, 0L)
     expect_false(monitor$is_alive())
@@ -368,7 +360,7 @@ test_that("dispatch records outputs and diagnostics while protecting inputs and 
     expect_identical(recorded$validation_status, "failed")
     expect_length(list.files(scratch, all.files = TRUE, no.. = TRUE), 0L)
     expect_identical(tools::md5sum(files), sentinel)
-    env$benchmark_with_resources <- function(tool, cores, config, label, run) {
+    env$benchmark_with_resources <- function(tool, cores, config, label, run, monitor_path = NULL) {
       result <- run()
       attr(result, "resources_cleaned") <- FALSE
       result

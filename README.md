@@ -140,13 +140,67 @@ the failure is reported rather than treated as success; unsafe scratch paths are
 left untouched, and scratch is retained if resource cleanup fails. Diagnostics
 identify retained scratch directories for manual inspection.
 
-Monitoring remains the existing Windows whole-machine PowerShell script. Keep
-`resource_monitoring = FALSE` on Linux: requesting it fails explicitly. On Windows,
-configure an existing monitoring output directory, script, and PowerShell
-executable; monitor stdout/stderr logs remain there. Campaign attribution and
-cross-platform monitoring are not implemented by this configuration change.
-Startup must produce stdout within ten seconds without startup stderr errors;
-that health check does not validate utilization samples or counter accuracy.
+### Campaign resource monitoring (Chat 9)
+
+The chosen campaign target is **Linux whole-machine monitoring**. Enable it with
+`resource_monitoring = TRUE` and configure
+`monitoring = list(scope = "whole-machine", interval_seconds = 1)` (the defaults
+for older configurations). Intervals must be between 0.05 and 60 seconds.
+The scope is explicit so a future process-tree backend can be added without
+silently changing measurement meaning; `process-tree` is currently rejected.
+Enabled monitoring requires readable Linux `/proc/stat` and `/proc/meminfo`.
+Other platforms fail explicitly before execution; opt out with
+`resource_monitoring = FALSE`, which records `disabled`, not zero utilization.
+The old `cpu_ram_usage.ps1` is retained only as a historical Windows logger:
+the campaign runner no longer launches it or uses `powershell`, `monitor_script`
+or a shared `system_monitoring_path`.
+
+A supervised R subprocess starts after worker/thread setup and before timing.
+Readiness requires its initial counter snapshot, within ten seconds. Each
+attempt directory holds `monitor-samples.csv`, stdout/stderr logs, readiness/stop
+receipts, and `monitor-report.rds`. Samples contain the attempt ID (inside its
+campaign directory), scope, platform, units, requested sampling interval, UTC
+Unix-epoch interval endpoints, observed monotonic interval duration, CPU percent,
+and used/available/total RAM in bytes. Actual intervals can exceed the requested
+cadence under load. CPU is the aggregate busy fraction across all logical CPUs,
+on a **0–100% machine scale**, excluding idle and iowait; guest ticks are not
+double-counted. RAM used is `MemTotal - MemAvailable`, not process RSS or simply
+total minus free RAM. These definitions are not interchangeable with historical
+Windows counters.
+
+On workload success or failure, shutdown requests a final counter snapshot,
+waits for a clean exit and reaps the process before validation/cooldown.
+Unexpected exit, invalid counters, missing samples and shutdown timeout are
+explicit failures, never successful/zero-valued measurements. Timeout triggers
+process-tree termination; existing resource-cleanup failure/scratch-retention
+semantics still apply. Setup/shutdown, validation, checksums, cleanup and cooldown
+remain outside workload timing. Startup overhead can perturb the machine even
+though it is untimed. Supervising the child protects normal parent exit; an
+OS/machine crash can still leave an incomplete attempt, which cannot be compiled.
+
+Summaries use only sample intervals overlapping the exact timed workload:
+`cpu_mean_percent` and `ram_mean_used_bytes` are overlap-duration-weighted;
+`cpu_peak_percent` and `ram_peak_used_bytes` are maxima of overlapping samples.
+CPU is an interval average, and RAM is an endpoint snapshot held over that
+interval for weighting; subinterval clipping is an estimate, not instantaneous
+attribution or a guarantee to capture brief peaks. The report and result's
+`monitoring_timed_*_epoch` fields preserve subsecond timed boundaries (unlike
+historical CSV datetime precision). Coverage seconds/fraction and overlapping
+sample count are explicit; incomplete coverage is `partial`. No overlap is an
+error. A stable system clock is required. These are **whole-machine**, not
+workload-only measurements: unrelated jobs, OS services, file cache and the
+monitor itself contribute. Keep the machine otherwise idle and record unrelated
+activity; tool serialization alone cannot establish isolation.
+
+The report stores the raw-sample checksum and deterministic summary. Its checksum
+is in the immutable result; campaign ingestion verifies both files and recomputes
+the summary, rejecting changed/missing samples or reports. Summaries retain
+failed attempts and warm-ups; they do not make them measurement-eligible.
+Skipped/pre-monitor-preparation failures record `not_run` when enabled, monitor
+failures record `unavailable` with execution/log diagnostics, and pre-Chat-9
+records are labeled `unavailable-historical` during outcome compilation.
+No historical samples are invented or migrated, and no `CPU-RAM.rds` or
+publication outputs are generated here (Chat 10).
 
 Review the selected combinations in `R/3_runBenchmarks.R` before sourcing it.
 Do not run a full campaign until inputs, dependencies, and workload contracts
@@ -509,6 +563,14 @@ LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData \
 ```
 
 ## Tests
+
+Chat 9 tests use the locked `callr`, `processx`, and `ps` dependencies plus Linux
+`/proc`; no PowerShell, native LAStools, point clouds, new dependency versions or
+real campaign inputs are needed. Live-monitor cases explicitly skip on non-Linux
+platforms. Controlled Rscript workloads exercise native-process success/failure,
+immutable sample/report ingestion, interval clipping, coverage, monitor death,
+startup failure and forced shutdown cleanup. Sampling does not assert a fixed
+CPU load or RAM quantity on a shared machine.
 
 All automated tests use `testthat`, without making this repository an R package.
 Restore the lockfile first as above; `testthat`, `withr`, and subprocess/fixture
