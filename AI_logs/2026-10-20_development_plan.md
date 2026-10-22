@@ -1048,3 +1048,118 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   or reporting acceptance is claimed. `CPU-RAM.rds`, figures and publication
   rebuilding remain Chat 10; an authorized pilot remains Chat 11.
 - Stop after this handoff. Do not start Chat 10 or run a real benchmark campaign.
+
+### Chat 10 handoff (2026-10-22)
+
+- Implemented only Chat 10 and its directly required compiler, reporting,
+  testthat and documentation changes on the existing `dev` branch. The
+  user-owned `_OLD/` directory remains untouched. No commits, pushes,
+  dependency/runtime changes, benchmark-data downloads/preparation, real
+  campaigns, pilot execution, historical-result rewrites or published `docs/`
+  changes. Chats 11-12 were not started.
+- Added the documented one-command route
+  `LIDAR_REPORTS_PATH=/path/to/reports LIDAR_CAMPAIGN_ID=<id> Rscript --vanilla R/5_report.R`.
+  It verifies one selected campaign through the existing immutable reader,
+  generates intermediates, CSV tables and PNG figures, stages all eight Quarto
+  pages, and renders a complete local site. Missing/corrupt/incomplete/empty
+  campaigns fail explicitly; legacy mode is not a fallback. Reporting does not
+  source benchmark setup or read machine configuration, require original point
+  clouds/native executables, or launch workloads/workers/monitoring.
+- `R/reporting.R` is a **replacement implementation**, not a claimed recovery
+  of historical generators or reproduction of their RDS schemas/figure style.
+  Each reserved campaign-local `report-<unique-id>/` contains `report.rds`,
+  `compiled.rds`, replacement `CPU-RAM.rds` and `complex1.rds`, section/attempt/
+  availability CSVs, available timing/CPU/RAM PNGs, staged source templates,
+  `render.log` and `_site/`. No manual RDS/PNG copying from `_OLD/`, `graphics/`
+  or `docs/` is required. Repeated builds use fresh directories, so unavailable
+  figures cannot be stale leftovers. Missing comparisons are labeled, never
+  linked as successful measurements.
+- Successful builds retain `build.rds` with campaign/frozen execution identity,
+  raw-record/report-source checksums, selection/timing policies, reporting R
+  session and Quarto version. Active execution locks or raw-record snapshot
+  changes during generation block acceptance. Failed/incomplete builds have
+  no success receipt and remain available for diagnosis; `render = FALSE`
+  deliberately records a non-rendered build. The HTML includes campaign identity,
+  availability and the attempt/exclusion ledger; CSVs expose full details.
+- The new root QMD sources are campaign-aware replacements. Previously published
+  historical HTML/graphics remain unchanged and are not reporting inputs.
+  `_quarto.yml` now defaults to ignored `_site/`, explicitly enumerates the eight
+  pages and disables cache/freeze reuse. A root render without generated inputs
+  fails with the documented builder instruction rather than touching `docs/`.
+  New figures use generic `sans`, not the historical Segoe UI helper; historical
+  visual/font parity is not claimed.
+- All attempts remain in the ledger, including failed retries, skips, warm-ups,
+  diagnostic streams, validation/comparability outcomes and monitoring coverage.
+  Per tool/task/run/phase/repetition, the latest precise `started.rds` timestamp
+  wins (lexical attempt ID breaks exact ties). A failed last retry never falls
+  back to an earlier success. Timing summaries require measured phase, execution
+  success, passed validation and finite elapsed time >= 0.1 seconds. Warm-ups,
+  superseded retries, execution/validation failures and short/invalid timings
+  have explicit exclusions, without rewriting execution/validation status.
+- Summaries retain planned/attempted/selected/missing/included/excluded/
+  failed/skipped/validation-failed/short counts, mean, sample SD, median and range.
+  One sample has NA SD, not zero. Manual repetitions remain attributable and
+  can exceed planned counts; pre-schedule campaigns have unknown planned/missing
+  counts. Tool-specific non-comparable timings stay descriptive.
+  `n_comparable` additionally requires a matched definition/group and validated
+  output; no generic real-input equivalence or speedup ranking is inferred.
+- Basic, complex, storage, tile-size and utilization views are generated where
+  evidence exists. Standard run IDs supply **nominal** density/tile/storage
+  labels, not newly measured footprints/device classes. Unknown dimensions
+  remain unavailable. Fewer than two measured configurations explicitly cannot
+  establish a storage/tile-size comparison; different run strata are not pooled
+  into causal speedups. Complex views contain actual end-to-end calls only;
+  independent DEM/normalization/DSM times are never summed into a claimed
+  sequential pipeline or CHM. Existing disabled complex calls remain disabled.
+- Utilization aggregates include only eligible, full-coverage whole-machine
+  measurements. Partial/disabled/unavailable monitoring remains explicit and
+  never becomes zero. Per-attempt duration-weighted means feed equally weighted
+  repetition means/sample SDs; peaks are maxima. CPU remains percent and RAM
+  bytes (GiB in figures), not process RSS or historical Windows counters.
+  Unrelated activity, sampling/clipping estimates and missed brief peaks remain
+  limitations inherited from Chat 9.
+- `R/4_compileResults.R` also no longer sources benchmark/plot setup or machine
+  configuration: `LIDAR_REPORTS_PATH` selects its root (default `results`).
+  Explicit campaign/legacy separation, immutable all-attempt retention and
+  execution/validation outcomes remain intact. Removed the obsolete invented
+  100-tile point-count/data labels; report dimensions use recorded run metadata,
+  not a fixed benchmark-area assumption. Nonstandard IDs remain readable.
+- **Timing precision limitation surfaced:** where immutable monitoring epochs
+  exist, reports use their subsecond workload boundaries. Otherwise historical
+  result CSV datetime serialization has second resolution. The ledger records
+  this precision; reporting does not invent lost subsecond timings or certify
+  unmonitored short measurements. No runner/timing-schema change was folded
+  into this reporting task.
+- **Final affected checks passed:** warnings-as-errors
+  `Rscript --vanilla -e 'source("renv/activate.R"); options(warn = 2); result <- testthat::test_dir("tests/testthat", filter = "chat10|chat1-regression|chat6", reporter = "summary", stop_on_failure = TRUE)'`
+  produced **417 passing expectations, zero failures/warnings/skips**. Chat 10
+  contributes **137** expectations, including the documented CLI route in a
+  clean Rscript subprocess and an actual eight-page Quarto render,
+  full intermediate/table/figure generation, unchanged raw/published-file
+  checksums, deterministic selection/statistics, conservative failed retries,
+  explicit unavailable sections and snapshot/concurrent-execution rejection.
+  Reporting fixtures have synthetic validation/monitoring receipts: they prove
+  the reporting route, **not** numerical correctness or a real campaign.
+- `Rscript --vanilla R/check_environment.R` passed with R 4.6.1, Quarto 1.10.18,
+  GDAL 3.12.2, GEOS 3.14.1 and PROJ 9.7.1. `git diff --check` passed.
+- **Required full-suite verification passed:**
+  `Rscript --vanilla tests/testthat.R` exited zero in **1,445.7 seconds**
+  (about 24.1 minutes), including strict isolated restoration:
+  **1,834 passing expectations, zero failures/warnings and one explicit skip**.
+  The skip is the opt-in read-only historical-input check because
+  `LIDAR_RECOVERED_INPUT_ROOT` was unset; no real-input verification is claimed.
+  The full run's early Chat 10 cases covered the initial 123 expectations;
+  final reporting snapshot/provenance guards and the clean CLI-route check
+  were added while isolated restoration was running. The final affected rerun
+  above covers all 137 Chat 10 expectations and both compiler regressions
+  against the final code. Only handoff documentation changed afterwards.
+- **Remaining blockers/limitations:** no scoped Linux reporting blocker remains
+  in the controlled fixture. No real-input reporting, Windows rendering/font
+  parity, licensed native processing, all-tool/complex numerical acceptance,
+  cold-cache/thermal or machine-isolation certification is claimed. Existing
+  Chat 7 surface correctness failures, disabled lasR normalization/complex
+  workloads, recovered-input CRS/units/license/repair provenance and runner
+  layout integration, and native LAStools entitlement/provenance/acceptance
+  remain blockers for real campaign interpretation. A user-authorized pilot
+  remains Chat 11; publication/full execution remains Chat 12.
+- Stop after this handoff. Do not start Chat 11 or run a real benchmark campaign.

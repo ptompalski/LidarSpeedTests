@@ -1,6 +1,22 @@
 project:
   type: website
-  output-dir: docs
+  output-dir: _site
+  render:
+    - index.qmd
+    - results_basic.qmd
+    - results_table.qmd
+    - results_CPU-RAM.qmd
+    - results_complex.qmd
+    - results_table_complex.qmd
+    - results_tileSize.qmd
+    - results_storage.qmd
+  resources:
+    - tables/
+    - figures/
+execute:
+  freeze: false
+  cache: false
+  error: false
 website:
   title: "LidarSpeedTests"
   repo-url: https://github.com/ptompalski/LidarSpeedTests
@@ -29,9 +45,9 @@ website:
       - text: Additional results
         menu:
           - href: results_tileSize.qmd
-            text: Infulence of tile size
+            text: Influence of tile size
           - href: results_storage.qmd
-            text: Infulence of storage type
+            text: Influence of storage type
             
       # - href: data.qmd
       #   text: Data
@@ -55,4 +71,3 @@ format:
     toc: true
 
 editor: source
-

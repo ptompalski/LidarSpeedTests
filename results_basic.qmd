@@ -1,55 +1,11 @@
 ---
-title: "Results - basic tasks"
-author:
-  - name: Piotr Tompalski
-    email: piotr.tompalski@nrcan-rncan.gc.ca
-format: html
+title: "Basic workload timings"
 engine: knitr
-lightbox: true
-date: 08/01/2024
-date-modified: today
 ---
 
-# Results
-
-
-### Generate DEM
-
-![](graphics/result_generate_DEM_W-VIC-A127816.png)
-
-
-### Genenerate DSM 
-
-![](graphics/result_generate_DSM1_W-VIC-A127816.png)
-
-
-![](graphics/result_generate_DSM2_W-VIC-A127816.png)
-
-
-### Normalization 
-
-
-![](graphics/result_normalization_W-VIC-A127816.png)
-
-
-### Pixel metrics
-
-#### Single metric
-
-
-![](graphics/result_pixel_metrics_1a_W-VIC-A127816.png)
-
-#### Multiple metrics
-
-
-![](graphics/result_pixel_metrics_2_W-VIC-A127816.png)
-
-
-
-### Detecting treetops
-
-::: {.callout-note}
-Work in progress
-:::
-
-
+```{r}
+#| echo: false
+#| results: asis
+source("R/reporting.R")
+benchmark_report_page("basic")
+```

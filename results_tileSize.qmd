@@ -1,21 +1,16 @@
 ---
-title: "Results - influence of tile size"
-author:
-  - name: Piotr Tompalski
-    email: piotr.tompalski@nrcan-rncan.gc.ca
-format: html
+title: "Tile-size observations"
 engine: knitr
-lightbox: true
-date: 08/01/2024
-date-modified: today
 ---
 
+Nominal tile size comes from recorded standard run IDs; it is not a new
+measurement of tile footprints. Run strata are not pooled. A causal tile-size
+comparison requires controlled coverage/density/tool/core/storage and matching
+input preparation, not just two filenames with different sizes.
 
-
-This benchmark was aimed to evaluate the influence of the tile size on processing time. In addition to the 1000 m tile size used in all standard benchmark runs, three additional sizes were tested: 200, 500, and 2000 m.
-
-![](graphics/byTileSize.png) 
-
-![](graphics/byTileSizeRel.png)
-
-
+```{r}
+#| echo: false
+#| results: asis
+source("R/reporting.R")
+benchmark_report_page("tile_size")
+```

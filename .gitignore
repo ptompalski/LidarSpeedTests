@@ -47,6 +47,7 @@ po/*~
 rsconnect/
 
 /.quarto/
+/_site/
 
 
 #all individual results files

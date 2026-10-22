@@ -1,6 +1,8 @@
 # Select one campaign explicitly; historical CSVs require a separate legacy mode.
-source("R/0_setup.R")
-source("R/99_plotSettings.R")
+source("R/1_functions.R")
+if (!exists("reports_path", inherits = FALSE)) {
+  reports_path <- Sys.getenv("LIDAR_REPORTS_PATH", "results")
+}
 
 campaign_id <- Sys.getenv("LIDAR_CAMPAIGN_ID")
 legacy <- identical(Sys.getenv("LIDAR_RESULTS_MODE"), "legacy")
@@ -51,20 +53,22 @@ r <- compile_execution_outcomes(r)
 r$tool <- factor(r$tool, levels = c("lidR", "lasR", "lastools"))
 round_density <- function(x) ifelse(x <= 7.5, round(x), round(x / 5) * 5)
 if ("density_points" %in% names(r)) {
-  r <- r %>% mutate(
-    density_points_rnd = round_density(density_points),
-    density_labels = fct_reorder(
-      paste0(round(density_points_rnd), " pts/m²"), density_points
-    ),
-    total_points_calc = custom_number_format(100 * 1000 * 1000 * density_points),
-    data_labels = paste0(input_data_size, "B; ", total_points_calc, " pts")
-  )
+  r$density_points_rnd <- round_density(r$density_points)
+  r$density_labels <- paste0(r$density_points_rnd, " pts/m²")
 }
 
 # Keep run_id and all repetition/attempt IDs; retries are never deduplicated.
 if (all(c("run_id", "cores") %in% names(r))) {
-  r <- r %>% separate(run_id, into = c(NA, "tile_size", NA, NA, "dir1", "dir2"),
-                     remove = FALSE)
+  parts <- strsplit(r$run_id, "_", fixed = TRUE)
+  standard <- lengths(parts) == 6L
+  positions <- c(tile_size = 2L, dir1 = 5L, dir2 = 6L)
+  for (field in names(positions)) {
+    # Nonstandard run IDs remain readable without inventing dimensions.
+    r[[field]] <-
+      vapply(seq_along(parts), function(i) {
+        if (standard[i]) parts[[i]][positions[[field]]] else NA_character_
+      }, character(1))
+  }
 }
 
 # Artifact expectations/outcomes belong to each attempt, never to a peer run.

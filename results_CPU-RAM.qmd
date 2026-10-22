@@ -1,29 +1,16 @@
 ---
-title: "CPU and RAM usage"
-author:
-  - name: Piotr Tompalski
-    email: piotr.tompalski@nrcan-rncan.gc.ca
-format: html
+title: "Whole-machine utilization"
 engine: knitr
-lightbox: true
-date: 01/08/2024
-date-modified: today
 ---
 
-::: {.callout-warning}
-Work in progress - not all results included. 
-:::
+CPU percentages and RAM bytes are separate units, not interchangeable resource
+percentages. `CPU-RAM.rds` is a replacement generator's selected-campaign
+summary, not the historical Windows intermediate. Partial coverage is excluded
+from aggregates and retained in the attempt ledger. RAM figures use GiB.
 
-
-## CPU and RAM usage for a single task
-
-![](graphics/system_usage_combined_CPU-RAM.png)
-
-
-## Average CPU utilization by task
-
-![](graphics/system_usage_CPU.png)
-
-## Average Memory utilization by task
-
-![](graphics/system_usage_RAM.png)
+```{r}
+#| echo: false
+#| results: asis
+source("R/reporting.R")
+benchmark_report_page("utilization")
+```

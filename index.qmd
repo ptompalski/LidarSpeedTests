@@ -1,89 +1,75 @@
 ---
-title: ""
-author:
-  - name: Piotr Tompalski
-    email: piotr.tompalski@nrcan-rncan.gc.ca
-format: html
+title: "Selected campaign report"
 engine: knitr
-lightbox: true
-date: 08/01/2024
-date-modified: today
 ---
 
-```{r, echo = FALSE, warning=FALSE, message=FALSE}
-options(digits = 2)
-
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  fig.path = "graphics/",
-  fig.width = 7,
-  fig.height = 5,
-  comment = "#>",
-  dev = "svg",
-  dpi = 300
-)
-
-
-
+```{r}
+#| echo: false
+#| results: asis
+source("R/reporting.R")
+report <- benchmark_report_read()
+cat("Campaign: **", report$manifest$campaign_id, "**\n\n", sep = "")
+cat("Frozen execution identity: `", report$manifest$identity_id, "`\n\n", sep = "")
+cat("Execution revision: `", report$manifest$identity$code$revision, "`; dirty: ",
+    report$manifest$identity$code$dirty, "\n\n", sep = "")
+print(knitr::kable(report$availability, format = "pipe"))
 ```
 
-# LidarSpeedTests
+## Reading this report
 
-::: callout-warning
-This is an ongoing work and the results may contain errors.
-:::
+This is a new campaign-specific reporting implementation, not a recovery of the
+historical figure generators. Historical published results remain separate in
+`docs/` and are not inputs to this report. Synthetic fixtures demonstrate the
+reporting route only; they are not benchmark evidence.
 
-This repository is dedicated to evaluating the performance of various point cloud processing tools in handling typical airborne laser scanning (ALS) data processing tasks. The goal is to provide users with comparative insights into processing time, CPU, RAM, and disk usage across different tools and configurations. More importantly, benchmark results could help decide which processing parameters are most optimal given the dataset and workstation characteristics.
+Every completed attempt is retained in the [attempt ledger](tables/attempts.csv),
+including failures, skips, validation outcomes, warm-ups, diagnostics,
+comparability labels, and monitoring coverage. Missing or corrupt raw records
+block the build. Planned but unattempted measurement slots appear in summaries.
 
-## Project Overview
+For each tool/task/run/phase/repetition, the latest attempt by the precise
+`started.rds` timestamp is selected (lexical attempt ID breaks exact ties).
+A failed final retry does not fall back to an earlier success. Warm-ups and
+superseded attempts cannot contribute samples. Eligible timings require recorded
+execution success, passed artifact validation, and finite elapsed time of at
+least 0.1 seconds. Short timings are flagged without changing execution status.
+Means, medians, ranges and sample standard deviations use one selected eligible
+attempt per repetition; a single sample has **NA**, not zero, SD.
 
-Point cloud processing tools offer a range of functionalities, often with overlapping capabilities. Users face decisions about which tool to use and how to configure settings for optimal performance. This project benchmarks several tools to guide these decisions.
+Timing uses the immutable monitor-bound subsecond workload epochs where present;
+otherwise raw CSV timestamps have only second resolution. The ledger identifies
+the precision per attempt. The report does not invent subsecond precision.
+Workload time includes tool I/O/computation/persistence, not setup, validation,
+cleanup or cooldown. Complex timings are actual end-to-end calls only.
+No sum of independent basic tasks is labeled sequential execution or CHM.
 
-## Benchmarking Methodology
+Tool-specific timings with non-comparable/unknown contracts are descriptive,
+not cross-tool speedup claims. `n_comparable` additionally requires a matched
+definition/group and passed validation; this is not general equivalence or
+real-input acceptance. Storage names and nominal tile size/density come only
+from standard `ALS_<tile>_<density>_<cores>_<input>_<output>` run IDs.
+Nonstandard IDs retain their timings but have unknown dimensions. Storage/tile
+views retain run strata and do not claim causal comparisons across different
+datasets or hardware; input checksums and mounts are in the frozen manifest.
 
--   **Uniform Task Performance**: Each tool is tested against standardized tasks to ensure comparable results.
--   **Resource Utilization**: We measure and record processing time, CPU and RAM usage.
--   **Iterative Testing**: Tools are tested under various conditions to assess performance impacts:
-    -   Different numbers of workers (CPU cores/threads)
-    -   Various storage devices including local (SSD, HDD) and network drives
-    -   Diverse input data characteristics
+CPU is Linux whole-machine busy percent (0–100); RAM used is
+`MemTotal - MemAvailable` in bytes, **not process RSS**. Only full-coverage,
+eligible measurements enter utilization aggregates. Partial/disabled/unavailable
+monitoring stays explicit in the ledger; no missing value becomes zero.
+Per-attempt means are duration-weighted over the timed interval; reported
+campaign means and sample SDs weight eligible repetitions equally.
+Peaks are maxima of overlapping samples. Unrelated activity and monitor overhead
+contribute; brief peaks can be missed. Historical Windows counters are not pooled.
 
-## Input Data
+## All attempts and exclusions
 
-The benchmark uses a subset of ALS data acquired over the Petawawa research forest located in in Ontario, Canada. The dataset is divided into 1 x 1 km tiles (100 tiles in total). This dataset is freely available and can be downloaded from https://opendata.nfis.org/mapserver/PRF.html.
-
-![](graphics/data.png)
-
-The average point density of the dataset is 13.6 pts/m². To facilitate a comprehensive analysis, the original dataset was systematically reduced to create variants with different densities: 1, 2, 5, 10. To simulate dataset with higher point density, the data was artificially densified by duplicating and then introducing a random noise to a subset of points. This procedure was used to generate datasets with densities of 20, and 50 pts/m². Benchmarks were conducted across these modified datasets to assess performance at varying point densities.
-
-![](graphics/data_density_crossections.png)
-
-## Included Software Packages
-
-So far the benchmark focuses on lidar processing tools available in R (`lidR`, `lasR`), as well as `lastools`.
-
--   `lidR`: [github.com/r-lidar/lidR](https://github.com/r-lidar/lidR)
--   `lasR`: [github.com/r-lidar/lasR](https://github.com/r-lidar/lasR)
--   `lastools`: [rapidlasso.de/product-overview](https://rapidlasso.de/product-overview/)
-
-## Benchmark Tasks
-
-Tasks are categorized into 'Simple' and 'Complex' to differentiate between single-step operations and multi-step processing pipelines, respectively.
-
-### Simple Tasks
-
--   Ground classification
--   Digital Terrain Model (DTM) generation
--   Canaopy Height model (CHM) generation
--   Height normalization
--   Point cloud metrics calculation (two scenarios: single metric, multiple metrics)
-
-### Complex Tasks (in progress)
-
--   a workflow consisting of the following tasks: Generate DTM, normalize heights, generate CHM
--   ...
-
-### Additional benchmarks:
-
--   Influence of tile size on processing time
--   Influence of drive configuration on processing time
+```{r}
+#| echo: false
+#| results: asis
+columns <- c("task_id", "run_id", "tool", "phase", "repetition_id", "attempt_id",
+             "execution_status", "validation_status", "exclusion", "diagnostic",
+             "validation_diagnostic", "comparison_note", "monitoring_status",
+             "monitoring_coverage_fraction", "timing_precision")
+columns <- intersect(columns, names(report$attempts))
+print(knitr::kable(report$attempts[columns], format = "pipe"))
+```

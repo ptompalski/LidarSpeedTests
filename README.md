@@ -83,9 +83,9 @@ this checkout, so an all-tool campaign remains blocked.
 The environment checker loads the locked R packages and reports linked
 geospatial versions, but does not launch benchmarks, download point clouds, or
 render/overwrite `docs/`. Setup, plotting helpers, real catalog metadata, and
-lasR pipeline construction are covered by tests. Data preparation, complete
-report generation, numerical workload equivalence, and native Windows behavior
-remain separate tasks. Chat 5's workload definitions, supported DSM API migration
+lasR pipeline construction are covered by tests. Campaign reporting is described
+below; real-input numerical acceptance and native Windows behavior remain
+external limitations. Chat 5's workload definitions, supported DSM API migration
 and remaining equivalence limitations are documented in [WORKLOADS.md](WORKLOADS.md).
 
 Catalog metadata now uses supported `lidR::npoints()`, `sf::st_area()`, and
@@ -96,8 +96,9 @@ RAM is reported in bytes through `ps::ps_system_memory()`; the strict `Z > 2`
 metric population is unchanged. Chat 5 changes its units to a user-confirmed
 fraction and standardizes band names for new attempts only; historical records
 are not rewritten.
-The plotting helper retains its historical Segoe UI font; font availability and
-visual parity on Linux must be resolved when rebuilding reports in Chat 10.
+The historical plotting helper retains Segoe UI. New campaign figures use the
+platform's generic `sans` font and a new descriptive layout; historical visual
+parity is not claimed or required.
 
 ## Running the benchmark harness
 
@@ -106,8 +107,10 @@ Workload definitions and relative dataset paths are in `R/0_setup.R`. Copy
 paths, core counts, and explicit tool selection. Alternatively, set
 `LIDAR_BENCHMARK_CONFIG` to a trusted R file containing the same `list(...)`.
 Run scripts from the repository root; relative configuration paths resolve there.
-No machine configuration is required to read the default `results` directory.
-Compilation requires explicit campaign selection or explicit legacy mode below.
+No machine configuration is required for compilation/reporting. Both use
+`LIDAR_REPORTS_PATH` (default `results`) independently of `benchmark.local.R`;
+set it explicitly when raw records live elsewhere. Compilation requires explicit
+campaign selection or explicit legacy mode below.
 
 Create report and scratch directories yourself before running. Input roots must
 contain the datasets declared in setup. Input, report, and scratch trees must not
@@ -199,8 +202,8 @@ failed attempts and warm-ups; they do not make them measurement-eligible.
 Skipped/pre-monitor-preparation failures record `not_run` when enabled, monitor
 failures record `unavailable` with execution/log diagnostics, and pre-Chat-9
 records are labeled `unavailable-historical` during outcome compilation.
-No historical samples are invented or migrated, and no `CPU-RAM.rds` or
-publication outputs are generated here (Chat 10).
+No historical samples are invented or migrated. The monitoring subsystem does
+not generate publication intermediates; the Chat 10 report builder below does.
 
 Review the selected combinations in `R/3_runBenchmarks.R` before sourcing it.
 Do not run a full campaign until inputs, dependencies, and workload contracts
@@ -320,8 +323,8 @@ usage. Attempt records contain configured `workers`, `native_threads`,
 `blas_threads`, cache policy, cooldown and timing boundary. These are execution
 settings, not utilization measurements or proof of proprietary-tool internals.
 Warm-ups remain in compiled raw records, but `measurement_eligible` requires
-measurement phase plus execution/validation success. Reporting/aggregation is
-still Chat 10.
+measurement phase plus execution/validation success. Reporting below additionally
+selects one attempt per repetition and flags invalid/sub-0.1-second timings.
 Pre-Chat-8 campaign records remain readable as measurements with missing
 schedule indices; they are not retroactively assigned balanced slots. Their
 identity cannot resume under the changed execution policy.
@@ -329,7 +332,7 @@ identity cannot resume under the changed execution policy.
 Compile only one explicitly selected campaign:
 
 ```sh
-LIDAR_CAMPAIGN_ID=approved-pilot Rscript --vanilla -e \
+LIDAR_REPORTS_PATH=/path/to/reports LIDAR_CAMPAIGN_ID=approved-pilot Rscript --vanilla -e \
   'source("renv/activate.R"); source("R/4_compileResults.R")'
 ```
 
@@ -340,10 +343,106 @@ For historical top-level CSVs, explicitly unset `LIDAR_CAMPAIGN_ID` and set
 `LIDAR_RESULTS_MODE=legacy`; that separate path writes the historical `r.rds`,
 labels records `legacy-unidentified`, and retains every recorded version rather
 than guessing the newest. Legacy mode refuses campaign-schema CSVs. Neither
-mode silently falls back to the other or pools campaigns. Report rebuilding/
-attempt selection for publication remains Chat 10; old report pages are not yet
-campaign-aware. The maximum-output-count heuristic has been removed: expectations
+mode silently falls back to the other or pools campaigns. Campaign report pages
+use the separate reproducible build below, never legacy RDS/PNG files.
+The maximum-output-count heuristic has been removed: expectations
 now come from each attempt's input/workload manifest, never from peer results.
+
+### Campaign tables, figures and Quarto site (Chat 10)
+
+From the repository root in the restored environment:
+
+```sh
+LIDAR_REPORTS_PATH=/path/to/reports LIDAR_CAMPAIGN_ID=approved-pilot \
+  Rscript --vanilla R/5_report.R
+```
+
+This single route verifies the selected campaign's immutable manifest, result
+receipts, validation reports and monitoring samples, selects attempts, generates
+intermediates/CSV tables/PNG figures, then renders every Quarto page. It never
+sources `R/0_setup.R`, reads machine configuration, starts workloads/monitors, or
+requires access to the original point clouds/executables. Missing, corrupt,
+incomplete or empty campaign records block the build rather than silently
+falling back to historical results. Legacy mode is explicitly rejected here.
+No input files or raw attempts are rewritten. Build only after execution has
+stopped: active execution locks and changed raw-record snapshots fail explicitly.
+
+The printed path is a fresh directory
+`<reports_path>/campaigns/<campaign_id>/report-<unique-id>/`. Each build contains:
+
+| Output | Meaning |
+|---|---|
+| `report.rds` | Selected campaign manifest, all attempts, summaries and availability |
+| `compiled.rds` | All attempts with selection/exclusion/timing/comparability fields |
+| `CPU-RAM.rds` | Replacement whole-machine utilization summary generator |
+| `complex1.rds` | Replacement summary of actual complex workload calls, both task IDs |
+| `tables/*.csv` | Basic, complex, storage, tile-size, utilization, attempt ledger and availability |
+| `figures/*.png` | Available timing/CPU/RAM means with sample-SD bars |
+| `build.rds` | Successful-build receipt: raw/report-source checksums, policies, R session and Quarto version |
+| `render.log`, `_site/` | Render diagnostics and complete local HTML site with downloadable tables/figures |
+
+These are **new replacements**, not recovered historical generator semantics or
+schema-compatible reproductions of old RDS files. No copying from `_OLD/`,
+`graphics/`, root-level RDS files or `docs/` is required. Published historical
+`docs/` and existing graphics remain unchanged. `_quarto.yml` defaults to
+ignored `_site/`, explicitly lists the eight report pages, and disables cache/
+freeze reuse. Do not change the output directory to `docs/` for a test render.
+Root rendering without a generated `report.rds` fails with the build command;
+use the staged site, not manual copying of intermediates. The new templates
+replace the historical source narrative; previously published HTML is retained.
+
+Selection is deterministic and conservative: for each tool/task/run/phase/
+repetition, use the latest precise `started.rds` timestamp; lexical attempt ID
+breaks an exact tie. A failed last retry does **not** fall back to an earlier
+success. All retries and warm-ups remain in the ledger with explicit exclusions.
+Timing aggregates require measured phase, recorded execution success, passed
+artifact validation, and finite elapsed seconds >= 0.1. Short durations remain
+flagged without changing execution/validation status. The summary includes
+planned, selected, missing, included, excluded, failed, skipped, validation-failed
+and short counts plus mean, sample SD, median and range. One sample has NA SD.
+Manual unscheduled repetitions remain attributable to their campaign and can
+increase selected counts beyond the frozen planned count; no schedule is invented
+for old/manual records. Old schemas without a schedule have unknown planned/
+missing counts.
+
+Timing uses immutable monitor-bound subsecond epochs where present; otherwise
+the legacy result CSV datetime serialization has **second resolution**. The
+ledger states which precision was available. Unmonitored subsecond measurements
+cannot be retrospectively recovered or certified. Complex summaries use actual
+end-to-end workload calls only; independent basic timings are never summed into
+a claimed sequential workflow/CHM. Blocked complex calls remain blocked.
+
+Non-comparable/unknown-contract timings are clearly descriptive, not equivalent
+cross-tool comparisons. `n_comparable` additionally requires a recorded matched
+definition/group and validated output; this is not proof of general real-input
+equivalence. Storage/tile-size outputs retain individual run strata and standard
+run-ID dimensions, without inventing device types or causal speedups. Unknown
+run-ID dimensions are labeled unavailable; fewer than two **measured**
+configurations cannot establish a comparison. Consult the campaign's input
+checksums/mounts before comparing strata.
+
+Utilization requires eligible full-coverage whole-machine monitoring. Missing,
+disabled and partial monitoring is not zero; raw diagnostics, coverage and sample
+counts remain in the ledger. Repetition means/SDs weight eligible attempts equally
+after the per-attempt duration-weighted calculation; peaks are maxima across
+eligible samples. CPU uses percent and RAM uses bytes (GiB in figures), never
+historical Windows percentages or process RSS. Every section labels unavailable
+measurements explicitly; no missing figure is linked as if it existed.
+
+For intermediates without rendering, use the same generator from the root:
+
+```r
+source("renv/activate.R")
+source("R/1_functions.R")
+source("R/reporting.R")
+benchmark_build_report("/path/to/reports", "approved-pilot", render = FALSE)
+```
+
+That produces a fresh staged build with `rendered = FALSE` in its receipt; no
+HTML is claimed. For a successful rendered build, open `_site/index.html` or
+serve that `_site/` directory locally. Builds are kept separately for provenance;
+incomplete builds have no `build.rds` success receipt. Real campaign publication
+and the authorized pilot remain separate tasks (Chats 11-12).
 
 ### Artifact correctness (Chat 7)
 
@@ -563,6 +662,19 @@ LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData \
 ```
 
 ## Tests
+
+Chat 10 (`filter = "chat10"`) uses temporary **synthetic reporting** campaign
+receipts, not numerical acceptance or real campaign evidence. It exercises
+latest-retry selection, failures/skips/short/unvalidated exclusions, warm-ups,
+sample counts/SD/range, unavailable/partial monitoring, missing dimensions,
+complex-call versus independent timings, immutable snapshot guards, compiler
+decoupling, replacement intermediates, PNG/CSV generation and an actual **eight-
+page Quarto render**. It asserts that raw attempt bytes and all published `docs/`
+bytes are unchanged. It requires the pinned plotting/rendering stack and Quarto
+1.10.18 on PATH (or `QUARTO`); missing Quarto is a failure, not an implicit skip.
+No machine configuration, point clouds, LAStools or benchmark execution is used.
+Fixture directories/sites are temporary and cleaned automatically. Linux report
+generation/rendering is exercised; Windows fonts/rendering are not certified.
 
 Chat 9 tests use the locked `callr`, `processx`, and `ps` dependencies plus Linux
 `/proc`; no PowerShell, native LAStools, point clouds, new dependency versions or
