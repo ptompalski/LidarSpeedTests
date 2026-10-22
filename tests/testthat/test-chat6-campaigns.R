@@ -1,18 +1,3 @@
-chat6_fixture <- function(envir = parent.frame()) {
-  fixture <- chat2_fixture(envir)
-  fixture$config$tools <- "lidR"
-  fixture$tasks <- data.frame(
-    task_id = "unsupported", data_type = "datasets_org", output_format = "",
-    task_call_lidR = ""
-  )
-  fixture$runs <- data.frame(
-    ID = "ALS_1000_1_1_SSD_SSD", cores = 1L,
-    dir_in_org = fixture$input, scratch_root = fixture$scratch
-  )
-  fixture$selection <- data.frame(task_id = fixture$tasks$task_id, run_id = fixture$runs$ID)
-  fixture
-}
-
 test_that("campaign identity is stable and records the required provenance", {
   f <- chat6_fixture()
   env <- f$env
@@ -151,7 +136,7 @@ test_that("resume and repetitions preserve skipped, failed and successful retrie
   expect_error(env$benchmark_attempt_finish(failed, failure), "already reserved")
   success <- env$benchmark_attempt_start(campaign, f$tasks$task_id, f$runs$ID, "lidR", 3L)
   env$benchmark_attempt_finish(success, env$benchmark_execute_call("42", "lidR"))
-  expect_true(env$benchmark_campaign_completed(
+  expect_false(env$benchmark_campaign_completed(
     campaign, f$tasks$task_id, f$runs$ID, "lidR", 3L
   ))
   result <- env$benchmark_read_campaign(f$reports, "fixture")
@@ -167,9 +152,9 @@ test_that("resume and repetitions preserve skipped, failed and successful retrie
   run(repetition_id = 4L)
   run(repetition_id = 4L)
   run(repetition_id = 4L)
-  expect_equal(execution, 2L)
+  expect_equal(execution, 3L)
   result <- env$benchmark_read_campaign(f$reports, "fixture")
-  expect_equal(sum(result$repetition_id == 4), 2L)
+  expect_equal(sum(result$repetition_id == 4), 3L)
   expect_true("dispatch failure" %in% result$diagnostic)
   expect_error(env$benchmark_attempt_start(campaign, "other", f$runs$ID, "lidR", 1),
                "outside")

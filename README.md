@@ -174,23 +174,103 @@ creates or resumes that manifest. Pass its returned handle as `campaign` to
 could otherwise be skipped. This involves reading all selected input bytes and
 installed package code, outside timing, and can be expensive; it does not trust
 file size/mtime as a checksum cache. Do not modify inputs/environment during a
-running call. Thread counts currently record the existing execution policy and
-environment; explicit thread scheduling/balanced order remains Chat 8.
+running call. The scheduling and parallelism policy below is also frozen.
 
-Each invocation has an explicit positive integer `repetition_id` (default `1`;
-the runner still schedules only repetition 1). Each tool attempt reserves a
+Each invocation has an explicit positive integer `repetition_id` (default `1`
+for low-level calls). Each tool attempt reserves a
 unique directory under `attempts/` containing `started.rds`, an atomic
 `result.csv`, and a checksum receipt `completed.rds`. Campaign, identity,
 repetition and attempt IDs accompany the outcomes, timing, diagnostics and
-metadata. Successful and explicitly skipped work resumes without re-execution;
-failures retry automatically. Existing `force_rerun_*` flags append another
+metadata. Validated successful and explicitly skipped work resumes without
+re-execution; execution/validation failures and unverified work retry automatically.
+Existing `force_rerun_*` flags append another
 attempt, never overwrite one. Metadata/preparation failures also get attempt
 records. Interrupted/uncompleted attempts remain on disk and never count as
 completed work. A retry gets its own ID; it does not erase the interrupted
 attempt. Compilation explicitly blocks on incomplete attempts rather than
 silently omitting them; preserve that campaign for diagnosis and use a new
 campaign for reporting if interruption recovery is needed. Completion is
-single-writer per attempt, and reading detects changed result bytes/identities.
+single-writer per attempt, and reading detects changed result bytes/identities
+and changed/missing validation reports.
+
+### Repetitions, ordering and timing policy (Chat 8)
+
+`benchmark.example.R` declares `scheduling`: **3 measured repetitions, 1 warm-up
+round, seed 20261020, 5 seconds cooldown, `uncontrolled-warm` cache policy and
+1 native thread per R file worker**. Older configuration files receive these
+same documented defaults during validation. Counts, seed and cooldown can be
+changed before campaign creation; nested native threading and other cache
+policies are rejected. A policy change requires a new campaign ID.
+
+The manifest freezes the entire schedule, not just the seed. For each selected
+task/run and phase, a seeded random tool permutation is rotated across
+repetitions: every tool appears once per repetition, and each tool's counts
+across order positions differ by at most one (exact balance at multiples of
+the tool count). Task/run block order is shuffled each round. Input selection
+row order and configured tool order do not change the generated schedule, and
+scheduling uses Mersenne-Twister/Inversion/Rejection independently of the
+caller's RNG kind and preserves the caller's RNG state. Unsupported/blocked tools keep
+their scheduled slots and explicit skipped records; they do not execute work.
+Balance describes the planned slots, not a guarantee of equal executed samples
+when tools skip/fail or completed measurements are resumed.
+
+The runner uses `benchmark_execute_schedule()` and dispatches **one tool at a
+time**, never futures across benchmark tools. An exclusive directory lock under
+the reports directory prevents overlapping harness calls sharing that directory,
+including cooldown. An interrupted process can leave this lock behind: verify
+that no runner is alive before manually removing that specific empty lock.
+Separate report roots and unrelated programs are not covered; keep the machine
+otherwise idle. This is not process-tree monitoring (Chat 9).
+
+Warm-ups run through the same preparation, workload, validation and cleanup path,
+with immutable `phase = "warmup"` records, never as measured repetitions.
+`phase`, `repetition_id`, `schedule_index` and `tool_position` link scheduled
+attempts to the manifest. Warm-ups are repeated on every scheduler invocation,
+including resume, because a previous process's cache state is not reusable.
+Completed measured work resumes independently of warm-ups; failed measurements
+retain their attempts and retry. Low-level `benchmark_run()` calls remain
+available for explicit retries, default to measurement, and have missing schedule
+indices unless a matching frozen schedule row is supplied.
+
+**No cold-cache claim is supported.** Input checksums, metadata, warm-ups and
+untimed numerical references all touch inputs; the OS/tool caches are neither
+evicted nor verified. Warm-ups do not guarantee uniform cache residency,
+especially when they fail, or when the working set exceeds RAM. A warm-up count
+of zero is allowed but still means uncontrolled cache, not cold cache.
+
+The recorded interval starts immediately before the workload call and stops
+when it returns/errors. It includes R expression evaluation or native process
+launch, input I/O, computation and artifact persistence. Campaign checksums,
+metadata/catalog preparation, scratch allocation, worker/thread setup, monitor
+startup/cleanup, artifact validation and scratch cleanup are **outside timing**.
+After each attempted workload with a start timestamp (including failures), its
+result is persisted and the configured cooldown sleeps **outside timing** and
+after cleanup; skipped, pre-execution failures and resumed work do not sleep.
+Cooldown is an explicit minimum delay, not a verified thermal/power equilibrium.
+
+Run `cores` is the total processing budget: lidR uses that many multisession
+file workers with `set_lidr_threads(1)` in the parent and worker startup; lasR
+uses `concurrent_files(cores)` with no nested point parallelism, verified by
+strategy readback; LAStools receives `-cores cores`. Data-table threads are
+limited to one. OpenMP nesting is disabled, native outer thread limits match
+the budget, and child-process BLAS/Rcpp thread environment limits are one.
+Thread environment, lidR/data-table counts and future plan are restored even
+on failure; lasR's temporary strategy is unset during cleanup.
+
+Already loaded threaded BLAS cannot reliably be capped with environment
+variables. Execution therefore requires a recognized **reference single-threaded
+BLAS** and fails explicitly for known threaded or unrecognized BLAS paths.
+Other BLAS implementations need verified runtime control before support can be
+claimed; do not bypass this guard or relabel requested limits as observed CPU
+usage. Attempt records contain configured `workers`, `native_threads`,
+`blas_threads`, cache policy, cooldown and timing boundary. These are execution
+settings, not utilization measurements or proof of proprietary-tool internals.
+Warm-ups remain in compiled raw records, but `measurement_eligible` requires
+measurement phase plus execution/validation success. Reporting/aggregation is
+still Chat 10.
+Pre-Chat-8 campaign records remain readable as measurements with missing
+schedule indices; they are not retroactively assigned balanced slots. Their
+identity cannot resume under the changed execution policy.
 
 Compile only one explicitly selected campaign:
 
@@ -208,8 +288,37 @@ labels records `legacy-unidentified`, and retains every recorded version rather
 than guessing the newest. Legacy mode refuses campaign-schema CSVs. Neither
 mode silently falls back to the other or pools campaigns. Report rebuilding/
 attempt selection for publication remains Chat 10; old report pages are not yet
-campaign-aware. The historical maximum-output-count heuristic remains pending
-Chat 7 and is not artifact validation.
+campaign-aware. The maximum-output-count heuristic has been removed: expectations
+now come from each attempt's input/workload manifest, never from peer results.
+
+### Artifact correctness (Chat 7)
+
+`prepare_input()` now stops on lidR chunk errors. The runner builds a validation
+manifest from the input catalog headers/file checksums before timing, then checks
+every required per-tile artifact after execution/resource monitoring and before
+owned-scratch cleanup. Validation/reference computation is **outside timing**.
+It can reread neighboring point payloads repeatedly and run untimed reference
+algorithms; this is deliberately correctness-first, not an authorized full-data
+campaign or a guarantee of low validation cost.
+
+Each inspected attempt retains `validation.rds` beside its immutable result CSV.
+The report includes input identity/bounds, required filenames, actual output
+checksums, per-artifact failures or numerical error/support summaries, tolerances
+and validation timestamps. Its checksum is bound into the result CSV. Primary
+artifacts themselves still live only until scratch cleanup. Execution `success`,
+`execution_status`, diagnostics and timing remain separate from
+`validation_status` (`passed`, `failed`, `unverified`, `not_run`) and
+`validation_diagnostic`; compiler `validated_success` requires execution success
+**and** passed validation. Legacy records without validation are unverified, not
+retroactively certified from counts or compared to the largest peer output.
+
+See [WORKLOADS.md](WORKLOADS.md#artifact-validation-chat7-v1) for exact ownership,
+support and tolerance rules. Synthetic neighboring metric fixtures pass, but
+surface extent/support discrepancies are explicitly rejected. LAStools numerical
+conventions, lasR tree equivalence and blocked normalization/complex workflows
+are **not certified**; successful structural inspection alone is unverified.
+Passing a tool-specific reference is not proof of cross-tool equivalence or
+of real-input CRS, vertical units, licensing or provenance.
 
 ## Workload contracts (Chat 5)
 
@@ -470,3 +579,23 @@ temporary checkout stand-in, never edit the real installed packages or inputs.
 The updated Chat 1/2/5 fixtures also cover campaign-aware dispatch. These tests
 do not establish real LAStools version/provenance/license validity, Windows
 behavior, numerical correctness or readiness to run a benchmark campaign.
+
+Chat 7 (`filter = "chat7"`) uses tiny neighboring synthetic LAS tiles and actual
+pinned R-tool GeoTIFF/LAZ/GPKG outputs. It covers missing/corrupt/partial products,
+geometry/bands/NoData, numerical/attribute errors, sparse cells, boundary mismatch
+rejection, chunk diagnostics, disabled complex requirements, report integrity,
+validated resume and failed-validation retries. Native filenames/structural
+inspection use renamed R fixtures, **not LAStools processing**. No real benchmark
+data, external-file opt-in, runtime upgrade or full campaign is needed. The full
+runner still includes the isolated-restore test and opt-in historical-data skip;
+Windows and licensed native correctness remain external limitations.
+
+Chat 8 (`filter = "chat8"`) checks repetition counts, per-position balance for
+one to three tools and partial/full cycles, seeded reproducibility and RNG
+preservation, serial frozen dispatch, warm-up/measurement separation, immutable
+resume records, policy incompatibility, execution locking and untimed cooldown.
+It uses actual temporary multisession workers, supported lidR/lasR thread APIs
+and an Rscript child to check inherited limits and cleanup on failure. These
+tests require the pinned stack and reference BLAS, use no real inputs or
+licensed LAStools processing, and do not certify Windows, cold-cache behavior,
+thermal equilibrium or observed native CPU utilization.

@@ -781,3 +781,180 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   rebuilding remain Chats 7-10. Campaign identity does not resolve or certify
   any of those inputs, outputs or workload-equivalence limitations.
 - Stop after this handoff; do not start Chat 7 or run a benchmark campaign.
+
+### Chat 7 handoff (2026-10-21)
+
+- Implemented only Chat 7 and its directly required integration, testthat
+  regressions and documentation on the existing `dev` branch. No commits,
+  pushes, dependency/runtime changes, benchmark-data downloads/preparation,
+  real campaigns, historical results or published-site changes. The user-owned
+  untracked `_OLD/` directory remains untouched.
+- `prepare_input()` now stops on lidR chunk errors. Workload contracts expose
+  explicit per-tool validation specifications. Before timing, each runnable
+  attempt builds an input manifest containing unique tile stems, header
+  bounds/counts, CRS and file checksums. Required filenames/counts come from
+  that manifest and the workload, never a peer run or observed maximum.
+  Unsupported/blocked calls still skip before input reads/scratch creation.
+- Validation runs after execution/resource-monitor cleanup and outside timing,
+  before owned scratch is deleted. It checks every primary raster/LAZ/GPKG:
+  readable/nonempty payloads; exact raster geometry/bands/support; finite values/
+  NoData; retained point counts/attributes/normalization; and persisted vector
+  geometry/XYZ/core populations. Sidecars cannot replace missing primary
+  products. Missing, corrupt, extra, partial, shifted or numerically incorrect
+  products fail with per-file reasons. `FALSE` pipeline returns fail execution;
+  execution diagnostics and validation warnings cannot silently certify chunks.
+- Untimed references explicitly read each core and its 20 m neighbors, checking
+  payload counts/finite XYZ and input byte identity. Metrics/maxima use direct
+  R reductions; TIN, normalization and lidR trees use supported in-memory lidR
+  APIs, separate from catalog chunking/persistence. Tolerances and ownership are
+  documented in `WORKLOADS.md`. This is correctness-first and can reread large
+  neighboring files/recompute expensive reference algorithms; no full-data
+  validation cost or scalability claim is made.
+- Each inspected attempt retains `validation.rds` with input identity, expected
+  names, actual output checksums, per-artifact errors/support/error summaries,
+  tolerances and validation timestamps. The immutable result binds its checksum;
+  missing/modified reports cannot support a passed result. Raw artifacts still
+  disappear at scratch cleanup; the report is not an artifact archive.
+  Execution flags/timing/diagnostics remain separate from validation status/
+  diagnostics. Compilation adds `validated_success` without relabeling execution,
+  removes the maximum-output-count heuristic entirely, and leaves historical
+  records unverified. Only execution-plus-validation success (or an explicit
+  skip) resumes; failed/unverified validations retain attempts and retry.
+- Named testthat cases use tiny temporary synthetic neighboring LAS tiles and
+  actual pinned R-tool GeoTIFF/LAZ/GPKG persistence, plus temporary synthetic
+  campaign records. They cover varying exact-cell-edge metrics, sparse/
+  singleton/empty support, known-value maximum grids, empty vectors, fractional
+  bounds, point/numerical/attribute corruption, missing/extra/bad-band/misaligned
+  outputs, native structural-only outcomes, complex required products, chunk
+  diagnostics, input mutation, untimed reporting, report tampering and retry/
+  resume. No licensed LAStools processing or real-input processing occurred.
+- **New confirmed acceptance blockers:** the integer-bounded neighboring
+  fixture rejects lidR maximum DSM occupied-cell support and lasR terrain/
+  maximum/TIN DSM extents. Fractional-header surface tests also reject lidR's
+  inward-rounded maximum/TIN DSM extents. These are recorded failures, not
+  hidden by cropping, alignment repair, relaxed support masks or a timed
+  algorithm change. Neighboring means/nine-band metrics (both R tools), sparse
+  metrics, lidR normalization/attributes and distinct lidR trees pass. A passed
+  tool-specific reference is not general cross-tool or real-input equivalence.
+- **External/remaining blockers:** LAStools entitlement/provenance, native
+  percentile filenames and numerical/ownership conventions; lasR treetop ties/
+  boundary equivalence; recovered-input CRS/units/license/repair provenance and
+  runner layout integration; exact shared-edge/degenerate TIN cases; Windows
+  behavior. Unknown/non-metre horizontal CRS leaves otherwise correct artifacts
+  unverified. Native structural success is always unverified. The previously
+  user-disabled lasR normalization and both complex tasks remain disabled;
+  candidate artifact requirements are checked but cannot certify or re-enable
+  them. Full all-tool/complex acceptance is **not claimed**.
+- **Final affected verification passed:** warnings-as-errors
+  `testthat::test_dir("tests/testthat", filter = "chat[12]|chat3-environment|chat5|chat6|chat7", stop_on_failure = TRUE)`
+  after renv activation produced **1,000 passing expectations, zero failures,
+  warnings or skips** (about 161 seconds); Chat 7 contributes 122 expectations.
+  `Rscript --vanilla R/check_environment.R` passed with R 4.6.1, Quarto 1.10.18,
+  GDAL 3.12.2, GEOS 3.14.1 and PROJ 9.7.1. `git diff --check` passed.
+  **Full-suite verification passed:** the required
+  `Rscript --vanilla tests/testthat.R` exited zero after about 21.2 minutes,
+  including strict isolated restoration: **1,170 passing expectations, zero
+  failures/warnings, one explicit skip**. The skip is the opt-in historical-file
+  check because `LIDAR_RECOVERED_INPUT_ROOT` was unset; no real-input verification
+  is claimed. The full run began before the final validation-specification/
+  sentinel/sorting refinements; the affected rerun above covered those final
+  code changes with warnings promoted to errors, and the full run's later
+  Chat 7 cases also passed against them. Only documentation/handoff wording was
+  adjusted afterwards. No all-tool/complex or real-input acceptance is claimed.
+- Stop after this handoff. Do not start Chat 8 or run a real benchmark campaign.
+
+### Chat 8 handoff (2026-10-22)
+
+- Implemented only Chat 8 and its directly required configuration, immutable
+  record/resume integration, testthat checks and documentation on the existing
+  `dev` branch. Preserved the incoming uncommitted Chat 7 changes and user-owned
+  `_OLD/` directory. No commits, pushes, benchmark-data downloads/preparation,
+  real campaigns, dependency-version changes, historical result changes or
+  published-site changes. Chats 9-12 were not started.
+- Added validated `scheduling` configuration with documented defaults:
+  3 measurement repetitions, 1 warm-up round, seed 20261020, 5 seconds cooldown,
+  `uncontrolled-warm` cache policy and 1 native thread per R file worker.
+  Older configuration files receive these defaults explicitly at validation;
+  invalid counts/seeds/delays, nested native threading and cold-cache policies
+  fail with actionable errors. `data.table` is now a declared direct dependency
+  for supported thread control; its existing locked version is unchanged.
+- Campaign schema 2 freezes the entire generated schedule and policy in its
+  identity. Mersenne-Twister/Inversion/Rejection is fixed independently of the
+  caller's RNG kind, with caller state restored. Each task/run/phase starts with
+  a seeded tool permutation and rotates positions across repetitions; per-tool
+  position counts differ by at most one, with exact balance at multiples of the
+  tool count. Task/run block order is shuffled each round. Selection/tool input
+  ordering does not affect the schedule. Unsupported/blocked combinations keep
+  explicit skipped slots; planned balance cannot imply equal executed/validated
+  samples when tools skip/fail or measurements are resumed.
+- The runner now executes that schedule serially, dispatching exactly one tool
+  per slot. A reports-root execution lock excludes concurrent harness workload
+  calls through cleanup/cooldown; other report roots and unrelated processes
+  remain the operator's responsibility. A killed process can leave a stale lock:
+  inspect live runners before removing that specific empty directory manually.
+  This does not add monitoring or certify machine idleness.
+- Attempts retain `phase`, repetition, schedule index and tool position.
+  Warm-ups use the same execution/validation/cleanup path but cannot satisfy a
+  measured repetition. They rerun on every scheduler invocation, including
+  resume; prior process/cache state is not reused. Completed measurements resume
+  independently; retries retain immutable history. Low-level manual calls remain
+  possible and have no invented schedule index. Pre-Chat-8 attempts remain
+  readable as measurements with missing schedule indices, but old identities
+  cannot resume under the changed policy. Compilation retains warm-ups and adds
+  `measurement_eligible`, requiring measurement phase plus execution/validation
+  success; publication/aggregation remains Chat 10.
+- Timing still covers only the workload expression/native process, including
+  its input I/O, computation and artifact persistence. Checksums, metadata/input
+  preparation, worker/thread/monitor setup and cleanup, validation and scratch
+  cleanup are outside timing. After a started workload (including failures), the
+  result is persisted and the intentional cooldown sleeps outside timing.
+  Skipped, pre-execution-failed and resumed work do not sleep. Cooldown is a
+  configured delay, not a verified thermal/power stabilization procedure.
+- `cores` is the processing budget: lidR multisession file workers each use
+  one native/data-table thread, with explicit worker startup initialization;
+  lasR uses concurrent-files parallelism with one point-processing thread and
+  strategy readback; LAStools retains its explicit `-cores` budget. Native outer
+  environment limits match the budget, nested OpenMP teams are disabled, and
+  child BLAS/Rcpp thread limits are one. Environment, lidR/data-table counts and
+  future plans restore on failure; temporary lasR strategy cleanup is retained.
+  Attempts record requested worker/native/BLAS settings, cache/cooldown policy
+  and timing boundary; these are not observed CPU-utilization measurements.
+- **Runtime restriction:** changing environment variables cannot reliably cap
+  an already loaded threaded BLAS. Workload execution therefore requires a
+  recognized reference single-threaded BLAS and explicitly rejects known
+  threaded/unrecognized BLAS paths. This checkout passes that guard. Other BLAS
+  implementations need verified runtime control before support can be claimed;
+  Windows/native-tool internals were not verified in this Linux chat.
+- **Cache policy:** no eviction procedure or cold-cache verification exists.
+  Checksums, preparation, warm-ups and numerical references touch inputs, and a
+  failed warm-up or oversized working set cannot guarantee residency. Zero
+  warm-ups remains uncontrolled cache, never a cold-cache measurement.
+- **Affected verification passed:** warnings-as-errors
+  `testthat::test_dir("tests/testthat", filter = "chat[1268]|chat3-environment|chat5|chat7", reporter = "summary", stop_on_failure = TRUE)`
+  after renv activation: **1,427 passing expectations, zero failures, warnings
+  or skips**. This covers one/two real temporary multisession workers, actual
+  native thread APIs and inherited Rscript limits, serial dispatch, balanced
+  counts/partial cycles, fixed RNG kind/state, warm-up/resume separation,
+  immutable historical records, policy changes, lock exclusion and untimed
+  failure-path cooldown. After adding the already-locked direct dependency
+  declaration, Chat 3 environment checks passed again with warnings as errors.
+  `Rscript --vanilla R/check_environment.R` passed with R 4.6.1, Quarto 1.10.18,
+  GDAL 3.12.2, GEOS 3.14.1 and PROJ 9.7.1. `git diff --check` passed.
+- **Required full-suite verification passed:**
+  `Rscript --vanilla tests/testthat.R` exited zero in **1,359.8 seconds**
+  (about 22.7 minutes), including strict isolated restoration:
+  **1,597 passing expectations, zero failures/warnings and one explicit skip**.
+  Chat 8 contributes 427 passing expectations. The skip is the read-only
+  historical-input case because `LIDAR_RECOVERED_INPUT_ROOT` was unset; no
+  real-input verification is claimed. The full run began before the final
+  fixed-RNG-kind/historical-record refinements and direct dependency declaration;
+  the affected rerun above covered the final execution code, the environment
+  rerun covered the declaration, and the full run's later Chat 6-8 cases used
+  the final code. Only handoff documentation changed afterwards.
+- **Remaining campaign blockers:** all Chat 7 acceptance failures and external
+  provenance/license/CRS/layout limitations remain. No real-input, licensed
+  LAStools, Windows, all-tool/complex correctness, cold-cache or thermal
+  acceptance is claimed. Disabled lasR normalization/complex tasks remain
+  disabled. Campaign-aware resource monitoring and publication rebuilding
+  remain Chats 9-10; an authorized pilot remains Chat 11.
+- Stop after this handoff. Do not start Chat 9 or run a real benchmark campaign.

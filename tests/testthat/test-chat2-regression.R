@@ -261,9 +261,15 @@ test_that("worker, monitor, and strategy cleanup retain failures and restore sta
     expect_match(failed_start$diagnostic, "startup failure", fixed = TRUE)
     expect_s3_class(future::plan(), "sequential")
     strategy <- FALSE
-    env$unset_parallel_strategy <- function() strategy <<- FALSE
-    env$concurrent_files <- function(ncores) ncores
-    env$set_parallel_strategy <- function(...) strategy <<- TRUE
+    env$unset_parallel_strategy <- function() {
+      strategy <<- FALSE
+      lasR::unset_parallel_strategy()
+    }
+    env$concurrent_files <- lasR::concurrent_files
+    env$set_parallel_strategy <- function(...) {
+      strategy <<- TRUE
+      lasR::set_parallel_strategy(...)
+    }
     failed_lasR <- env$benchmark_with_resources("lasR", 1L, config, "fixture", function() {
       expect_true(strategy)
       stop("intentional lasR failure")
@@ -274,6 +280,7 @@ test_that("worker, monitor, and strategy cleanup retain failures and restore sta
     env$unset_parallel_strategy <- function() {
       unset_calls <<- unset_calls + 1L
       if (unset_calls > 1L) stop("intentional strategy cleanup failure")
+      lasR::unset_parallel_strategy()
     }
     failed <- env$benchmark_execute_call(task_call, "lastools", call_env)
     cleanup_failed <- env$benchmark_with_resources("lasR", 1L, config, "fixture", function() failed)
@@ -357,7 +364,8 @@ test_that("dispatch records outputs and diagnostics while protecting inputs and 
     expect_equal(recorded$success, 0L)
     expect_equal(recorded$exit_status, 7L)
     expect_match(recorded$diagnostic, "status 7", fixed = TRUE)
-    expect_match(recorded$diagnostic, "output inspection failure", fixed = TRUE)
+    expect_match(recorded$validation_diagnostic, "output inspection failure", fixed = TRUE)
+    expect_identical(recorded$validation_status, "failed")
     expect_length(list.files(scratch, all.files = TRUE, no.. = TRUE), 0L)
     expect_identical(tools::md5sum(files), sentinel)
     env$benchmark_with_resources <- function(tool, cores, config, label, run) {

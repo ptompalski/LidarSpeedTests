@@ -30,15 +30,6 @@ if (length(native)) {
 }
 
 
-#loop over all benchmark_combinations
-for (i in seq_len(nrow(B))) {
-  
-  #get current row
-  b <- B[i,]
-  
-  benchmark_run(task_id = b$task_id, run_id = b$run_id, 
-                benchmark_tasks = benchmark_tasks, benchmark_runs = benchmark_runs,
-                sysinfo = sysinfo, config = benchmark_config,
-                campaign = campaign, repetition_id = 1L)
-  
-}
+benchmark_execute_schedule(
+  campaign, benchmark_tasks, benchmark_runs, benchmark_config, sysinfo
+)

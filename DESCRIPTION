@@ -10,6 +10,7 @@ Imports:
     callr,
     cli,
     curl,
+    data.table,
     dplyr,
     forcats,
     fs,

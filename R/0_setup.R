@@ -184,7 +184,8 @@ benchmark_contracts <- purrr::map_dfr(benchmark_tasks$task_id, function(task_id)
            input_z = contract$z, population = contract$population,
            buffer = contract$buffer, origin = list(contract$origin),
            resolution = contract$resolution, bands = list(contract$bands),
-           artifacts = list(contract$artifacts))
+           artifacts = list(contract$artifacts),
+           validation = list(contract$validation))
   })
 })
 

@@ -4,6 +4,11 @@ list(
   scratch_roots = c(SSD = "/path/to/benchmark-scratch"),
   reports_path = "results",
   cores = c(1, 2, 4, 8, 16, 32),
+  scheduling = list(
+    repetitions = 3L, warmups = 1L, seed = 20261020L,
+    cooldown_seconds = 5, cache_policy = "uncontrolled-warm",
+    native_threads = 1L
+  ),
   tools = c("lidR", "lasR", "lastools"),
   lastools_path = "/path/to/LAStools/bin",
   workstation_id = unname(Sys.info()[["nodename"]]),

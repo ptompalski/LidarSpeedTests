@@ -63,8 +63,9 @@ with an entitled native processing run. Both LAStools metric tasks remain
 
 ## Supported matrix and required outputs
 
-`matched` below means a matched target definition **pending Chat 7 validation**,
-not a validated result. `tool-specific` means runnable but **non-comparable**.
+`matched` below retains the Chat 5 matched-target label, not a validated result;
+Chat 7 validation is per attempt and has the boundary limitations below.
+`tool-specific` means runnable but **non-comparable**.
 `blocked` means deliberately empty runnable call and recorded skipped attempt;
 the candidate definition is retained separately in `task_candidate_lasR`.
 `unsupported` has no implemented call or required artifacts.
@@ -83,16 +84,17 @@ the candidate definition is retained separately in `task_candidate_lasR`.
 
 There are 18 runnable, six unsupported and three blocked combinations.
 Artifact patterns are requirements, not the old maximum-observed-file-count
-heuristic. Counts/coverage, empty tile/vector behavior, native filename suffixes
-and primary-artifact validation remain Chat 7. In particular, LAStools
+heuristic. Chat 7 validates explicit per-tile primary artifacts. In particular, LAStools
 percentile suffix spelling must be confirmed against the installed distribution;
-the contract uses `*_p*.tif` for the five separately required percentiles rather
-than guessing zero padding.
+the descriptive contract uses `*_p*.tif`; validation conservatively requires
+`_p5`, `_p25`, `_p50`, `_p75`, `_p95` until native spelling is verified. A different
+spelling fails with explicit missing/unexpected names, never substitutes a
+duplicate percentile or certifies the distribution.
 Optional VRT mosaics, spatial indexes and GDAL sidecars are not substitutes for
 primary artifacts. GeoPackages are written inside the run-owned output directory
 by both R tools (lidR's documented sf catalog driver is explicitly GPKG, not its
 pinned default Shapefile). IDs/schema/tie ordering are tool-specific.
-As before, the harness counts artifacts then removes owned scratch; this is
+The harness validates artifacts then removes owned scratch; this is
 on-disk persistence during the attempt, **not archival retention**.
 
 ## Spatial and algorithm contracts
@@ -114,7 +116,7 @@ owner. This predates the buffer change (also reproduced with wall-to-wall TRUE).
 Thus lidR normalization is **not** a guarantee of retaining the entire isolated
 input record count. The fixture checks retained coordinates and normalized Z
 against that owned population rather than hiding the loss with a count tolerance.
-Native ownership and actual tile-edge assignments still require Chat 7 checks;
+Native ownership and actual tile-edge assignments remain externally unverified;
 normalization remains non-comparable.
 
 Raster grids are axis-aligned, square cells, origin **(0,0)**, pixel edges at
@@ -126,8 +128,8 @@ remain unverified. Nominal per-file extents are unbuffered header XY bounds
 snapped outward to the grid. Sparse/partial-coverage tiles are **not** assumed to
 cover a complete 1 km square. Interpolation/masking and edge ownership may
 change the actual extent/valid support; no automatic crop, resample, hole filling
-or alignment repair hides these differences. Chat 7 must verify geometry,
-neighboring boundaries and actual coverage before a comparison is accepted.
+or alignment repair hides these differences. The Chat 7 validator checks geometry,
+neighboring boundaries and actual coverage before an attempt is accepted.
 
 All raster artifacts are numeric GeoTIFFs, never hillshade/RGB previews.
 R complex metrics have the ordered band names above. Single-band terrain,
@@ -176,6 +178,83 @@ An authorized runtime fix plus boundary/LAZ checks is required to re-enable them
 Basic DSMs are **not CHMs**: they use original elevations. Only the disabled
 complex candidates normalize before computing canopy height.
 
+## Artifact validation: chat7-v1
+
+Expectations are the product of unique input tile stems and workload artifacts,
+not successful peer runs. Input manifests record unbuffered header bounds/counts,
+CRS and file checksums. Each R raster/vector/LAZ must use its original tile stem;
+complex candidates require every explicitly suffixed product in the table.
+Missing files, unexpected/duplicate primary products (including halo exports),
+zero-byte products and unreadable payloads fail. VRTs/indexes/GDAL sidecars do not
+satisfy a primary requirement. Zero-area/nonfinite input bounds, duplicate stems
+or header/payload count mismatches fail explicitly; an empty/degenerate input
+file is not silently treated as successfully processed. Empty **cells** and
+zero-treetop references are valid only with readable, correctly shaped products.
+
+Validation reads each tile and overlapping neighbors within the 20 m buffer
+outside timing. It checks their payload counts and finite XYZ, builds untimed
+references, and verifies input byte identity again afterwards. This may be
+expensive on full inputs; no header-count-only correctness shortcut is used.
+Reference metrics are independent R group reductions on cell populations;
+maximum DSM is an independent per-cell maximum. Terrain/first-return TIN and
+lidR normalization/trees use public lidR algorithms on an explicit buffered
+in-memory cloud, without catalog chunking/output drivers. Those checks establish
+catalog/persistence consistency, not an independent proof of the algorithms.
+
+Raster geometry must exactly match the contract's outward-snapped header extent,
+zero-origin resolution and CRS, with the required number/order of named metric
+bands. There is no automatic cropping, alignment repair, resampling or filling.
+NoData masks must match the reference **exactly**, including singleton SD and
+unoccupied cells. Decoded NaN/NA is NoData; infinite values fail. Legitimate values
+colliding with either configured R NoData sentinel fail rather than disappearing.
+Maximum-DSM target ownership uses half-open XY cells; metric ownership uses
+the pinned R raster cell lookup (rightward X, downward Y on exact cell edges).
+Both operate on original Z, including buffered contributions only to owned cells.
+TIN support is explicitly compared, not just the range of finite elevations.
+
+| Product | Numerical tolerance / required agreement |
+|---|---|
+| Means, nine metrics, terrain, maximum/first-return TIN DSM | For each finite value: absolute error <= `2e-6 + 2e-7 * abs(reference)`; exact support mask, band order and grid |
+| lidR normalized LAZ | Exact owned count, original non-Z attributes and XY after attribute-based sorting; normalized Z error <= half the output LAS Z scale + `1e-6`; no relative tolerance |
+| lidR treetops | Exact point population after XYZ sorting; XYZ error <= `1e-6`; original-Z minimum 2 and core bounds; no duplicate/nonfinite points |
+| Native LAStools / lasR treetops | Structural checks only; **unverified**, never passed numerical validation |
+| Blocked complex candidates | Every candidate product required; always rejected as disabled, never certified or dispatched |
+
+LAS point ordering and tree IDs are not assumed stable. Normalization uses
+half-open **header** core ownership, not a loose count tolerance. GPKGs require
+one valid POINT layer, matching CRS and finite XYZ; elevation may be a Z geometry
+ordinate or the persisted numeric `Z` attribute, as in pinned lidR's sf driver.
+Empty vector references may have zero rows but still need a readable layer/schema.
+Unknown/non-metre horizontal CRS leaves otherwise correct artifacts unverified;
+even a declared projected CRS does not prove vertical units or source provenance.
+
+Any execution failure, `FALSE` pipeline result or recorded execution warning
+prevents passed validation. Warnings during reference/artifact inspection are
+recorded as failures rather than suppressed into success. Partial processing
+cannot pass because every input tile must supply every required artifact, with
+full expected support/populations. Reports retain diagnostics, byte identities,
+per-artifact error/support summaries and timestamps after scratch cleanup.
+The compiler preserves execution flags separately and adds `validated_success`;
+old records remain unverified and no maximum-observed-count heuristic remains.
+
+### Boundary acceptance and remaining blockers
+
+Tiny neighboring-tile fixtures pass persisted R means/nine-band metrics, sparse
+cells, lidR normalization/attributes and distinct lidR treetops. They also expose
+real surface differences: on the integer-bounded fixture lidR maximum DSM has
+a different occupied-cell mask, while lasR terrain/DSMs extend beyond the
+outward-snapped contract maximum. Fractional header maxima can also make lidR
+surface extents round inward instead of outward. These are **rejected**, not
+declared equivalent or silently repaired. The contract and timed calls are not
+changed to hide them. Extent/support ownership needs a separately authorized
+workload correction before accepting those surface combinations on such inputs.
+
+LAStools numerical/filename/ownership conventions and entitlement, lasR treetop
+ties/ownership, exact shared-edge/degenerate TIN behavior and real-input metadata
+remain uncertified. The known pinned-lasR normalization defect and both complex
+blocks remain unchanged. A passed synthetic fixture is not all-input/all-tool
+equivalence, nor permission for a benchmark campaign.
+
 ## Checks and remaining acceptance work
 
 Run `Rscript --vanilla tests/testthat.R`; focused checks use `filter = "chat5"`
@@ -184,12 +263,11 @@ pinned R tools and persisted GeoTIFF/GPKG files. No licensed native processing,
 historical point-cloud processing, preparation or benchmark campaign is launched.
 The native-cutoff placeholder is tested with process stand-ins.
 
-The matched-definition groups must not be published as validated comparisons
-yet. Native LAStools conventions/entitlement, recovered-data units/provenance,
-neighboring-tile correctness and empty/partial artifact acceptance remain
-blockers. Campaign identity/immutable records (Chat 6), full artifact validation
-(Chat 7), and report enforcement of comparison status (Chat 10) are not
-implemented here. The legacy compiler/site must not be used to mix these changed
+The matched-definition groups must not be published as universally validated
+comparisons. Native LAStools conventions/entitlement, recovered-data units/
+provenance and the boundary limitations above remain blockers. Campaign identity
+(Chat 6) and artifact validation (Chat 7) are implemented; publication enforcement
+of comparison status remains Chat 10. The legacy compiler/site must not mix these changed
 workloads with historical timings or claim cross-tool equivalence.
 
 Sources: pinned package help for `lasR::metric_engine`, `rasterize`, `dsm`,

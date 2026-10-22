@@ -36,6 +36,9 @@ if (legacy) {
   # Historical runs have no campaign identity. Preserve every version/record;
   # do not select an independently "newest" tool version for each task.
   r$result_origin <- "legacy-unidentified"
+  r$validation_status <- "unverified"
+  r$validation_diagnostic <- "Legacy artifacts unavailable for contract-based validation."
+  r$expected_output_file_count <- NA_integer_
   output <- "r.rds"
 } else {
   r <- benchmark_read_campaign(reports_path, campaign_id)
@@ -64,13 +67,5 @@ if (all(c("run_id", "cores") %in% names(r))) {
                      remove = FALSE)
 }
 
-# The historical output-count heuristic is retained pending Chat 7.
-r_expected <- r %>% group_by(tool, task_id) %>%
-  dplyr::summarise(expected_output_file_count =
-    if (all(is.na(output_file_count))) NA_real_
-    else max(output_file_count, na.rm = TRUE), .groups = "drop")
-r <- r %>% left_join(r_expected, by = c("tool", "task_id")) %>%
-  mutate(success = if_else(
-    !is.na(output_file_count) & !is.na(expected_output_file_count) &
-      output_file_count < expected_output_file_count, 0, success))
+# Artifact expectations/outcomes belong to each attempt, never to a peer run.
 saveRDS(r, output)

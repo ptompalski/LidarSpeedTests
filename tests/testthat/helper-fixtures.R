@@ -35,6 +35,7 @@ chat2_fixture <- function(envir = parent.frame()) {
   config <- env$benchmark_validate_config(list(
     input_roots = c(SSD = input), scratch_roots = c(SSD = scratch),
     reports_path = reports, cores = c(1L, 2L), tools = c("lidR", "lasR", "lastools"),
+    scheduling = list(cooldown_seconds = 0),
     lastools_path = bin, workstation_id = "fixture", resource_monitoring = FALSE
   ))
   config_file <- file.path(test_dir, "machine config.R")
@@ -92,6 +93,21 @@ with_chat2_fixture <- function(code) {
   envir <- environment()
   list2env(chat2_fixture(envir), envir = envir)
   eval(substitute(code), envir)
+}
+
+chat6_fixture <- function(envir = parent.frame()) {
+  fixture <- chat2_fixture(envir)
+  fixture$config$tools <- "lidR"
+  fixture$tasks <- data.frame(
+    task_id = "unsupported", data_type = "datasets_org", output_format = "",
+    task_call_lidR = ""
+  )
+  fixture$runs <- data.frame(
+    ID = "ALS_1000_1_1_SSD_SSD", cores = 1L,
+    dir_in_org = fixture$input, scratch_root = fixture$scratch
+  )
+  fixture$selection <- data.frame(task_id = fixture$tasks$task_id, run_id = fixture$runs$ID)
+  fixture
 }
 
 fixture_campaign <- function(env, tasks, runs, config, id = "fixture") {
