@@ -1,28 +1,89 @@
 metrics_multiple <- function(z) {
-  
-  #function to generate the following set of metrics using lidR
-  # c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95')
-  
-  zmax <- max(z)
-  zmean <- mean(z)
-  zsd <- stats::sd(z)
-  probs <- c(0.05, 0.25, 0.50, 0.75, 0.95)#seq(0.05, 0.95, 0.05)
-  zq <- as.list(stats::quantile(z, probs))
-  names(zq) <- paste0("zq", probs * 100)
-  
-  n <- length(z)
-  pzabove2 <- sum(z > 2, na.rm = TRUE)/n * 100
-  
-  m <- list(
-    zmax=zmax,
-    zmean=zmean,
-    zsd = zsd,
-    pzabove2 =pzabove2
-  )
-  
-  return(c(m,zq))
+  if (!is.numeric(z) || any(!is.finite(z))) {
+    stop("Metric elevations/heights must be finite numeric values.")
+  }
+  bands <- c("z_max", "z_mean", "z_sd", "z_above2",
+             "z_p5", "z_p25", "z_p50", "z_p75", "z_p95")
+  if (!length(z)) return(as.list(stats::setNames(rep(NA_real_, 9L), bands)))
+  values <- c(max(z), mean(z), stats::sd(z), mean(z > 2),
+              stats::quantile(z, c(.05, .25, .50, .75, .95),
+                              type = 7, names = FALSE))
+  as.list(stats::setNames(values, bands))
 }
 
+benchmark_workload_contract <- function(task_id, tool) {
+  ids <- c("normalization", "pixel_metrics_1a", "pixel_metrics_2", "generate_DEM",
+           "generate_DSM1", "generate_DSM2", "tree_detection",
+           "complex_task1", "complex_task2")
+  if (!task_id %in% ids || !tool %in% c("lidR", "lasR", "lastools")) {
+    stop("Unknown workload contract: ", task_id, "/", tool)
+  }
+  supported <- if (startsWith(task_id, "complex_")) tool == "lasR" else
+    !(tool == "lastools" && task_id %in% c("generate_DSM2", "tree_detection"))
+  blocked <- tool == "lasR" &&
+    task_id %in% c("normalization", "complex_task1", "complex_task2")
+  implemented <- supported
+  supported <- supported && !blocked
+  matched <- supported && tool != "lastools" &&
+    task_id %in% c("pixel_metrics_1a", "pixel_metrics_2", "generate_DSM1",
+                   "generate_DSM2")
+  artifacts <- switch(task_id,
+    normalization = "*.laz",
+    pixel_metrics_1a = if (tool == "lastools") "*_avg.tif" else "*.tif",
+    pixel_metrics_2 = if (tool == "lastools")
+      c("*_max.tif", "*_avg.tif", "*_std.tif", "*_dns.tif", "*_p*.tif")
+      else "*.tif",
+    generate_DEM = "*.tif", generate_DSM1 = "*.tif", generate_DSM2 = "*.tif",
+    tree_detection = "*.gpkg",
+    complex_task1 = c("*.laz", "*_dtm.tif", "*_chm.tif"),
+    complex_task2 = c("*.laz", "*_dtm.tif", "*_chm.tif",
+                      "*_metrics.tif", "*_trees.gpkg"))
+  status <- if (blocked) "blocked" else if (!supported) "unsupported" else if (matched)
+    "matched_definition_pending_validation" else "non_comparable"
+  note <- if (blocked)
+      "Disabled: pinned lasR 0.21.2 TIN normalization produces NA at ground hull boundaries and corrupt LAZ elevations; candidate only." else
+    if (!supported) "No implemented pipeline; record an unsupported/skipped attempt." else
+    if (tool == "lastools")
+      "Native cutoff/filter flags are explicit; native numerical, geometry and output conventions are unverified." else
+    if (startsWith(task_id, "complex_"))
+      "lasR-only sequential pipeline; not equivalent to a sum of independent basic tasks." else
+    if (task_id %in% c("normalization", "generate_DEM"))
+      "Class 2/9 TIN; lidR extrapolation and lasR outside-hull handling differ." else
+    if (task_id == "tree_detection")
+      "Local maxima window/tie/boundary semantics are not established as equivalent." else
+      "Same target definition; tiny fixtures do not establish neighboring-tile correctness."
+  list(
+    workload_contract = "chat5-v1", comparison_status = status,
+    comparison_group = if (matched) paste0("chat5-v1/", task_id) else NA_character_,
+    comparison_note = note, supported = supported,
+    z = if (startsWith(task_id, "complex_")) "original Z for terrain; normalized Z thereafter" else "original Z",
+    population = switch(task_id,
+      normalization = if (tool == "lidR")
+        "half-open catalog core points retained; terrain from classes 2 and 9" else
+        "all points transformed; native terrain and boundary handling",
+      generate_DEM = "classes 2 and 9",
+      generate_DSM2 = "all first returns; no highest-per-cell preselection",
+      "all points; no return/class filter"),
+    buffer = 20, origin = c(0, 0),
+    resolution = if (grepl("^pixel", task_id)) 20 else
+      if (task_id %in% c("generate_DEM", "generate_DSM1", "generate_DSM2") ||
+          startsWith(task_id, "complex_")) 1 else NA_real_,
+    bands = if (task_id == "pixel_metrics_2") names(metrics_multiple(numeric())) else
+      if (task_id == "pixel_metrics_1a") "z_mean" else character(),
+    artifacts = if (implemented) artifacts else character()
+  )
+}
+
+benchmark_height_cutoff <- function(ctg) {
+  z <- ctg@data$Min.Z
+  if (!is.numeric(z) || !length(z) || any(!is.finite(z))) {
+    stop("Cannot define an all-point height cutoff without finite catalog Min.Z headers.")
+  }
+  minimum <- min(z)
+  cutoff <- minimum - max(1, abs(minimum) * .Machine$double.eps * 4)
+  if (!is.finite(cutoff) || cutoff >= minimum) stop("Cannot represent a cutoff below input Z.")
+  format(cutoff, digits = 17, scientific = FALSE, trim = TRUE)
+}
 
 benchmark_directory <- function(path, label, writable = FALSE) {
   if (!is.character(path) || length(path) != 1L || is.na(path) ||
@@ -307,6 +368,15 @@ prepare_input <- function(dir_in, dir_out) {
   opt_laz_compression(ctg) <- TRUE
   opt_progress(ctg) <- FALSE
   opt_stop_early(ctg) <- FALSE
+  opt_chunk_size(ctg) <- 0
+  opt_chunk_buffer(ctg) <- 20
+  opt_chunk_alignment(ctg) <- c(0, 0)
+  # Prevent raster methods from silently replacing the requested 20 m buffer.
+  opt_wall_to_wall(ctg) <- FALSE
+  opt_select(ctg) <- "*"
+  opt_filter(ctg) <- ""
+  ctg@output_options$drivers$sf$extension <- ".gpkg"
+  ctg@output_options$drivers$sf$param <- list(quiet = TRUE, driver = "GPKG")
   
   return(ctg)
   
@@ -377,6 +447,9 @@ benchmark_lastools_command <- function(task_call, envir) {
     "{output}" = get("dir_out", envir = envir),
     "{cores}" = as.character(get("cores", envir = envir))
   )
+  if ("{height_cutoff}" %in% task_call$args) {
+    values[["{height_cutoff}"]] <- get("height_cutoff", envir = envir)
+  }
   args <- as.character(unlist(lapply(task_call$args, function(arg) {
     if (arg %in% names(values)) return(values[[arg]])
     if (grepl("[{}]", arg)) stop("Unknown LAStools argument placeholder: ", arg)
@@ -614,6 +687,9 @@ benchmark_run_tool <- function(tool, task_call, context, config, label) {
       stop("Input catalog references files outside its validated input directory.")
     }
     context$fout <- paste0(context$dir_out, "/*.", context$output_format)
+    if (tool == "lastools" && "{height_cutoff}" %in% task_call$args) {
+      context$height_cutoff <- benchmark_height_cutoff(context$ctg)
+    }
     result <- benchmark_with_resources(tool, context$cores, config, label, function() {
       benchmark_execute_call(task_call, tool, context)
     })
@@ -734,6 +810,14 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
     )
     common <- c(list(task_id = task_id, run_id = run_id, cores = run$cores),
                 as.list(sysinfo), metadata)
+    if ("workload_contract" %in% names(task)) {
+      contract <- benchmark_workload_contract(task_id, tool)
+      if (contract$comparison_status == "blocked") {
+        result$diagnostic <- contract$comparison_note
+      }
+      common <- c(common, contract[c("workload_contract", "comparison_status",
+                                    "comparison_group", "comparison_note")])
+    }
     write.csv(as.data.frame(c(result, common)), report)
     if (result$success == 1L) {
       cli::cli_alert_success("Finished in {result$finish_time-result$start_time} sec.")

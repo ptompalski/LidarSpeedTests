@@ -85,16 +85,17 @@ geospatial versions, but does not launch benchmarks, download point clouds, or
 render/overwrite `docs/`. Setup, plotting helpers, real catalog metadata, and
 lasR pipeline construction are covered by tests. Data preparation, complete
 report generation, numerical workload equivalence, and native Windows behavior
-remain separate tasks. In particular, lasR's deprecated `chm()` alias is retained
-for Chat 5's supported DSM/workload-contract decision; this environment work does
-not silently change workload semantics.
+remain separate tasks. Chat 5's workload definitions, supported DSM API migration
+and remaining equivalence limitations are documented in [WORKLOADS.md](WORKLOADS.md).
 
 Catalog metadata now uses supported `lidR::npoints()`, `sf::st_area()`, and
 catalog header accessors: counts are exact and densities are unrounded, using
 summed tile areas and first-return counts as in lidR's catalog display.
 Printed “thousand/million” values are no longer mistaken for raw counts.
 RAM is reported in bytes through `ps::ps_system_memory()`; the strict `Z > 2`
-metric population is unchanged. Historical records are not rewritten.
+metric population is unchanged. Chat 5 changes its units to a user-confirmed
+fraction and standardizes band names for new attempts only; historical records
+are not rewritten.
 The plotting helper retains its historical Segoe UI font; font availability and
 visual parity on Linux must be resolved when rebuilding reports in Chat 10.
 
@@ -123,6 +124,8 @@ strings. Each input filename is a separate argument, including filenames with
 spaces or shell metacharacters. LAStools task definitions use
 `list(executable = "tool", args = c(...))`; the whole-argument placeholders
 `{inputs}`, `{output}`, and `{cores}` expand without parsing or shell evaluation.
+Metric calls also use `{height_cutoff}`, derived below the catalog's minimum Z
+before timing so lascanopy does not silently exclude points below 1.37.
 Result CSVs retain exit status, stdout, stderr,
 and error/warning diagnostics. R dependencies, including `processx` and `future`,
 are restored from the project lockfile.
@@ -148,6 +151,22 @@ that health check does not validate utilization samples or counter accuracy.
 Review the selected combinations in `R/3_runBenchmarks.R` before sourcing it.
 Do not run a full campaign until inputs, dependencies, and workload contracts
 have been approved.
+
+## Workload contracts (Chat 5)
+
+[WORKLOADS.md](WORKLOADS.md) defines populations, thresholds, units, SD/quantiles,
+buffers/grids, bands, NoData, artifacts and the complete supported tool/task
+matrix. Inspect `benchmark_contracts` after sourcing setup. New CSVs carry
+contract/comparability labels; these are not correctness certification.
+LAStools metrics now use an all-Z cutoff and all-return density, but native
+equivalence remains unverified. lasR uses supported `dsm()` APIs.
+
+**lasR normalization and both complex tasks are disabled** after synthetic
+fixtures found corrupt elevations from pinned TIN boundary normalization.
+They record skipped attempts with the blocker diagnostic; candidate pipelines
+and artifact requirements are retained, not claimed working. No complex
+end-to-end workload is currently runnable. Basic DSMs use original elevations,
+not canopy heights; summed independent timings are not a sequential pipeline.
 
 ## Petawawa input preparation (Chat 4)
 
@@ -372,3 +391,11 @@ are not established by these fixtures.
 Its real-file checksum/header case is opt-in via `LIDAR_RECOVERED_INPUT_ROOT`;
 otherwise it skips explicitly. It reads the approved 24 external files without
 changing them, downloading data, decoding full point payloads or preprocessing.
+
+Chat 5 (`filter = "chat5"`) exercises known-value metrics, persisted R-tool
+GeoTIFF bands/geometry, first-return versus all-return DSMs, GeoPackage
+persistence, native-command cutoff contracts, supported/blocked dispatch and
+the pinned-lasR normalization defect. It requires the pinned geospatial stack,
+uses temporary synthetic data, and does not run LAStools or a campaign. Native
+processing, Windows and neighboring real-tile numerical equivalence are not
+established by these checks.

@@ -37,8 +37,7 @@ benchmark_settings <- list(
 )
 
 
-# tasks to run during the benchmark. function calls for lidR, lasR, and lastools. 
-# should not require any changes
+# Chat 5 contracts and remaining equivalence limitations: WORKLOADS.md.
 
 benchmark_tasks <- 
   tribble(
@@ -52,8 +51,8 @@ benchmark_tasks <-
     
     "normalization", 
     "Normalization",
-    "lidR::normalize_height(las = ctg, algorithm = tin())", 
-    "exec(pipeline = normalize() + write_las(fout), on = f)", 
+    "lidR::normalize_height(las = ctg, algorithm = tin(), use_class = c(2L, 9L))",
+    "exec(pipeline = normalize() + write_las(fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
     list(executable = "lasheight64", args = c(
       "-i", "{inputs}", "-odir", "{output}", "-olaz", "-cores", "{cores}",
       "-replace_z", "-buffered", "20")),
@@ -62,58 +61,65 @@ benchmark_tasks <-
     
     "pixel_metrics_1a", 
     "Pixel metrics (simple)",
-    "lidR::pixel_metrics(las = ctg, ~mean(Z), res = 20)", 
-    "exec(pipeline = rasterize(20, 'z_mean', ofile = fout), on = f)",
+    "lidR::pixel_metrics(las = ctg, ~list(z_mean = mean(Z)), res = 20, start = c(0, 0))",
+    "exec(pipeline = rasterize(20, 'z_mean', ofile = fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
     list(executable = "lascanopy64", args = c(
       "-i", "{inputs}", "-step", "20", "-avg", "-odir", "{output}",
-      "-otif", "-cores", "{cores}", "-buffered", "20")),
+      "-otif", "-cores", "{cores}", "-buffered", "20", "-use_orig_bb",
+      "-height_cutoff", "{height_cutoff}", "-grid_ll", "0", "0",
+      "-no_data", "-9999", "-no_kml")),
     "datasets_org",
     "tif",
     
     
     "pixel_metrics_2", 
     "Pixel metrics (complex)",
-    "pixel_metrics(las = ctg, ~metrics_multiple(Z), res = 20)", 
-    "exec(pipeline = rasterize(20, c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95'), ofile = fout), on = f)", 
+    "lidR::pixel_metrics(las = ctg, ~metrics_multiple(Z), res = 20, start = c(0, 0))",
+    "exec(pipeline = rasterize(20, c('z_max','z_mean','z_sd','z_above2','z_p5','z_p25','z_p50','z_p75','z_p95'), ofile = fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
     list(executable = "lascanopy64", args = c(
-      "-i", "{inputs}", "-max", "-avg", "-std", "-cov", "-p",
+      "-i", "{inputs}", "-step", "20", "-max", "-avg", "-std", "-dns", "-p",
       "5", "25", "50", "75", "95", "-odir", "{output}", "-otif",
-      "-cores", "{cores}", "-buffered", "20")),
+      "-cores", "{cores}", "-buffered", "20", "-use_orig_bb",
+      "-height_cutoff", "{height_cutoff}", "-cover_cutoff", "2", "-fractions",
+      "-grid_ll", "0", "0", "-no_data", "-9999", "-no_kml")),
     "datasets_org",
     "tif",
     
     "generate_DEM", 
     "Generate DEM",
-    "rasterize_terrain(las = ctg, res = 1, algorithm = tin())", 
-    "exec(pipeline = dtm(res = 1, ofile = fout), on = f)", 
+    "lidR::rasterize_terrain(las = ctg, res = 1, algorithm = tin(), use_class = c(2L, 9L), shape = 'convex')",
+    "exec(pipeline = dtm(res = 1, ofile = fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
     list(executable = "blast2dem64", args = c(
       "-i", "{inputs}", "-otif", "-odir", "{output}", "-step", "1",
-      "-cores", "{cores}")), # no need to buffer the tiles
+      "-cores", "{cores}", "-keep_class", "2", "9", "-elevation",
+      "-kill", "100", "-buffered", "20", "-use_orig_bb",
+      "-no_data", "-9999", "-no_kml")),
     "datasets_org",
     "tif",
     
     "generate_DSM1", #rasterizing highest point, no interpolation
     "Generate DSM (rasterize highest)",
-    "rasterize_canopy(ctg, res = 1, algorithm = p2r())", 
-    "exec(pipeline = chm(1, tin=FALSE, ofile = fout), on = f)", 
+    "lidR::rasterize_canopy(ctg, res = 1, algorithm = p2r(subcircle = 0, na.fill = NULL))",
+    "exec(pipeline = dsm(1, tin = FALSE, ofile = fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
     list(executable = "lasgrid64", args = c(
       "-i", "{inputs}", "-highest", "-otif", "-odir", "{output}", "-step", "1",
-      "-cores", "{cores}", "-buffered", "20")),
+      "-cores", "{cores}", "-buffered", "20", "-use_orig_bb",
+      "-no_data", "-9999", "-no_kml")),
     "datasets_org",
     "tif",
     
     "generate_DSM2", #based on tin surface
     "Generate DSM (with TIN interpolation)",
-    "rasterize_canopy(ctg, res = 1, algorithm = dsmtin())", 
-    "exec(pipeline = chm(1, tin=TRUE, ofile = fout), on = f)", 
+    "lidR::rasterize_canopy(ctg, res = 1, algorithm = dsmtin(max_edge = 0, highest = FALSE))",
+    "exec(pipeline = dsm(1, tin = TRUE, ofile = fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
     NULL, # requires lasthin + las2dem combo
     "datasets_org",
     "tif",
     
     "tree_detection",
     "Detect treetops",
-    "ttops <- locate_trees(ctg, lmf(ws = 5))",
-    "lasR::exec(pipeline = local_maximum(5, ofile = fout), on = f)",
+    "lidR::locate_trees(ctg, lmf(ws = 5, hmin = 2, shape = 'circular'))",
+    "lasR::exec(pipeline = local_maximum(5, min_height = 2, ofile = fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
     NULL, # not possible with lastools
     "datasets_org",
     "gpkg",
@@ -125,13 +131,13 @@ benchmark_tasks <-
     'fout_laz <- paste0(dir_out, "/*.laz") 
     fout_dtm <- paste0(dir_out, "/*_dtm.tif")
     fout_chm <- paste0(dir_out, "/*_chm.tif")
-    del = triangulate(filter = keep_ground())
+    del = triangulate(filter = keep_ground_and_water())
     norm = transform_with(del)
     dtm = rasterize(1, del, ofile = fout_dtm)
     chm = rasterize(1, "max", ofile = fout_chm)
     write = write_las(ofile = fout_laz)
-    pipeline = del + norm + write + dtm + chm 
-    ans = exec(pipeline, on = f, progress = TRUE)', 
+    pipeline = del + dtm + norm + write + chm
+    ans = exec(pipeline, on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))',
     NULL,
     "datasets_org",
     "",
@@ -143,22 +149,44 @@ benchmark_tasks <-
     fout_dtm <- paste0(dir_out, "/*_dtm.tif")
     fout_chm <- paste0(dir_out, "/*_chm.tif")
     fout_metrics <- paste0(dir_out, "/*_metrics.tif")
-    del = triangulate(filter = keep_ground())
+    fout_trees <- paste0(dir_out, "/*_trees.gpkg")
+    del = triangulate(filter = keep_ground_and_water())
     norm = transform_with(del)
     dtm = rasterize(1, del, ofile = fout_dtm)
     chm = rasterize(1, "max", ofile = fout_chm)
-    seed = local_maximum(5)
+    seed = local_maximum(5, min_height = 2, ofile = fout_trees)
     metrics = rasterize(20, c("z_max","z_mean","z_sd","z_above2","z_p5","z_p25","z_p50","z_p75","z_p95"),ofile=fout_metrics  )
     write = write_las(ofile = fout_laz)
-    pipeline = del + norm + write + dtm + chm + metrics + seed
-    ans = exec(pipeline, on = f, progress = TRUE)', 
+    pipeline = del + dtm + norm + write + chm + metrics + seed
+    ans = exec(pipeline, on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))',
     NULL,
     "datasets_org",
     ""
     
   )
 
-
+benchmark_tasks$workload_contract <- "chat5-v1"
+blocked_lasR <- benchmark_tasks$task_id %in%
+  c("normalization", "complex_task1", "complex_task2")
+benchmark_tasks$task_candidate_lasR <- ifelse(
+  blocked_lasR, benchmark_tasks$task_call_lasR, NA_character_
+)
+benchmark_tasks$task_call_lasR[blocked_lasR] <- ""
+benchmark_contracts <- purrr::map_dfr(benchmark_tasks$task_id, function(task_id) {
+  purrr::map_dfr(c("lidR", "lasR", "lastools"), function(tool) {
+    contract <- benchmark_workload_contract(task_id, tool)
+    tibble(task_id = task_id, tool = tool,
+           workload_contract = contract$workload_contract,
+           supported = contract$supported,
+           comparison_status = contract$comparison_status,
+           comparison_group = contract$comparison_group,
+           comparison_note = contract$comparison_note,
+           input_z = contract$z, population = contract$population,
+           buffer = contract$buffer, origin = list(contract$origin),
+           resolution = contract$resolution, bands = list(contract$bands),
+           artifacts = list(contract$artifacts))
+  })
+})
 
 benchmark_runs <- if (is.null(benchmark_config)) {
   tibble(ID = character(), dir_in_org = character(), dir_in_norm = character(),

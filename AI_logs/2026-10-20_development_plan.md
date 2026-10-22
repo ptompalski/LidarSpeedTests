@@ -599,3 +599,99 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   Reproducible regeneration is still blocked without originals. No benchmark or
   later-chat implementation was launched; work remains on `dev`, with no
   commits or pushes. The user-owned `_OLD/` archive remains untouched.
+
+### Chat 5 handoff (2026-10-21)
+
+- Implemented only Chat 5 and directly required runner integration, regression
+  checks and documentation on the existing `dev` branch. No commits, pushes,
+  dependency/runtime upgrades, data downloads/preparation, campaigns or
+  historical result/site changes. The user-owned `_OLD/` archive remains
+  untracked and untouched.
+- Added `WORKLOADS.md` and a 27-row `benchmark_contracts` table covering every
+  task/tool: original versus normalized Z, populations, thresholds/units,
+  sample SD, type-7 quantiles, buffers, zero-origin grids, extent/ownership
+  rules, bands, NoData, primary artifacts and comparison limitations. New
+  attempts carry `chat5-v1` and explicit comparison status/group/note in CSVs;
+  execution success does not establish equivalence. The legacy compiler/site
+  is not converted to a new campaign/reporting system in this chat.
+- The user chose **fractions (0-1), retaining native lasR metrics** after tiny
+  fixtures showed that pinned `z_above2` returns a fraction, despite its help
+  describing percentages. `metrics_multiple()` now has matching canonical band
+  names, strict `Z > 2`, explicit type-7 quantiles and sample SD; empty cells/
+  singleton SD are NoData and nonfinite helper inputs fail explicitly. This
+  intentionally differs from historical lidR percentages and band names; do
+  not pool old/new measurements.
+- LAStools pixel calls explicitly use 20 m cells, a finite all-Z cutoff below
+  every header Min.Z, and zero-origin canopy grids; the complex call uses
+  all-return `-dns -cover_cutoff 2 -fractions`, not first-return `-cov`.
+  Terrain explicitly keeps classes 2/9 and requests numeric elevation.
+  Buffers/unbuffered raster bounds, native NoData and no-KML requests are
+  explicit. Native numerical/geometry/filename conventions remain unverified,
+  so all runnable LAStools combinations are **non-comparable**.
+- Adopted supported lasR `dsm()` APIs. Basic DSMs use original elevations,
+  not canopy heights; first-return TIN DSM disables lidR's default
+  highest-per-cell preselection. R terrain populations explicitly use classes
+  2/9. lidR catalog settings retain file chunks, 20 m buffers and zero alignment;
+  wall-to-wall is FALSE to prevent raster methods silently reducing buffers.
+  The documented sf catalog driver now writes GeoPackages explicitly rather
+  than the pinned default Shapefile. Both R tree calls persist to owned scratch.
+- Synthetic checks also characterized pre-existing lidR half-open core ownership:
+  exact maximum-X/Y records are omitted from isolated catalog normalization
+  outputs, with either old/new wall-to-wall setting. The contract and fixture
+  expose that retained population rather than claiming all input records
+  survive. Normalization/terrain extrapolation and treetop window/tie semantics
+  remain non-comparable; neighboring-edge correctness is still Chat 7.
+- **New native-runtime blocker:** pinned lasR 0.21.2 TIN normalization produces
+  NA at some exact ground hull/triangle boundaries; exploratory tiny LAZ output
+  turned these into invalid elevations near -2147484. The regression now
+  characterizes NA before writing corrupt output. The user explicitly chose
+  **disable the affected combinations**, not a timed R guard, dropped points,
+  substituted algorithm or runtime upgrade. lasR normalization and both complex
+  tasks have empty runnable calls and record skipped outcomes with the blocker
+  diagnostic, before reading point clouds or creating scratch.
+- Candidate complex definitions remain separate from runnable calls. Their
+  order is terrain triangulation -> original-elevation DTM -> normalization ->
+  normalized LAZ -> normalized maximum CHM; task 2 additionally requires nine
+  normalized metric bands and an explicitly persisted `*_trees.gpkg`.
+  Class-2/9 terrain, 1 m terrain/CHM, 20 m metrics and 5 m/minimum-height-2
+  treetops are specified. They are sequential candidates, **not sums of
+  independently timed basic tasks**. There is currently **no runnable complex
+  workload**: 18 runnable, six unsupported and three blocked task/tool pairs.
+- Added named testthat cases using only temporary tiny synthetic clouds:
+  known-value all-return metrics and persisted bands/geometry, negative/zero/
+  threshold/sparse values, native metric conventions, all-versus-first-return
+  DSMs, flat terrain, retained-point normalization, GeoPackage persistence,
+  matrix/artifact consistency, cutoff process stand-ins, and blocked CSV
+  diagnostics/no-input/no-scratch dispatch. No LAStools processing or historical
+  point-cloud payload processing was performed.
+- Focused affected checks passed with warnings promoted to errors:
+  `Rscript --vanilla -e 'source("renv/activate.R"); options(warn = 2); testthat::test_dir("tests/testthat", filter = "chat[12]|chat3-environment|chat5", stop_on_failure = TRUE)'`
+  produced **775 expectations, zero failures/warnings/skips**.
+- **Full-suite verification completed:** `Rscript --vanilla tests/testthat.R`
+  exited zero after about 19 minutes, including strict isolated restoration:
+  **945 passing expectations, zero failures, four warnings and one skip**.
+  Chat 5 contributed 294 passing expectations. The skip is the explicitly
+  opt-in historical-file case (`LIDAR_RECOVERED_INPUT_ROOT` was not set);
+  no real-input verification was claimed. The four warnings came from the
+  suite's early Chat 2 dispatch fixtures accessing the new optional tibble
+  contract column. That compatibility issue was fixed while restoration was
+  running; the final affected-code rerun above then passed all 775 expectations
+  with warnings promoted to errors and no warnings/skips. The full isolated
+  restore was not redundantly rerun after that optional-column guard fix.
+  `git diff --check` passed; all changed production R scripts are parsed by
+  the environment tests.
+- **Acceptance / remaining blockers:** workload definitions and tiny R-fixture
+  contracts are implemented, but an all-tool/complex-equivalence acceptance is
+  **not claimed**. Re-enabling lasR normalization/complex tasks needs an
+  authorized runtime correction plus boundary and persisted-LAZ verification.
+  Native tool entitlement/provenance and numerical/output conventions,
+  recovered-input CRS/units/license/repair provenance and layout integration,
+  neighboring-tile/empty/partial artifact validation and Windows behavior remain
+  unresolved. No later-chat campaign identity, scheduling, validation engine,
+  resource-monitoring or reporting rebuild was implemented.
+- Stop after this handoff. Chat 6 remains a separate task; do not start it or
+  run a campaign as part of Chat 5.
+- Follow-up decision (2026-10-21): the user deferred investigation/fixing of the
+  lasR normalization blocker. Keep lasR normalization and both complex tasks
+  disabled and recorded as blocked/skipped; do not waive correctness or claim
+  those workloads are validated. No runtime change or further task was started.

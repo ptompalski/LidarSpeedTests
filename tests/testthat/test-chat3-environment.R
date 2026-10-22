@@ -45,24 +45,26 @@ test_that("setup and supported pipeline APIs load without running benchmarks", {
   env$dir_out <- tempdir()
   env$f <- character()
   env$capture_pipeline <- function(pipeline, ...) pipeline
-  for (call in env$benchmark_tasks$task_call_lasR) {
+  calls <- c(env$benchmark_tasks$task_call_lasR,
+             na.omit(env$benchmark_tasks$task_candidate_lasR))
+  for (call in calls[nzchar(calls)]) {
     call <- sub("(lasR::)?exec\\(", "capture_pipeline(", call)
     expect_no_warning(pipeline <- eval(parse(text = call), env))
     expect_true(inherits(pipeline, "PipelinePtr"))
   }
 })
 
-test_that("public metric operations preserve the existing threshold and quantiles", {
+test_that("public metrics use the agreed fraction, sample SD and type-7 quantiles", {
   env <- benchmark_fixture()$env
   z <- c(-1, 0, 2, 2, 3, 4, 10)
   result <- env$metrics_multiple(z)
-  expect_equal(result$pzabove2, 100 * 3 / 7)
-  expect_equal(result$zmax, max(z))
-  expect_equal(result$zmean, mean(z))
-  expect_equal(result$zsd, sd(z))
-  expect_equal(unlist(result[paste0("zq", c(5, 25, 50, 75, 95))]),
+  expect_equal(result$z_above2, 3 / 7)
+  expect_equal(result$z_max, max(z))
+  expect_equal(result$z_mean, mean(z))
+  expect_equal(result$z_sd, sd(z))
+  expect_equal(unlist(result[paste0("z_p", c(5, 25, 50, 75, 95))]),
                setNames(quantile(z, c(.05, .25, .5, .75, .95)),
-                        paste0("zq", c(5, 25, 50, 75, 95))))
+                        paste0("z_p", c(5, 25, 50, 75, 95))))
 })
 
 test_that("catalog metadata uses exact counts and unrounded header densities", {
