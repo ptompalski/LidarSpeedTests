@@ -474,3 +474,128 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   warnings, or skips. No workload flags, machine configuration, license
   entitlement, or campaign execution changed; distribution provenance and
   executable checksums remain unverified.
+
+### Chat 4 handoff (2026-10-21)
+
+- Implemented only Chat 4 on the existing `dev` branch. No commits, pushes,
+  downloads of benchmark data, real-data preprocessing, campaigns, or historical
+  result/site changes. The user-owned `_OLD/` directory remains untracked and
+  untouched; `ALS_tiles.gpkg` is unchanged.
+- The user supplied `_OLD/` after the initial provenance question. Recovered the
+  actual Petawawa selection/preparation in `_OLD/R/2_data.R`, densification in
+  `99_IncreaseDensity.R`, and repair in `99_repairPetawawaALS2012.R`. README.md
+  and preparation manifests preserve their original MD5 identities. The first
+  script records the Petawawa 2012 LAS archive URL and the 100 selected tile
+  IDs; it is not the unrelated Ontario SPL/COPC example formerly in `R/2_data.R`.
+  The historically recorded URL has not been downloaded/verified as an archive.
+  The public landing page was readable but did not settle license or CRS.
+- The user confirmed the 100 tile IDs in `ALS_tiles.gpkg`, approved the neighboring
+  pair `298000_5093000` / `298000_5094000`, and approved a seeded adaptation
+  with base seed `20261021`. No historical seeds were found, so this is explicitly
+  not bit-for-bit reproduction of old outputs. The user requires **already
+  repaired input**, not automatic application of the recovered repair script.
+- Replaced the commented `Download_LAZ` workflow with sourceable, opt-in functions
+  in `R/2_data.R`. `petawawa_preflight()` requires local source/output paths,
+  confirmed source citation/license/projected metric CRS/repair provenance,
+  explicit native executable names and tool entitlement. It checks unique input
+  mappings, approved scope, source attributes/returns/coverage/format, paths,
+  checksums and native version queries without preprocessing. Sourcing the
+  script alone does not download or process anything.
+- `prepare_petawawa()` defines all six targets, point-level `lidR::random()`
+  thinning, and recovered artificial densification: rounded source density,
+  full/partial copies, discrete Z-only +/-0.10 through +/-0.50 m noise in 0.05 m
+  steps, and the recovered constant copied-point GPS-time increment. Tile/target
+  seeds use stable positions in the full approved selection; RNG state is
+  restored. Original 1 km tile ownership/edge coverage, inherited point
+  attributes and LAS 1.1/1.2 point formats 1/3 are preserved. No retile, height
+  normalization, COPC conversion or blanket VLR removal was invented.
+- Added `data-preparation.example.R` and README instructions for **user-run**
+  preflight and neighboring-subset preparation. Full preparation requires an
+  explicit all-100 selection, `full = TRUE`, a new output root and separate user
+  authorization. The code is serial, whole-tile processing; high-density
+  transforms and complete-record validation can need substantial RAM.
+- Preparation records source/implementation/lock/index/native binary checksums,
+  recovered script identities, method parameters, runtime/library versions,
+  configuration and tool output. Per-tile/target records retain output/index
+  checksums, seeds, counts, coverage, attributes and achieved density. MD5 is a
+  content-change identifier, not source authentication. Resumption requires
+  matching identity and intact outputs; changed input/configuration/environment
+  or partial/corrupt outputs fail rather than silently reusing/replacing them.
+  Run-owned staging/identity-checked cleanup reuse the Chat 2 safety helpers.
+- Complete-record comparisons validate coordinates and inherited attributes,
+  CRS/count/format/scales/offsets and native sort order. Index files must be
+  nonempty, but native spatial-query correctness is not established by that
+  check. Density uses the actual source footprint; rounding source density in
+  the recovered densifier means achieved density need not equal the nominal
+  target. Both source-area and output-footprint densities are recorded.
+- Added named testthat cases with only tiny temporary synthetic LAS/LAZ files.
+  Real lidR transforms/IO are exercised; sort/index processes are explicit
+  stand-ins, not processing of the user's benchmark data. Focused checks passed
+  **154 expectations, zero failures/warnings/skips**.
+- **Final verification passed:** `Rscript --vanilla tests/testthat.R` completed
+  with **638 expectations, zero failures, zero warnings and zero skips**,
+  including all 154 Chat 4 expectations and Chat 3's strict isolated restore.
+  The complete suite took about 19 minutes (the restore about 18.5 minutes).
+  `git diff --check` passed. No R dependency/runtime check blocker remains.
+- Read-only native checks found `lassort64` version 260914 (non-profit), MD5
+  `0fe0f6ab4b34bc73818da17b7dd969d3`, and `lasindex64` version 260914, MD5
+  `4f0ded3635b23fe7b9316bc96448bd3e` under
+  `/home/ptompals/opt/lastools/bin`. Historical `lasindex` is absent. The example
+  explicitly configures `lasindex64`; no executable fallback is performed.
+  Version queries/checksums do not establish distribution origin or entitlement.
+- **Remaining blockers / acceptance status:** the user will provide the source
+  path. Dataset CRS/license/attribution and actual repair provenance remain
+  unconfirmed; native tool licensing/distribution provenance remains external.
+  No real subset has been prepared or validated, so Chat 4's real-data “done
+  when” criterion remains **blocked**, not claimed complete. Native sort/index
+  behavior, real source coverage/quality, full-data resources and Windows
+  processing remain unverified. The user, not the assistant, must run any
+  preparation commands; commands are in README.md. No benchmark campaign or
+  later-chat implementation was started.
+
+### Chat 4 follow-up: recovered historical inputs (2026-10-21)
+
+- The user found the previously benchmarked thinned/densified clouds in backup,
+  copied them to `/data/nvme1/LidarSpeedTestData`, and explicitly approved reuse
+  **unchanged as historical inputs**. Original unmodified/repaired sources were
+  not recovered. No new download, thinning or densification is needed to reuse
+  this backup; regeneration with the new seeded workflow remains a separate,
+  blocked operation. Do not treat these variants as its original source.
+- Read-only filename/header inventory found all six target directories, each
+  with exactly the approved 100 LAZ tiles and 100 LAX indexes: 600 clouds plus
+  600 indexes, about 43.9 GiB. All header XY bounds fit their named 1 km tiles.
+  All 100 density-1 header point counts and XY bounds match `ALS_tiles.gpkg`.
+  This supports historical identification but is not a byte-level comparison
+  with old runs, whose original checksums are unavailable.
+- All files use point format 1. Densities 1/2/5/10 use LAS 1.1; 20/50 use
+  LAS 1.2. **All 600 headers have no CRS, and the user confirmed it is unknown.**
+  No coordinate system was inferred or assigned. The user reports the data are
+  based on the open Petawawa data online; exact license/attribution terms,
+  acquisition/repair provenance and original random seeds are still unverified.
+- Added `input-manifests/petawawa-recovered-pilot.csv` for the approved neighboring
+  pair at all six densities: 12 LAZ files plus 12 LAX indexes, about 0.95 GiB.
+  It records portable relative paths, both file checksums, LAZ sizes, header
+  point counts/formats and unknown CRS. MD5 identifies the recovered bytes now;
+  no historical preparation manifest or seeds were invented. Remaining files
+  were inventoried by header, not fully checksummed or decoded. No point clouds
+  were copied into the repository or modified.
+- Added named testthat schema and opt-in external checksum/header cases.
+  `LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData Rscript --vanilla -e
+  'source("renv/activate.R"); testthat::test_dir("tests/testthat",
+  filter = "chat4-recovered-data", stop_on_failure = TRUE)'` passed **79
+  expectations with zero failures, warnings or skips**. Without the environment
+  variable, only the external-file case skips explicitly. `git diff --check`
+  passed. This targeted follow-up changes no production R code; the earlier
+  complete-suite result remains recorded above, not claimed rerun.
+- README.md documents historical reuse and the read-only verification command.
+  The backup has `tile_1000_density_*` directly under its root, unlike setup's
+  current `benchmark_data/1_org/...` relative paths; runner configuration/layout
+  integration is still required before a campaign. No directories were moved,
+  symlinked or rewritten to hide that mismatch.
+- **Updated acceptance status:** historical data availability and a checksummed
+  pilot identity are resolved. Unknown CRS, unverified source terms/repair
+  provenance, full point-payload/attribute and native-index correctness, and
+  runner layout integration remain blockers to a trustworthy new campaign.
+  Reproducible regeneration is still blocked without originals. No benchmark or
+  later-chat implementation was launched; work remains on `dev`, with no
+  commits or pushes. The user-owned `_OLD/` archive remains untouched.

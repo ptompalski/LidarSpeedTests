@@ -149,6 +149,178 @@ Review the selected combinations in `R/3_runBenchmarks.R` before sourcing it.
 Do not run a full campaign until inputs, dependencies, and workload contracts
 have been approved.
 
+## Petawawa input preparation (Chat 4)
+
+**Historical preparation was recovered**, not invented, from the user-supplied
+`_OLD/R/2_data.R`, `99_IncreaseDensity.R`, and `99_repairPetawawaALS2012.R`.
+Their MD5 identities at recovery were respectively
+`b110ca6a754816d286027585b52dd09b`,
+`9bddef7946565cfa4b5ac9c269287ec8`, and
+`5fdfb399625d1ff18db9f16e7c15efe3`.
+The archive is user-owned, untracked reference material; the new implementation
+does not source or modify it. The Petawawa script records this actual source:
+
+```text
+https://opendata.nfis.org/mapserver/PRF.html
+https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip
+```
+
+The latter is a **historically recorded URL**, not a verified current download
+or a license grant. The old script estimates the archive at 18 GB. Download and
+extraction are manual, user-authorized operations; no preparation function
+downloads anything. Confirm the dataset's license/attribution and projected CRS
+from its documentation before processing. The public landing page was readable
+on 2026-10-21 but did not establish those facts. The repository's MIT license does
+not license the point clouds.
+
+`ALS_tiles.gpkg` is retained unchanged as the approved **100 tile IDs**, not as
+a download manifest or trustworthy CRS/footprint reference: it contains processed
+LAS headers and old Windows paths, lacks `Download_LAZ`, and has an undefined
+engineering CRS. IDs are recovered from those filenames with either path
+separator. The approved small neighboring subset is `298000_5093000` and
+`298000_5094000`; no point clouds are committed. Supply exactly one repaired
+`<tile_id>.las` or `<tile_id>.laz` per selected tile, directly in `source_root`.
+The historical selection already uses 1 km tiles; there is no new retile, buffer,
+clipping or XY perturbation. Edge tiles can have partial coverage. Coordinates
+must lie within the named tile's closed 1 km bounds; source-edge ownership is
+preserved rather than inventing a different half-open clipping rule.
+
+The user approved a **seeded adaptation**, not bit-for-bit reproduction of the
+historical random draws (no seeds were recorded):
+
+- Targets 1, 2, 5 and 10 points/m² use `lidR::random()` without pulse grouping.
+  Each retains `round(target * lidR::area(source))` points, sampled without
+  replacement. A source below the target fails instead of silently returning an
+  under-density tile. This is point thinning, not complete-pulse thinning.
+- Targets 20 and 50 preserve the recovered algorithm: round the source density,
+  calculate `multiplier = target / rounded_density - 1`, append
+  `floor(multiplier)` full copies and a random partial copy of
+  `round(fraction(multiplier) * source_count)` points. Each copied point gets
+  independently sampled **Z-only** noise from
+  `c(-seq(0.10, 0.50, 0.05), seq(0.10, 0.50, 0.05))` metres. All copies receive
+  the same GPS-time increment `0.013 / multiplier`, as the recovered executable
+  code actually does; an unused iteration-dependent variable in the old script
+  does not change that rule. XY, classification, intensity, return attributes and
+  other point fields are inherited. Invalid/sufficiently dense sources fail.
+- Base seed is `20261021`. Each tile/target uses base plus 100 times the
+  zero-based density position in `c(1,2,5,10,20,50)` plus its one-based position
+  in the sorted full 100-tile selection. Results do not depend on subset order or
+  resume order. RNG kinds are Mersenne-Twister/Inversion/Rejection; the caller's
+  RNG state is restored. Preparation is serial, one tile/target at a time.
+- Require **already repaired** inputs with documented repair provenance; do not
+  silently run the recovered repair script. That script filters zero returns,
+  rounds XYZ to 0.01 m, deduplicates by XYZ/GPS/intensity/return fields, excludes
+  pulses over eight points, chooses maximum Z for repeated return numbers, and
+  repairs return counts/order. Its historical use on the supplied inputs is not
+  yet confirmed. The new preflight requires valid legacy return numbers 1–7.
+- Preserve the supplied LAS 1.1/1.2 point format 1 or 3, CRS, coordinate scales,
+  offsets and point attributes; quantize modified Z on the existing scale.
+  Unknown CRS may be assigned **only from explicitly confirmed configuration**;
+  conflicting CRS fails. There is no COPC/LAS 1.4-to-1.2 conversion and no blanket
+  VLR removal: those belonged to the unrelated SPL example, not recovered
+  Petawawa preparation. Other formats need a separately approved conversion.
+  `lassort64 -point_source -gps_time -olaz` and a LASindex executable finish each
+  tile. The example explicitly selects `lasindex64`, present in this Linux
+  installation; the old Windows script used `lasindex`. Configure exact names
+  with `executables = c(sort = "lassort64", index = "lasindex64")`;
+  there is no automatic binary-name substitution.
+  Confirm those executable identities and license/entitlement separately from
+  the benchmark tools; no restricted/demo processing is authorized by this code.
+
+Density uses `lidR::area()` on the source footprint, not an assumed 1,000,000 m²
+for partly covered tiles. Reported output-footprint density can change after
+thinning. Densification uses *rounded* source density, so its achieved density
+is approximate, not necessarily exactly 20/50. Metadata records source area,
+source density, actual count, output bounds/area/density, and count per source
+area. Tests check the exact count formulas, not a misleading exact-density claim.
+Full-record comparison after sorting checks every point attribute and coordinate,
+count, CRS, LAS format/version, scales and offsets against the seeded variant.
+An external `.lax` must exist and be nonempty; this does **not** prove native index
+query correctness. Real source coverage and index behavior still need validation.
+Whole-tile transforms and canonical comparisons can require substantial RAM,
+especially at 50 points/m²; this is not a streaming implementation.
+
+**Commands for the user**, once source metadata and repaired data are available:
+
+```sh
+# Copy/edit outside the checkout, supplying the path, CRS, data/tool license,
+# and repair provenance. Create a NEW empty output directory yourself.
+cp data-preparation.example.R /your/path/petawawa.local.R
+# Read/hash sources and query native tool versions; no preprocessing:
+Rscript --vanilla -e 'source("renv/activate.R"); source("R/2_data.R"); cfg <- dget("/your/path/petawawa.local.R"); str(petawawa_preflight(cfg))'
+# USER-RUN preprocessing of ONLY the approved neighboring pair:
+Rscript --vanilla -e 'source("renv/activate.R"); source("R/2_data.R"); prepare_petawawa(dget("/your/path/petawawa.local.R"))'
+```
+
+Outputs are `<output_root>/1_org/tile_1000_density_<target>/<tile_id>.laz`,
+with `.lax` and `.laz.rds` validation/checksum records. Root `preparation.rds`
+records source/output identity, method parameters, source and native executable
+MD5 checksums, version stdout/stderr, configuration/provenance, code/index/lockfile
+checksums, R/package/native-library versions, and seed policy.
+MD5 detects accidental changes; it does not authenticate downloaded sources.
+Keep metadata with the data and retain original archive checksums in
+`repair_provenance` or a referenced source manifest.
+
+Re-running the identical command resumes only intact, checksummed tile/target
+pairs. A changed input, seed, environment, configuration, tool or implementation
+requires a **new empty output root**, not reuse of old results. Missing/corrupt
+outputs, orphan outputs without metadata, and partial publication fail explicitly;
+inspect/quarantine the named files yourself before retrying. Processing happens
+in private temporary children; cleanup never resets an input/output root.
+No normalization is performed: benchmark normalization is a workload, not input
+preparation. This manifest is not the Chat 6 benchmark campaign/attempt schema.
+
+**Full-data preparation is separately authorized**, not the default: only after
+explicit approval, set `cfg$tiles <- petawawa_tiles()` and call
+`prepare_petawawa(cfg, full = TRUE)` with a new output root. No real preparation
+or download has been run during Chat 4. Regeneration still needs the original
+repaired sources, verified CRS/license/repair history and native-tool validation.
+
+### Recovered historical inputs (2026-10-21)
+
+The user recovered the previously benchmarked, already thinned/densified clouds
+from backup and approved **reuse unchanged as historical inputs**. The local
+root is `/data/nvme1/LidarSpeedTestData`, containing all six
+`tile_1000_density_<target>` directories directly (no `benchmark_data/1_org`
+prefix). Do not move/rewrite the backup to satisfy the runner's current relative
+paths; that layout needs explicit configuration/integration before a campaign.
+No download or new thinning/densification is needed to reuse these files.
+Original unmodified sources have not been recovered, so regeneration remains a
+different, blocked operation. Do not pass these density variants to
+`prepare_petawawa()` as though they were the original repaired source.
+
+Read-only inspection found 100 LAZ files and 100 LAX indexes per density:
+600 clouds and 600 indexes, about 43.9 GiB total. Every set has exactly the
+approved tile IDs; all header XY bounds fit the named 1 km tiles. Density-1
+point counts and XY bounds match the tracked GeoPackage for all 100 tiles.
+This corroborates the user's historical identification but is not proof that
+point payloads match old runs: old file checksums are unavailable. All files use
+point format 1; densities 1/2/5/10 use LAS 1.1 and densities 20/50 use LAS 1.2.
+**All 600 headers lack a CRS. The user confirmed the CRS is unknown.** Do not
+infer an EPSG code from coordinates or the undefined GeoPackage CRS.
+
+`input-manifests/petawawa-recovered-pilot.csv` freezes the approved neighboring
+pair at all six densities: relative paths, point-cloud and index MD5 checksums,
+file bytes, header counts/formats and explicitly unknown CRS. Its 12 clouds plus
+12 indexes total about 0.95 GiB and remain external to git. Only these 24 files
+were checksummed; the rest of the backup was inventoried by filename/header,
+not fully checksummed or decoded. Checksums identify the recovered bytes now,
+not their original seeds, repair history, or equivalence to the new seeded
+workflow. No preparation metadata is retroactively fabricated.
+
+The user reports these inputs are based on the open Petawawa data online.
+Exact source/license/attribution terms, CRS and repair provenance still need
+verification. Header/checksum inspection is not full point-attribute,
+decompression, numerical correctness or native index-query validation; this
+does not authorize or establish readiness for a benchmark campaign.
+
+To verify the frozen pilot read-only, without preprocessing:
+
+```sh
+LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData \
+  Rscript --vanilla -e 'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "chat4-recovered-data", stop_on_failure = TRUE)'
+```
+
 ## Tests
 
 All automated tests use `testthat`, without making this repository an R package.
@@ -186,3 +358,17 @@ Strict restoration disallows a substitute repository
 for URL-pinned records, and `retry = FALSE` disallows retrying with newer versions.
 Unix-specific shell, permission, and symlink checks are explicitly skipped on Windows; permission
 checks also skip when the current user bypasses the tested restrictions.
+
+Chat 4 checks (`filter = "chat4"`) use tiny, temporary synthetic LAS/LAZ tiles:
+real lidR thinning/densification/IO with stubbed native sorting/index creation,
+not the user's source data. They cover metadata/scope guards, exact target count
+formulas, neighboring tile bounds/CRS, inherited attributes, Z/GPS modifications,
+seed reproducibility/RNG restoration, persisted provenance, resume checksums and
+failure/partial-output cleanup. They never download or prepare real benchmark
+data. Native sort/index correctness, source-data quality and Windows behavior
+are not established by these fixtures.
+
+`chat4-recovered-data` always checks the tracked historical manifest schema.
+Its real-file checksum/header case is opt-in via `LIDAR_RECOVERED_INPUT_ROOT`;
+otherwise it skips explicitly. It reads the approved 24 external files without
+changing them, downloading data, decoding full point payloads or preprocessing.
