@@ -5,7 +5,7 @@ engine: knitr
 
 Only measured end-to-end workload calls appear here. Independent DEM,
 normalization, and DSM timings are not summed into an invented pipeline.
-The currently blocked lasR normalization/complex calls remain blocked; reporting
+lasR normalization/complex calls require explicit diagnostic opt-in; reporting
 does not enable them.
 
 ```{r}

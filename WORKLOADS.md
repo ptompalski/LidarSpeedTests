@@ -19,6 +19,19 @@ including its original datum; no CRS, datum or unit conversion is performed.
 The recovered Chat 4 inputs have **unknown CRS**. These contracts do not resolve
 that provenance/units blocker or assign a guessed CRS.
 
+**Chat 11 confirmed declaration (2026-10-22):** the custodian confirmed the
+backup inherited EPSG:2959 (NAD83(CSRS) / UTM zone 18N), EPSG:5713 (CGVD28
+height), and metre XYZ units unchanged from the identified original source.
+The headers themselves remain empty. Optional `input_metadata` configuration
+records this confirmation in campaign identity and validation manifests, sets
+the horizontal CRS on in-memory lidR catalogs and uses supported
+`lasR::set_crs()` before processing. This assigns metadata, not a coordinate
+transformation or source-file rewrite. Vertical datum/units remain an explicit
+source declaration, not an invented LAS header. Conflicting file CRS is refused.
+Declared LAStools calls also assign the horizontal EPSG with `-epsg`, not
+`-target_epsg` reprojection, and explicitly request `-fail` rather than demo
+fallback. This supplies metadata, not native numerical acceptance.
+
 Basic pixel metrics use **all points**, including ground, water, non-first
 returns and points at/below zero: no return/class/height filter, pulse grouping,
 deduplication or height normalization. Buffers supply neighboring points but
@@ -83,6 +96,13 @@ the candidate definition is retained separately in `task_candidate_lasR`.
 | `complex_task2` | unsupported | **blocked** | unsupported | candidate: task 1 products plus `*_metrics.tif` (nine bands), `*_trees.gpkg` |
 
 There are 18 runnable, six unsupported and three blocked combinations.
+That is the **default strict matrix**. With the user-authorized
+`diagnostic_lasR = TRUE`, the three blocked lasR calls become runnable
+`diagnostic_only` combinations, for 21 runnable and six unsupported pairs.
+They retain the NA/corrupt-elevation warning; no algorithm, point dropping,
+NA filling or runtime upgrade is introduced. Their validation remains failed
+when errors are found, or unverified if diagnostic inspection finds none;
+they cannot become passed numerical comparisons or eligible report timings.
 Artifact patterns are requirements, not the old maximum-observed-file-count
 heuristic. Chat 7 validates explicit per-tile primary artifacts. In particular, LAStools
 percentile suffix spelling must be confirmed against the installed distribution;
@@ -174,6 +194,9 @@ records the native defect as the skip diagnostic. Candidate artifacts remain
 specified but **no complex workload is currently runnable**. The regression
 characterizes NA before writing corrupt output and verifies all three skips.
 An authorized runtime fix plus boundary/LAZ checks is required to re-enable them.
+Chat 11 subsequently authorized **diagnostic execution without that fix** through
+the explicit flag above, including both complex candidates. Default calls remain
+disabled unless opted in; the known defect is not resolved or waived.
 
 Basic DSMs are **not CHMs**: they use original elevations. Only the disabled
 complex candidates normalize before computing canopy height.
@@ -254,6 +277,33 @@ ties/ownership, exact shared-edge/degenerate TIN behavior and real-input metadat
 remain uncertified. The known pinned-lasR normalization defect and both complex
 blocks remain unchanged. A passed synthetic fixture is not all-input/all-tool
 equivalence, nor permission for a benchmark campaign.
+
+### User-accepted surface discrepancies (Chat 11)
+
+The user explicitly authorized changing acceptance rules to defer known surface
+extent/support discrepancies. `accept_known_surface_discrepancies = TRUE` is
+an opt-in policy frozen in campaign identity; strict behavior remains the
+default. It applies only to basic R terrain/DSM products, never metrics,
+normalized point clouds, vectors, LAStools or complex diagnostic products.
+
+- lasR terrain/DSM and lidR DSM extents may differ by **at most one cell per
+  edge**. CRS, resolution, alignment, bands and artifact inventory still have
+  to match. Larger extent differences fail.
+- R terrain/DSM NoData/occupied-cell differences are accepted and counted.
+  Both products must have finite coverage in their aligned overlapping core.
+  Values on shared occupied cells must still satisfy the original numerical
+  tolerances; infinity, corrupt/missing products and execution/reference warnings
+  still fail. If the occupied populations are entirely disjoint, the report
+  explicitly records that no numerical value comparison was possible.
+- Validation compares aligned overlap in memory only; it does not crop,
+  resample, fill or rewrite the saved product. Reports retain extent deltas,
+  differing-mask counts, compared-value counts and exception reasons.
+
+Such attempts are **`accepted_exception`, not `passed`**. They resume and enter
+descriptive timing/utilization summaries when execution and timing are otherwise
+eligible; `n_accepted_exception` identifies them. `validated_success` remains
+false and `n_comparable` excludes them. These are user-accepted differences,
+not a claim that formerly failing surfaces are numerically equivalent.
 
 ## Checks and remaining acceptance work
 

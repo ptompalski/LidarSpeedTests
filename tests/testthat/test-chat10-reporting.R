@@ -1,6 +1,7 @@
-chat10_fixture <- function(envir = parent.frame()) {
+chat10_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE) {
   f <- chat6_fixture(envir)
   env <- f$env
+  f$config$accept_known_surface_discrepancies <- accept_exceptions
   sys.source(file.path(repo, "R/reporting.R"), env)
   f$tasks <- data.frame(
     task_id = c("pixel_metrics_1a", "complex_task1", "normalization"),
@@ -92,6 +93,20 @@ test_that("reporting retains retries and exclusions with deterministic sample st
   expect_identical(report, f$read())
   expect_true(all(report$summary$n_missing[report$summary$task_id == "normalization"] == 3))
   expect_true(all(is.na(report$summary$mean_seconds[report$summary$n_included == 0])))
+})
+
+test_that("accepted surface exceptions are descriptive measurements, not validated comparisons", {
+  f <- chat10_fixture(accept_exceptions = TRUE)
+  f$append(validation = "accepted_exception", seconds = 2)
+  report <- f$read()
+  row <- subset(report$summary, task_id == "pixel_metrics_1a" & run_id == f$runs$ID[1L])
+  expect_equal(row$n_included, 1)
+  expect_equal(row$n_accepted_exception, 1)
+  expect_equal(row$n_comparable, 0)
+  expect_false(report$attempts$validated_success)
+  expect_true(report$attempts$measurement_eligible)
+  expect_true(f$env$benchmark_campaign_completed(
+    f$campaign, "pixel_metrics_1a", f$runs$ID[1L], "lidR", 1L))
 })
 
 test_that("short, invalid, unvalidated, partial and non-comparable results stay explicit", {

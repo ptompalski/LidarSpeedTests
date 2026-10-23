@@ -34,13 +34,15 @@ benchmark_report_prepare <- function(records, manifest) {
     !r$selected_attempt ~ "superseded retry",
     r$execution_status != "succeeded" | is.na(r$success) | r$success != 1 ~
       paste0("execution: ", r$execution_status),
-    r$validation_status != "passed" ~ paste0("validation: ", r$validation_status),
+    !r$validation_status %in% c("passed", "accepted_exception") ~
+      paste0("validation: ", r$validation_status),
     !is.finite(r$elapsed_seconds) | r$elapsed_seconds < 0.1 ~
       "invalid or sub-0.1-second timing",
     TRUE ~ "included"
   )
   r$report_included <- r$exclusion == "included"
   r$comparison_eligible <- dplyr::coalesce(r$report_included &
+    r$validation_status == "passed" &
     r$comparison_status == "matched_definition_pending_validation" &
     !is.na(r$comparison_group), FALSE)
   planned <- manifest$identity$schedule
@@ -82,6 +84,7 @@ benchmark_report_prepare <- function(records, manifest) {
       n_failed = sum(measured$execution_status == "failed"),
       n_skipped = sum(measured$execution_status == "skipped"),
       n_validation_failed = sum(measured$validation_status == "failed"),
+      n_accepted_exception = sum(good$validation_status == "accepted_exception"),
       n_short = sum(measured$short_duration, na.rm = TRUE),
       mean_seconds = stat(good$elapsed_seconds, mean),
       sd_seconds = if (nrow(good) > 1L) stats::sd(good$elapsed_seconds) else NA_real_,
@@ -245,6 +248,7 @@ benchmark_build_report <- function(reports_path, campaign_id, repo_root = getwd(
     schema = "chat10-v1", campaign_id = campaign_id, identity_id = manifest$identity_id,
     created_at = Sys.time(), sources = rbind(raw_checksums, benchmark_checksums(source_files)),
     selection_policy = "latest started.rds timestamp per phase/tool/task/run/repetition; lexical attempt ID breaks ties",
+    acceptance_policy = "passed validation or frozen-policy accepted surface exceptions; exceptions are descriptive, never comparable",
     timing_policy = "monitor-bound subsecond epochs where available; otherwise second-resolution CSV timestamps",
     R = R.version.string, session = sessionInfo(), rendered = render, Quarto = NA_character_
   )
@@ -286,16 +290,17 @@ benchmark_report_page <- function(section, figures = TRUE) {
   cat(status, "\n\n")
   cat("Times are actual workload calls, never sums of independent tasks. ",
       "Non-comparable tools remain descriptive; no cross-tool speedups are inferred. ",
+      "Accepted surface exceptions are counted separately and are not numerically validated comparisons. ",
       "NA variability means fewer than two eligible samples, not zero variability.\n\n", sep = "")
   data <- report$sections[[section]]
   if (nrow(data)) {
     columns <- c("task_id", "run_id", "tool", "cores", "n_planned", "n_attempts",
                  "n_missing", "n_included", "n_excluded", "n_failed", "n_skipped",
-                 "n_validation_failed", "n_short", "mean_seconds", "sd_seconds",
+                 "n_validation_failed", "n_accepted_exception", "n_short", "mean_seconds", "sd_seconds",
                  "median_seconds", "min_seconds", "max_seconds", "n_comparable",
                  "comparison_status", "availability")
     if (section == "utilization") columns <- c(
-      "task_id", "run_id", "tool", "n_included", "n_monitored", "n_partial_monitoring",
+      "task_id", "run_id", "tool", "n_included", "n_accepted_exception", "n_monitored", "n_partial_monitoring",
       "cpu_mean_percent", "cpu_sd_percent", "cpu_peak_percent", "ram_mean_used_bytes",
       "ram_sd_used_bytes", "ram_peak_used_bytes", "availability"
     )

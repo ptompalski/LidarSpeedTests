@@ -10,6 +10,15 @@ list(
     native_threads = 1L
   ),
   tools = c("lidR", "lasR", "lastools"),
+  # Opt-in policies are frozen in the campaign; defaults retain strict validation.
+  input_metadata = NULL,
+  # Confirmed historical Petawawa declaration (does not rewrite source files):
+  # input_metadata = list(
+  #   horizontal_epsg = 2959L, vertical_epsg = 5713L, xyz_units = "metre",
+  #   confirmation = "Custodian confirmed source lineage and unchanged XYZ units/datum."
+  # ),
+  accept_known_surface_discrepancies = FALSE,
+  diagnostic_lasR = FALSE,
   lastools_path = "/path/to/LAStools/bin",
   workstation_id = unname(Sys.info()[["nodename"]]),
   resource_monitoring = FALSE,

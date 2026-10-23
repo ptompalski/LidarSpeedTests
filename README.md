@@ -396,7 +396,8 @@ repetition, use the latest precise `started.rds` timestamp; lexical attempt ID
 breaks an exact tie. A failed last retry does **not** fall back to an earlier
 success. All retries and warm-ups remain in the ledger with explicit exclusions.
 Timing aggregates require measured phase, recorded execution success, passed
-artifact validation, and finite elapsed seconds >= 0.1. Short durations remain
+artifact validation or a user-accepted surface exception (see Chat 11 below),
+and finite elapsed seconds >= 0.1. Short durations remain
 flagged without changing execution/validation status. The summary includes
 planned, selected, missing, included, excluded, failed, skipped, validation-failed
 and short counts plus mean, sample SD, median and range. One sample has NA SD.
@@ -410,7 +411,8 @@ the legacy result CSV datetime serialization has **second resolution**. The
 ledger states which precision was available. Unmonitored subsecond measurements
 cannot be retrospectively recovered or certified. Complex summaries use actual
 end-to-end workload calls only; independent basic timings are never summed into
-a claimed sequential workflow/CHM. Blocked complex calls remain blocked.
+a claimed sequential workflow/CHM. Complex calls remain blocked by default; explicit Chat 11 diagnostic opt-in
+enables execution without making their failed/unverified outputs eligible.
 
 Non-comparable/unknown-contract timings are clearly descriptive, not equivalent
 cross-tool comparisons. `n_comparable` additionally requires a recorded matched
@@ -650,7 +652,9 @@ workflow. No preparation metadata is retroactively fabricated.
 
 The user reports these inputs are based on the open Petawawa data online.
 Exact source/license/attribution terms, CRS and repair provenance still need
-verification. Header/checksum inspection is not full point-attribute,
+verification for the recovered files; the source-catalogue findings below
+resolve the published source's horizontal CRS and licence, not the backup's
+missing metadata or chain of custody. Header/checksum inspection is not full point-attribute,
 decompression, numerical correctness or native index-query validation; this
 does not authorize or establish readiness for a benchmark campaign.
 
@@ -661,7 +665,206 @@ LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData \
   Rscript --vanilla -e 'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "chat4-recovered-data", stop_on_failure = TRUE)'
 ```
 
+### Chat 11 pre-pilot metadata investigation (2026-10-22)
+
+**Historical pause, superseded by the authorized execution below.** At this
+inspection the pilot was paused at the user's request. Inputs remained unchanged at
+`/data/nvme1/LidarSpeedTestData`. The approved output parent is
+`/data/nvme2/LidarSpeedTestWorkingDir`; read-only inspection/check logs and public
+metadata snapshots are under its `chat11-diagnostics/` child. This is not a
+campaign or a pilot report.
+
+The authoritative NFIS catalogue record
+[Petawawa Research Forest - LiDAR 2012, LAS Files](https://saforah2.nfis.org/geonetwork-main/srv/eng/csw?request=GetRecordById&service=CSW&version=2.0.2&elementSetName=full&outputSchema=http%3A%2F%2Fwww.isotc211.org%2F2005%2Fgmd&id=f8e16c36-f267-42af-9d20-8a90677fa0a1)
+links the **same original LAS archive** recorded in `_OLD/R/2_data.R`.
+Its `referenceSystemInfo` explicitly identifies **EPSG:2959,
+NAD83(CSRS) / UTM zone 18N**, whose horizontal units are metres, and its
+`MD_LegalConstraints` specifies the
+[Open Government Licence - Canada](https://open.canada.ca/en/open-government-licence-canada).
+Attribute the source to Natural Resources Canada / Canadian Forest Service,
+Canadian Wood Fibre Centre (distributed by Pacific Forestry Centre), identify
+the dataset, and retain the licence link. In the absence of a provider-specific
+attribution statement, the licence requires:
+"Contains information licensed under the Open Government Licence – Canada."
+Do not imply government endorsement or apply the repository's MIT licence to
+the source data.
+
+**Vertical datum is a supported lead, not confirmed backup metadata.**
+The recovered repair script names a source folder
+`2012als_2959_5713_unixvz_prf`: EPSG:5713 is **CGVD28 height**, in metres.
+A separate NFIS record,
+[Harmonized 2012 airborne laser scanning](https://saforah2.nfis.org/geonetwork-main/srv/eng/csw?request=GetRecordById&service=CSW&version=2.0.2&elementSetName=full&outputSchema=http%3A%2F%2Fwww.isotc211.org%2F2005%2Fgmd&id=8db8d84d-1f91-491b-8c8a-78b3364c2f8d),
+explicitly states NAD83(CSRS)/UTM 18N and CGVD28. That is a **different,
+harmonized product**, linked to normalized clouds; its vertical statement is
+corroboration, not proof about the unnormalized historical backup. Confirm the
+backup's source/repair lineage, XYZ units and vertical datum with its custodian
+or original delivery metadata before recording them as established.
+
+The two density-1 pilot headers still have **zero VLRs and no CRS**.
+Their XYZ scale factors are 0.0001 coordinate units, which describe quantization,
+not metres or a datum. They report `lassort64 (240402) non-profit`; this does
+not identify all historical preparation steps. No CRS was assigned to a cloud,
+catalogue or GeoPackage, and the frozen recovered-input manifest remains
+`unknown`. Source metadata cannot alone restore missing file metadata or prove
+which repair/thinning/densification was actually applied.
+
+Other pilot blockers at that point were the rejected surface extents/support masks,
+user-disabled lasR normalization/complex calls, LAStools entitlement/distribution
+provenance and numerical conventions, and explicit integration of the
+two-file subset with the runner's different directory layout. A new pilot must
+not accidentally select all 100 tiles or use assigned CRS to waive validation.
+See the Chat 11 handoff in the development plan for evidence and readiness.
+
+### Chat 11 approved policies (2026-10-22 follow-up)
+
+The custodian has now **confirmed** the backup's lineage, EPSG:2959 horizontal
+CRS, EPSG:5713 vertical datum and metre XYZ units inherited unchanged from the
+original Petawawa source. This supersedes the investigation's pending-confirmation
+status, not its observation that the physical headers have no CRS records.
+
+Three explicit machine-configuration fields implement the approved decisions:
+
+```r
+input_metadata = list(
+  horizontal_epsg = 2959L, vertical_epsg = 5713L, xyz_units = "metre",
+  confirmation = "Custodian confirmed source lineage and unchanged XYZ units/datum on 2026-10-22."
+),
+accept_known_surface_discrepancies = TRUE,
+diagnostic_lasR = TRUE
+```
+
+Add these fields inside the configuration's `list(...)`, as shown in
+`benchmark.example.R`. Without opt-in, metadata stays header-derived,
+surface validation stays strict and affected lasR calls stay disabled.
+All declarations/policies are frozen in campaign identity; changing them
+requires a new campaign rather than resuming incompatible work.
+
+Metadata is applied to in-memory lidR catalogs and through supported
+`lasR::set_crs()` stages before processing, without rewriting/reprojecting
+the backups. The horizontal declaration reaches persisted artifacts; the source
+vertical datum and XYZ units are retained in configuration/validation provenance.
+Conflicting file CRS is an error. For declared historical inputs, lasR requires
+existing nonempty LAX indexes: otherwise it would automatically create indexes
+in the protected input directory. The recovered backup already has indexes;
+no new indexes are generated there by this path.
+
+The surface policy accepts the documented R terrain/DSM support differences
+and specified extent differences up to one cell per edge, retaining exception
+reasons and measurements. Wrong CRS/alignment/resolution/bands, larger extent
+differences, corrupt/missing artifacts, absent finite overlap, and numerical
+errors on shared occupied cells still fail. No shared occupied cells means
+numerical comparison was impossible, explicitly recorded, not a numerical pass.
+See [the exact exception policy](WORKLOADS.md#user-accepted-surface-discrepancies-chat-11).
+`accepted_exception` attempts enter descriptive summaries and resume, but remain
+separate from `passed`; `n_accepted_exception` counts them, `validated_success`
+is false and `n_comparable` excludes them.
+
+`diagnostic_lasR` enables standalone normalization and **both complex pipelines**
+without fixing/filtering their NA behavior. Execution errors/warnings and
+validation failures remain explicit; an otherwise clean diagnostic inspection
+is unverified, not passed. Those attempts do not enter eligible timing summaries.
+The R tools run serially under the existing scheduler, not simultaneously.
+
+The enabled local configuration is saved outside git at
+`/data/nvme2/LidarSpeedTestWorkingDir/benchmark-pilot.R`, with report/scratch
+children under that output parent, Linux monitoring and all three tools:
+
+```sh
+export LIDAR_BENCHMARK_CONFIG=/data/nvme2/LidarSpeedTestWorkingDir/benchmark-pilot.R
+```
+
+This selects configuration, **not permission to run the default matrix**.
+Use the dedicated two-file pilot entry point below, not the default selection in
+`R/3_runBenchmarks.R`; do not select all 100 tiles or bypass preflight.
+Policy approval alone did not launch the pilot. Subsequent explicit execution
+authorization and LAStools licence confirmation enabled the run below; native
+numerical acceptance remains separate from entitlement.
+
+### Resuming the authorized two-tile pilot
+
+The user authorized execution and confirmed an installed LAStools licence.
+The saved configuration now enables all three tools. Licence-query diagnostics
+are private local files; licence keys/holder details must not enter git or the
+report. Version/checksum identity and the user's entitlement confirmation are
+retained separately from numerical acceptance.
+
+Use the dedicated pilot entry point, **not the default matrix in
+`R/3_runBenchmarks.R`**:
+
+```sh
+export LIDAR_BENCHMARK_CONFIG=/data/nvme2/LidarSpeedTestWorkingDir/benchmark-pilot.R
+Rscript --vanilla R/6_pilot.R --preflight
+LIDAR_CAMPAIGN_ID=petawawa-pilot-20261022-v2 Rscript --vanilla R/6_pilot.R --run
+LIDAR_REPORTS_PATH=/data/nvme2/LidarSpeedTestWorkingDir/reports \
+  LIDAR_CAMPAIGN_ID=petawawa-pilot-20261022-v2 Rscript --vanilla R/5_report.R
+```
+
+Preflight copies only the two frozen density-1 clouds and their existing indexes
+unchanged into `pilot-inputs/tile_1000_density_1` under the approved output parent.
+Source/destination checksums and provenance are retained; existing changed or
+extra files are refused, never overwritten. No metadata rewrite, regeneration,
+download or selection of the remaining 98 tiles occurs. Original files stay
+under `historical_input_root`; `input_roots` selects the staged subset only.
+The pilot selects all nine task IDs at 1/2 cores, retaining unsupported slots
+and diagnostic complex calls, with configured repetitions, warm-ups and monitoring.
+The manifest binds original/staged byte identities and execution policies.
+
+For declared inputs, native calls explicitly assign horizontal `-epsg 2959`
+and use `-fail` (no coordinate reprojection, demo fallback or force flag).
+Native structural success still remains unverified until numerical conventions
+are established. Matching-ID reruns use existing immutable resume rules; failures
+retry and warm-ups rerun. A changed execution identity requires a new campaign.
+
+### Real pilot outcome (2026-10-22)
+
+Campaign `petawawa-pilot-20261022-v2` completed all **216 frozen slots**:
+nine tasks, two core counts, three tools, one warm-up and three measured
+repetitions. One explicit failed-measurement retry brings the immutable history
+to **217 attempts**; resuming an unsupported slot added no attempt. Execution
+outcomes are 161 succeeded, eight failed native canopy calls and 48 unsupported
+skips. All 169 executed attempts have full whole-machine monitoring coverage.
+
+**No real attempt passed validation or qualified as an accepted exception.**
+Source return-field compliance warnings, numerical/geometry differences and
+deferred lasR normalization/complex defects remain explicit. One-core native
+canopy calls exit nonzero after height-cutoff warnings; two-core native calls
+can return zero despite warnings. None of this is waived by the installed
+licence or by the bounded surface-exception policy. All timing/comparison
+sections therefore correctly report **no eligible measurements**.
+
+The eight-page report is outside the published site:
+`/data/nvme2/LidarSpeedTestWorkingDir/reports/campaigns/petawawa-pilot-20261022-v2/report-9e45241319e19/_site/index.html`.
+The campaign also retains `pilot-review.rds`, `pilot-attempt-review.csv` and
+`pilot-raw-diagnostic-timings.csv`. The last file describes unaccepted raw
+executions only, not benchmark comparisons. Original and staged byte identities
+are in the frozen manifest and `pilot-inputs/provenance.rds`.
+
+Two exploratory campaigns were interrupted to fix quadratic reference-raster
+lookups and accidental 0.001-m requantization of buffered validation points.
+Their incomplete attempts and scratch outputs remain separately archived, not
+pooled into this report. The final campaign also stopped twice on a transient
+native version-output mismatch; current identities matched before continuation
+of unattempted slots. The guard was not bypassed and frozen code was not changed.
+See the plan's handoff for exact history, checks and outstanding limitations.
+**Execution/review is complete; acceptance is blocked and a full campaign is
+not ready.** Historical inputs and published `docs/` were not modified.
+
+For opt-in read-only review of the saved real campaign alongside the full suite:
+
+```sh
+LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData \
+LIDAR_CHAT11_PILOT_ROOT=/data/nvme2/LidarSpeedTestWorkingDir/reports/campaigns/petawawa-pilot-20261022-v2 \
+TMPDIR=/data/nvme2/LidarSpeedTestWorkingDir/chat11-diagnostics \
+Rscript --vanilla tests/testthat.R
+```
+
 ## Tests
+
+Chat 11 (`filter = "chat11"`) uses tiny indexed synthetic clouds to check declared
+CRS propagation, unchanged input bytes/inventory, strict defaults and bounded
+surface acceptance, diagnostic normalization/complex dispatch, and frozen policy
+identity. Chat 10 also checks that accepted exceptions resume and contribute only
+descriptive measurements, never validated comparisons.
 
 Chat 10 (`filter = "chat10"`) uses temporary **synthetic reporting** campaign
 receipts, not numerical acceptance or real campaign evidence. It exercises

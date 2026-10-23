@@ -31,8 +31,11 @@ For each tool/task/run/phase/repetition, the latest attempt by the precise
 `started.rds` timestamp is selected (lexical attempt ID breaks exact ties).
 A failed final retry does not fall back to an earlier success. Warm-ups and
 superseded attempts cannot contribute samples. Eligible timings require recorded
-execution success, passed artifact validation, and finite elapsed time of at
+execution success, passed artifact validation or an explicitly accepted surface
+exception, and finite elapsed time of at
 least 0.1 seconds. Short timings are flagged without changing execution status.
+Accepted exceptions retain their diagnostics, contribute to descriptive timings
+and `n_accepted_exception`, and never count as passed numerical comparisons.
 Means, medians, ranges and sample standard deviations use one selected eligible
 attempt per repetition; a single sample has **NA**, not zero, SD.
 

@@ -119,7 +119,7 @@ benchmark_tasks <-
     "tree_detection",
     "Detect treetops",
     "lidR::locate_trees(ctg, lmf(ws = 5, hmin = 2, shape = 'circular'))",
-    "lasR::exec(pipeline = local_maximum(5, min_height = 2, ofile = fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
+    "exec(pipeline = local_maximum(5, min_height = 2, ofile = fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE))",
     NULL, # not possible with lastools
     "datasets_org",
     "gpkg",
@@ -171,10 +171,13 @@ blocked_lasR <- benchmark_tasks$task_id %in%
 benchmark_tasks$task_candidate_lasR <- ifelse(
   blocked_lasR, benchmark_tasks$task_call_lasR, NA_character_
 )
-benchmark_tasks$task_call_lasR[blocked_lasR] <- ""
+if (!isTRUE(benchmark_config$diagnostic_lasR)) {
+  benchmark_tasks$task_call_lasR[blocked_lasR] <- ""
+}
 benchmark_contracts <- purrr::map_dfr(benchmark_tasks$task_id, function(task_id) {
   purrr::map_dfr(c("lidR", "lasR", "lastools"), function(tool) {
-    contract <- benchmark_workload_contract(task_id, tool)
+    contract <- benchmark_workload_contract(
+      task_id, tool, isTRUE(benchmark_config$diagnostic_lasR))
     tibble(task_id = task_id, tool = tool,
            workload_contract = contract$workload_contract,
            supported = contract$supported,

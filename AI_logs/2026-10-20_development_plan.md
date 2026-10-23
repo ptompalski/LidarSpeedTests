@@ -1163,3 +1163,320 @@ approval: freeze, run, archive, and prepare the full campaign for publication."
   remain blockers for real campaign interpretation. A user-authorized pilot
   remains Chat 11; publication/full execution remains Chat 12.
 - Stop after this handoff. Do not start Chat 11 or run a real benchmark campaign.
+
+### Chat 11 handoff: paused for blocker investigation (2026-10-22)
+
+- Read this plan and its referenced audit on the existing `dev` branch.
+  Before pilot execution, the user redirected the task: **pause and investigate
+  CRS, units and other blockers**. No pilot/campaign was started and Chat 11's
+  end-to-end acceptance is **not complete**. No production code, dependency,
+  workload, validation tolerance or disabled-call decision was changed.
+- The user confirmed `/data/nvme1/LidarSpeedTestData` as the input root and
+  selected **`/data/nvme2/LidarSpeedTestWorkingDir` for all outputs**. Created
+  that previously absent directory and its `chat11-diagnostics/` child for
+  header inspection, check logs and small public XML metadata snapshots only.
+  Future reports/scratch/subset staging must use separate, validated children
+  there, not the input tree or overlapping roots. No data staging, source
+  download, preparation, benchmark processing or report render occurred.
+- **Published source horizontal CRS and licence found:** following the public
+  PRF page to the NFIS CSW catalogue yielded record
+  `f8e16c36-f267-42af-9d20-8a90677fa0a1`, *Petawawa Research Forest - LiDAR
+  2012, LAS Files*, metadata dated 2024-12-13. It links the exact
+  `PRF_LiDAR2012_LAS.zip` URL in the recovered preparation script.
+  `referenceSystemInfo` explicitly says **EPSG:2959** (NAD83(CSRS) / UTM
+  zone 18N, horizontal units **metres**). `MD_LegalConstraints` explicitly
+  specifies **Open Government Licence - Canada**. This resolves what the
+  published source declares, without claiming byte-level backup provenance.
+  README.md now links the full record and licence, names the provider/
+  distributor and records the required default attribution statement.
+- **Vertical datum/units lead:** `_OLD/R/99_repairPetawawaALS2012.R` lines
+  9/113 name `2012als_2959_5713_unixvz_prf`. The installed PROJ database
+  identifies EPSG:5713 as **CGVD28 height, metres**. NFIS record
+  `8db8d84d-1f91-491b-8c8a-78b3364c2f8d`, *Harmonized 2012 airborne laser
+  scanning*, explicitly describes the same horizontal system and CGVD28.
+  However, this is a **different harmonized/normalized product**, not the
+  original LAS archive. The path and separate record corroborate a likely
+  vertical datum but do not establish the recovered backup's vertical datum,
+  XYZ units or repair lineage. Do not substitute harmonized/normalized data
+  for the original-elevation workloads.
+- **Local evidence unchanged:** no auxiliary metadata files were found at
+  depth <= 2 in the input root. Read-only inspection of the two density-1
+  pilot headers confirms LAS 1.1 / format 1, zero VLRs, empty CRS, XYZ scales
+  0.0001, and generating software `lassort64 (240402) non-profit`. Scales are
+  quantization in coordinate units, not evidence of physical units. Z bounds
+  are 165.1299-283.82 and 184.77-282.8999 coordinate units respectively;
+  plausible elevations do not prove a datum. No CRS was inferred from XY,
+  assigned in memory, written to data/GPKG, or changed in the frozen manifest.
+- Preserved full public catalogue XML responses as
+  `chat11-diagnostics/nfis-original-2012-las.xml` (SHA-256
+  `3a19dc8d29c7df7e21d2d19294ed4043e2880c7c0c3efe0070d998bd2fb3c723`)
+  and `nfis-harmonized-2012-las.xml` (SHA-256
+  `d4a3b3c34b3bb80cd2bb77dc93f84e9947946995157ca9ea6f03ebb906611fe9`)
+  under the approved output parent. These are metadata only, not downloaded
+  point clouds. Directory listing of the remote archive path and the supersite
+  paper returned HTTP 403; the public catalogue itself was accessible without
+  authentication. No access controls were bypassed.
+- **Relevant checks passed:** warnings-as-errors testthat command
+  `LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData TMPDIR=/data/nvme2/LidarSpeedTestWorkingDir/chat11-diagnostics Rscript --vanilla -e 'source("renv/activate.R"); options(warn = 2); result <- testthat::test_dir("tests/testthat", filter = "chat4-recovered-data|chat5|chat7", reporter = "summary", stop_on_failure = TRUE); counts <- as.data.frame(result); print(colSums(counts[c("nb", "failed", "skipped", "error", "warning", "passed")]))'`
+  exited zero: **495 passing expectations, zero failures/errors/warnings/
+  skips**. All 12 pilot LAZ and 12 LAX bytes match the frozen manifest.
+  Synthetic tests reproduce the pinned-lasR normalization NA blocker and
+  rejected surface extent/support cases; passing these tests means rejection
+  works, **not that the affected workloads pass correctness**. No real
+  point-payload/workload processing was performed by the recovered-file checks.
+  Full-suite/isolated restore was not rerun for this paused, documentation-only
+  investigation; no new Chat 11 end-to-end fixture or real pilot is claimed.
+- `Rscript --vanilla R/check_environment.R` passed with R 4.6.1, Quarto
+  1.10.18, GDAL 3.12.2, GEOS 3.14.1 and PROJ 9.7.1.
+  `header-crs-inspection.txt`, `targeted-checks.log`, `environment-check.log`,
+  `native-versions.txt` and `native-sha256.txt` retain diagnostic evidence.
+  Version-only native queries still report 260914 `(non-profit)` for
+  lascanopy64/lasheight64/lasgrid64/blast2dem64; SHA-256 identities are recorded.
+  No licensed processing was attempted; version strings/checksums do not
+  establish distribution origin or entitlement.
+
+| Blocker | Evidence / status | Requirement before acceptance |
+|---|---|---|
+| Recovered-file CRS, XYZ units and vertical datum | Source horizontal EPSG:2959/metres established; CGVD28/metres supported by historical path and separate product; backup headers remain empty | Custodian/delivery confirmation of backup lineage and unchanged coordinate units/datum, followed by explicitly approved metadata integration without rewriting originals |
+| Data licence and repair provenance | Published original source is OGL-Canada; original archive checksums, actual repair history and historical seeds remain unavailable | Retain source attribution/licence and document the backup's lineage/known unknowns; do not claim seeded regeneration or exact historical reproduction |
+| Surface correctness | Existing testthat fixtures again reject lidR maximum-DSM support, lasR surface extents and fractional-bound lidR DSM extents | Explicitly authorized algorithm/ownership correction with exact-grid/support regressions; no cropping/filling/tolerance waiver |
+| Normalization and complex outputs | Pinned lasR still produces boundary NA; user previously chose disabled calls; no runnable complex task exists | Separate approval to investigate/correct runtime or workload, then boundary and persisted-LAZ/product acceptance; keep calls disabled meanwhile |
+| LAStools | Installed exact binaries/version/checksums confirmed; distribution/entitlement and native metric/filename/ownership correctness unverified | Record distribution source and appropriate entitlement, then authorized tiny native numerical checks; R-only scope can defer this, not certify all tools |
+| Subset/layout integration | Backup has density folders directly; setup expects `benchmark_data/1_org/...` and a whole directory, not the approved pair | Explicit pilot-local run definitions/subset selection under the approved output parent with traceable unchanged inputs, avoiding an accidental 100-tile run |
+| Pilot operational acceptance | No real repeated/core-matrix attempts, failure/retry/resume exercise, monitored pilot or report exists | Resume only after scope/metadata decisions, execute authorized subset, review records/validation/monitoring and regenerate report |
+
+- **Readiness decision: NOT READY for a full campaign.** Chat 11 is paused,
+  not passed, and Chat 12 remains unauthorized. Stop after this investigation
+  and handoff. Only README.md and this plan were edited; historical data,
+  results, `docs/`, `ALS_tiles.gpkg`, the frozen input manifest and user-owned
+  `_OLD/` were unchanged. No commits or pushes.
+
+### Chat 11 follow-up: approved input metadata and diagnostic policies (2026-10-22)
+
+- The user **confirmed backup lineage and unchanged XYZ units/datum**:
+  horizontal EPSG:2959 (NAD83(CSRS) / UTM zone 18N), vertical EPSG:5713
+  (CGVD28 height), X/Y/Z in metres, inherited unchanged from the identified
+  original Petawawa source. This resolves the custodian-confirmation blocker;
+  original physical headers and the historical byte manifest remain unchanged.
+- The user explicitly chose **change acceptance rules for known surface
+  discrepancies**, rather than merely running and excluding them. The user
+  also authorized **standalone lasR normalization and both complex pipelines
+  for diagnostic execution**, retaining validation failures. This supersedes
+  the earlier keep-disabled decision only when the explicit opt-in is selected.
+  No runtime upgrade, algorithm correction, NA filtering, dropping points or
+  source-file rewrite was authorized or performed. Real pilot execution remains
+  paused; enabling these policies is not execution of the campaign.
+- Added validated `input_metadata`, `accept_known_surface_discrepancies` and
+  `diagnostic_lasR` machine-configuration fields. Defaults preserve existing
+  strict/disabled behavior. Stored enabled machine configuration outside git at
+  `/data/nvme2/LidarSpeedTestWorkingDir/benchmark-pilot.R`; select it with
+  `LIDAR_BENCHMARK_CONFIG` before sourcing setup. Reports/scratch are separate
+  children of that approved output parent; R tools only, 1/2 cores, three
+  repetitions/one warm-up and Linux whole-machine monitoring are configured,
+  not run. The existing runner still needs explicit two-tile selection/layout
+  integration before use; do not run its default directory matrix.
+- The declaration is frozen in campaign identity and retained in validation
+  manifests. Horizontal CRS is assigned to in-memory lidR catalogs and
+  propagated via supported `lasR::set_crs()` stages; vertical datum/XYZ units
+  remain source provenance rather than fabricated file metadata. Existing
+  conflicting file CRS is refused. No coordinates are transformed.
+- Small synthetic execution exposed lasR's automatic creation of missing LAX
+  indexes beside inputs. The newly declared-input path now requires existing
+  nonempty indexes before lasR execution, failing explicitly instead of
+  modifying protected inputs. The backup already has indexes. Tests verify
+  unchanged source bytes **and directory inventories**, including indexes.
+- Surface acceptance is limited to basic R terrain/DSM outputs: documented
+  lasR surface/lidR DSM extent differences up to **one cell per edge**, and
+  R surface occupied-cell/NoData differences. CRS, resolution/alignment, bands,
+  inventory, finite coverage in the overlapping core and shared-cell numerical
+  tolerances remain enforced. Reports retain extent deltas, mask differences
+  and compared-value counts. Entirely disjoint occupied populations explicitly
+  record **no possible numerical comparison**. Saved outputs are not cropped,
+  resampled or repaired; only aligned overlap is compared in memory.
+- Such outputs are `accepted_exception`, not `passed`. Successful eligible
+  attempts resume and enter descriptive timing/utilization summaries, with
+  `n_accepted_exception` shown in CSV/HTML. `validated_success` remains false
+  and `n_comparable` excludes them. Completion requires an immutable validation
+  report and the frozen acceptance opt-in. Errors, execution/reference warnings,
+  corrupt/missing products, larger/misaligned extents, absent finite overlap and
+  shared-cell numerical errors still fail.
+- With `diagnostic_lasR = TRUE`, the three previously blocked lasR calls are
+  runnable and labeled `diagnostic_only`. Validation errors remain failed;
+  otherwise diagnostic outcomes remain unverified, never passed/eligible
+  comparisons or timing samples. Complex outputs use their existing required
+  artifact definitions; the normalization defect is not claimed resolved.
+- Updated directly related configuration guidance, WORKLOADS.md, report
+  templates and regression coverage. New `test-chat11-policies.R` cases use
+  only tiny temporary synthetic indexed clouds; no real pilot input payloads
+  were processed. Focused warnings-as-errors checks passed **60 expectations,
+  zero failures/warnings/skips**. The saved local configuration passed six
+  additional testthat assertions without starting work.
+- **Full-suite verification passed against the final code:**
+  `LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData TMPDIR=/data/nvme2/LidarSpeedTestWorkingDir/chat11-diagnostics Rscript --vanilla tests/testthat.R`
+  exited zero after **1,477.4 seconds** (about 24.6 minutes):
+  **1,986 passing expectations, zero failures/warnings/skips**. This includes
+  strict isolated restoration, unchanged recovered-file checksums/headers,
+  the new policy tests, default-strict regressions, immutable retry/resume/
+  monitoring checks and an actual eight-page synthetic-campaign Quarto render.
+  It does not certify real-input numerical equivalence or a real pilot.
+  `Rscript --vanilla R/check_environment.R` and `git diff --check` also passed.
+  Logs are `chat11-diagnostics/full-policy-suite.log`,
+  `policy-checks.log`, `local-policy-config-check.log` and
+  `policy-environment-check.log` under the approved output parent.
+- **Updated readiness:** metadata is confirmed, surface discrepancies are
+  explicitly accepted exceptions, and affected lasR calls are enabled only
+  through diagnostic opt-in. The actual two-tile pilot, its repeated/core-matrix
+  execution and review remain unrun; subset/layout integration and LAStools
+  entitlement/native acceptance remain outstanding. Known normalization NA/
+  corrupt-elevation behavior is deliberately deferred, not fixed.
+  **Not ready for an accepted full campaign.** No real campaign, data
+  preparation/download, original-input mutation, historical publication change,
+  commit or push occurred. Work remains on `dev`; `_OLD/` is untouched.
+
+### Chat 11 authorized execution/review handoff (2026-10-22)
+
+**Outcome: execution and report review completed; acceptance is blocked.**
+This supersedes the earlier paused/R-only handoffs. The user supplied a
+LAStools licence and explicitly authorized resuming execution. No Chat 12/full
+campaign was launched. Work remains uncommitted on the existing `dev` branch.
+
+- **Entitlement/provenance:** all four selected native tools' `-license`
+  queries exited zero, identified a licensee, and showed no invalid/expired
+  indication. The user confirmed entitlement. Raw licence-query output remains
+  in private local diagnostic logs, never in git, configuration or reports.
+  Version banners still say `260914 (non-profit)`; that text alone does not
+  establish licence status. Configuration records the distribution URL, local
+  archive SHA256 and non-secret user confirmation; campaign identity records
+  executable checksums and versions. Archive SHA256:
+  `479cb2e79d9b487f8b01bed6bc487f1b6496c18fa9913fa9e45446b3ea2a8db4`.
+  The URL/installation evidence is not independent cryptographic authentication
+  of the vendor distribution.
+- **Safe subset integration:** added `R/6_pilot.R` with guarded `--preflight`
+  and `--run` routes, reusing campaign/attempt/scheduling APIs. It copies only
+  `298000_5093000` and `298000_5094000` at density 1, including their existing
+  LAX indexes, from `/data/nvme1/LidarSpeedTestData` to
+  `/data/nvme2/LidarSpeedTestWorkingDir/pilot-inputs/tile_1000_density_1`.
+  The four files are unchanged byte copies, not symlinks/hardlinks or regenerated
+  inputs. Frozen-manifest/source/destination checksums and staging provenance
+  are retained in `pilot-inputs/provenance.rds` and campaign configuration.
+  Existing changed/extra files are refused, not overwritten/deleted.
+  The remaining 98 tiles are not selected. Source headers, indexes, the frozen
+  CSV and all historical data remain unchanged.
+- **Declared native metadata:** structured native calls now append horizontal
+  `-epsg 2959` and explicit `-fail` when confirmed metadata is configured.
+  This assigns CRS, not `-target_epsg` reprojection. Vertical datum/metre XYZ
+  remain source provenance, not fabricated output vertical metadata. No demo,
+  force or ignore-errors fallback was used. Native numerical acceptance is
+  still independent of supplied metadata and entitlement.
+- **Pilot-blocking validator fixes:** the first scout exposed quadratic
+  named-list lookup in large occupied-cell reference rasters. References now
+  use integer group indexes, preserving numerical behavior; a 50,000-occupied-
+  cell regression covers sparse ownership/NoData. A subsequent run exposed
+  `lidR::LAS(data)` silently requantizing buffered reference coordinates to
+  0.001 m. Reference reconstruction now retains the owning input header and
+  declared CRS, preserving the recovered 0.0001-m coordinates. A sub-millimetre
+  regression checks exact XYZ preservation. Input compliance warnings remain
+  failures; neither fix changes benchmark algorithms or hides bad data.
+- **Interrupted exploratory history:** `petawawa-pilot-scout-20261022`
+  retains 12 completed attempts and one interrupted attempt;
+  `petawawa-pilot-20261022` retains 28 completed attempts and one interrupted
+  attempt. Their active scratch directories were moved into each campaign's
+  `interrupted-scratch/`, and only their resolved empty execution locks were
+  removed after their owned processes stopped. An explicit testthat check
+  confirmed the campaign reader refuses incomplete scout history. These
+  campaigns are not pooled into the final report and cannot resume against
+  the subsequently corrected code identity.
+- **Final frozen campaign:** `petawawa-pilot-20261022-v2` selects all nine
+  task IDs at cores 1/2, tools lidR/lasR/LAStools, one warm-up and three
+  measurement repetitions: **216 unique scheduled slots**, including
+  unsupported combinations. It retains seed 20261022, balanced serial tool
+  dispatch, 5-second cooldown, uncontrolled-warm cache, configured thread
+  budgets and Linux whole-machine monitoring. Confirmed EPSG:2959/EPSG:5713
+  metre metadata, bounded surface acceptance and diagnostic lasR normalization/
+  both complex pipelines are frozen in the manifest. No dependency/runtime
+  upgrade or NA filtering/repair was performed.
+- **Identity-guard incidents:** dispatch stopped before starting new attempts
+  after 146 and 186 completed slots because a `lascanopy64 -version` string
+  temporarily differed from the frozen identity. The anomalous strings were
+  not retained by the original guard; their cause remains unknown. Binary
+  identities/current version strings matched before continuation. Fifty
+  subsequent standalone queries and 155 additional privately captured version
+  queries all matched. The guard was not weakened or bypassed. The external
+  continuation driver retained failures and dispatched only unattempted frozen
+  slots; it did not repeat all failed work or warm-ups. Later instrumentation
+  records version-query results without changing their values or workload calls.
+- **Retry/resume:** an explicit retry of measurement slot 94
+  (`pixel_metrics_1a`, lidR, one core, repetition 1) added a second immutable
+  failed-validation attempt. Resuming the already completed unsupported lidR
+  `complex_task1` slot added none. Final history therefore contains **217
+  completed attempts**, covering every frozen schedule index. Real retry was
+  failed-to-failed, and real completion resume was of an unsupported slot:
+  there is no claim of a real validated-success resume. Failure-to-success and
+  passed/accepted-exception resume remain covered by synthetic regression tests.
+- **Actual outcomes:** 161 executions succeeded, eight failed and 48 were
+  unsupported skips. The eight execution failures are one-core native canopy
+  metric calls returning status 1 after height-cutoff warnings; corresponding
+  two-core calls returned zero despite warnings. These are not recorded as
+  licensing failures or silently forced to succeed. Validation is **169 failed,
+  48 not run**, with zero passed or accepted-exception attempts. All **169
+  executed attempts have available, full-interval monitoring**, including
+  failures; skips have monitoring not run. Monitoring is whole-machine CPU/RAM,
+  not process-tree usage or certified cold-cache behavior.
+- **Correctness/acceptance blockers:** recovered payloads emit zero/invalid
+  return-number/count compliance warnings, including return numbers exceeding
+  number of returns. Real shared-cell numerical and geometry/support differences
+  also remain. The bounded approved surface policy does not waive compliance
+  warnings or shared-value errors. Deferred lasR normalization/complex NA or
+  corrupt-elevation behavior remains diagnostic, not repaired or accepted.
+  Native warning/exit behavior and numerical/ownership conventions still need
+  investigation. Consequently **zero measurements are eligible or comparable**;
+  all report sections explicitly say no eligible measurements. Input metadata
+  and installed licensing no longer block execution, but they do not resolve
+  these acceptance failures.
+- **Timings/variability review:** a separate
+  `pilot-raw-diagnostic-timings.csv` retains 40 execution-success groups with
+  three selected measurement repetitions each. Raw group means range from
+  approximately 1.379 to 12.559 seconds and sample SDs from 0.0029 to 1.460
+  seconds. They are unaccepted diagnostic observations, not valid speedups,
+  eligible benchmark summaries or evidence of full-campaign readiness.
+  `pilot-attempt-review.csv` retains exclusions, superseded retry, contract
+  labels, monitoring and timings; `pilot-review.rds` records outcome counts and
+  retry/resume evidence. Native/core status differences must not be interpreted
+  as a matched performance comparison.
+- **Report:** actual independent Quarto rendering produced eight HTML pages at
+  `/data/nvme2/LidarSpeedTestWorkingDir/reports/campaigns/petawawa-pilot-20261022-v2/report-9e45241319e19/_site/index.html`.
+  The campaign-local build retains raw snapshots/checksums, intermediates,
+  exclusions and build receipts; no historical RDS/PNG copying or published
+  `docs/` overwrite was used. Final primary products follow the existing
+  cleanup policy and were removed from scratch after validation, even for
+  failed validation: saved validation reports/checksums are not a complete
+  product archive. Investigating those products later requires an explicit
+  diagnostic rerun/retention decision.
+- **Verification passed against final execution code:** focused reference/
+  metadata/staging/native-process regressions passed before the final run.
+  The full command below exited zero in **1,494.6 seconds** (about 24.9 minutes),
+  with **2,032 passing expectations, zero failures/warnings/skips**:
+
+  ```sh
+  LIDAR_RECOVERED_INPUT_ROOT=/data/nvme1/LidarSpeedTestData \
+  LIDAR_CHAT11_PILOT_ROOT=/data/nvme2/LidarSpeedTestWorkingDir/reports/campaigns/petawawa-pilot-20261022-v2 \
+  TMPDIR=/data/nvme2/LidarSpeedTestWorkingDir/chat11-diagnostics \
+  Rscript --vanilla tests/testthat.R
+  ```
+
+  This includes isolated environment restoration, unchanged recovered bytes/
+  headers, 25 opt-in read-only assertions over the real campaign/report,
+  precision/scalability regressions, failure/retry/resume/monitoring cases and
+  another actual synthetic-campaign report render. Environment checks and
+  `git diff --check` passed. Protected-file diffs confirm `docs/`, the frozen
+  input manifest and `ALS_tiles.gpkg` unchanged. Pilot scratch is empty and no
+  pilot workload/monitor remains running. Logs under `chat11-diagnostics/`:
+  `pilot-reference-checks.log`, `pilot-v2-execution.log`,
+  `pilot-v2-continuation.log`, `pilot-v2-continuation-2.log`,
+  `pilot-v2-review.log`, `full-pilot-suite.log` and
+  `pilot-final-environment.log`; licence/version raw diagnostics stay private.
+- **Readiness/stop:** Chat 11 execution and review are complete, but its
+  accepted-output gate is not met. **Not ready for an accepted full campaign.**
+  Do not launch Chat 12 or treat diagnostic timings as publication results.
+  All operational outputs remain under the approved working parent; historical
+  inputs/publication and user-owned `_OLD/` are untouched. No commit or push.
