@@ -56,3 +56,6 @@ rsconnect/
 
 # Machine-local benchmark paths/settings
 /benchmark.local.R
+
+# Archived local files
+/_OLD/

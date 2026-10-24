@@ -491,7 +491,390 @@ and artifact requirements are retained, not claimed working. No complex
 end-to-end workload is currently runnable. Basic DSMs use original elevations,
 not canopy heights; summed independent timings are not a sequential pipeline.
 
-## Petawawa input preparation (Chat 4)
+## Fresh Petawawa download, repair and preparation
+
+`R/prepare_fresh_data.R` is a **new preparation method**, not a reconstruction
+of which historical repair was actually used. The current method uses a new,
+empty destination, for example
+`/data/nvme2/LidarSpeedTestWorkingDir/input_data_no_synthetic`; the previous
+`input_data` run and recovered inputs remain untouched.
+No real download or preparation was run while implementing it.
+Sourcing the script only defines functions.
+
+**Current policy (`fresh-petawawa-v4`): discard source synthetic points
+before decoding, using the native `-drop_synthetic` filter.** Do not resume the
+old v2 full run with this policy: use a separate local configuration and a new,
+empty root, then prepare and verify a new pilot before full preparation.
+Old repaired/prepared products cannot be reused because their point population
+and density reference may differ. Frozen-policy guards deliberately reject
+in-place upgrades, failed-preparation retries and parallel transitions from v2.
+Existing outputs, receipts and the downloaded archive are not deleted.
+V4 additionally discards source points with **Z < 0**, with individual removal
+audits, before any other repair. Z = 0 is retained. This is explicit
+user-authorized curation, not a claim that negative elevation is universally
+invalid. An interrupted synthetic-filtered v3 full run can use the narrowly
+guarded recovery below; another data root or download is not required.
+
+Independent inspection of tiny uncompressed LAS 1.2/format-1 records
+confirms the writer preserves the complete flag vectors. The first divergence
+is inside the installed **rlas 1.9.5 native reader**, before lidR construction:
+its `C_reader` can return one flagged point from 138 correctly flagged records.
+In `SMART_POPULATOR_BOOL`, `auto fill_val = name[0]` retains a `vector<bool>`
+proxy across `reserve()`, which invalidates it. An isolated C++ AddressSanitizer
+reproducer confirms the use-after-free; taking a Boolean value before reserve
+fixes that reproducer, **not the installed dependency**. The lost 137-point
+prefix also explains the 376-versus-239 densified result. See the
+[rlas 1.9.5 source](https://github.com/cran/rlas/blob/c3f5ad7b7d078decfb401eaa0a2c1987c443cb76/src/rlasstreamer.cpp)
+and the latest development-plan handoff for evidence and bounded checks.
+
+The filter examines native point flags before the affected R Boolean-vector
+population, rather than subsetting an already decoded `Synthetic_flag` column.
+Prepared reads do not filter: any remaining synthetic flag or synthetic read
+diagnostic is fatal, so validation cannot silently hide flagged outputs.
+An entirely synthetic source fails as empty. Tiny mixed-flag worker and
+independent disk-bit checks cover this workaround; the installed dependency
+has **not** been repaired or changed. The same upstream macro handles other
+Boolean flags, so this is not a general dependency fix or proof of real-data
+readiness. Preserve the old run for later recovery after an explicit dependency
+fix/build-identity transition; do not edit frozen receipts.
+
+Copy `fresh-data.example.R` to a trusted file outside git, for example
+`/data/nvme2/LidarSpeedTestWorkingDir/fresh-data-no-synthetic.local.R`. Before the first
+command, fill in `metadata_confirmation` and the non-secret `tool_license`
+confirmation, and review the native tool paths. Never put licence keys in
+configuration or provenance. Confirm the original delivery's **EPSG:2959,
+EPSG:5713 and metre XYZ**; a conflicting embedded horizontal CRS is an error,
+not permission to reproject. The vertical declaration is retained in provenance;
+it is not a vertical transformation or proof supplied by the GeoPackage.
+The output parent and protected historical root must exist. The new root must
+be absent or empty; existing unrelated files and linked/overlapping roots are
+refused. Configuration is frozen on initialization, including download settings.
+
+**Run these commands yourself; they can take substantial time, RAM and disk.**
+Use the restored Linux/R 4.6.1 project environment. Download requires the `curl`
+executable and uses the original approximately 18 GB NFIS ZIP URL recovered
+from the historical script, with HTTPS redirects, resumable `.part` transfer,
+failure logs, ZIP inventory checks and a checksum receipt. Its live availability
+and contents were not reverified here. Optional `archive_md5` is only meaningful
+when obtained independently; a locally calculated MD5 is a content identifier,
+not proof of authenticity.
+
+```sh
+CONFIG=/data/nvme2/LidarSpeedTestWorkingDir/fresh-data-no-synthetic.local.R
+Rscript --vanilla R/prepare_fresh_data.R --download "$CONFIG"
+Rscript --vanilla R/prepare_fresh_data.R --pilot "$CONFIG"
+Rscript --vanilla R/prepare_fresh_data.R --verify-pilot "$CONFIG"
+
+# After reviewing the pilot data-QC receipts, explicitly request all 100 tiles:
+Rscript --vanilla R/prepare_fresh_data.R --full "$CONFIG"
+Rscript --vanilla R/prepare_fresh_data.R --verify-full "$CONFIG"
+```
+
+The pilot extracts only `298000_5093000` and `298000_5094000`. The full stage
+requires the successful pilot receipt, rechecks its files and refuses changed
+implementation/tools/runtime. Both prepare **1, 2, 5, 10, 20 and 50 points/m2**.
+Only selected members are extracted, one tile per worker; the original ZIP stays
+immutable. Extra/missing/ambiguous tile matches or unsafe ZIP paths are errors.
+Repair and preparation each use **eight tile workers by default**, capped to the
+number of selected tiles (two for the pilot). Each preparation worker processes
+its tile's six densities sequentially. OpenMP, data.table and lidR threads are
+capped at one per worker; native/index-query subprocesses are supervised, so
+eight workers is not a limit of eight operating-system processes.
+Override the operational budget without changing the frozen configuration:
+
+```sh
+Rscript --vanilla R/prepare_fresh_data.R --full "$CONFIG" --cores 8
+# Use --cores 1 for serial operation, or a smaller budget if RAM/storage is tight.
+```
+
+Download, checksum/preflight work, pilot re-verification and final verification
+remain serial. Eight dense tiles can require substantial aggregate memory and
+scratch space; this is not an adaptive RAM-based scheduler or a guaranteed
+eightfold speedup. The benchmark runner's own core settings are unchanged.
+The preparation lock prevents another preparation invocation, not unrelated
+machine activity. After a crash, inspect partial outputs and verify no
+preparation workers or native children remain before removing that specific
+empty stale lock. Partial/unreceipted tiles are refused during ordinary resume;
+the explicit interrupted-full recovery below archives them instead.
+
+The user-approved repair (`fresh-petawawa-v4`) first discards source points
+whose LAS synthetic flag is set, using native filtering before R decoding.
+It then removes negative-Z source points before invalid-return, duplicate,
+ground-XY or pulse cleanup, recording `drop_negative_Z`, filtered-input row
+IDs and original Z in the action audit. This prevents a negative ground point
+from displacing a valid ground return at the same XY. An entirely negative
+retained source fails rather than yielding empty products.
+It preserves the original coordinate
+scales, offsets and
+retained XYZ values: **no 0.01 m rounding**. It drops zero/out-of-range legacy
+return fields, drops repeated XYZ locations retaining the first source row,
+then retains the **lowest-Z class-2 ground point at each repeated XY** (first
+source row on ties), followed by the highest-Z point for repeated pulse/return
+labels (first row on ties). Ground cleanup does not change elevations or remove
+non-ground points just because they share XY. Its audit records each removed
+row's original Z, the chosen ground source-row ID and its Z.
+Pulses use `PointSourceID + gpstime`, plus scanner channel when present.
+Return counts are raised to the maximum reported count/return label in that
+group; valid return labels are not renumbered, and partial tiled/thinned pulses
+are not mistaken for complete pulses. These are explicit curation assumptions,
+not recovery of unknown physical returns. Remaining QC defects still cause a
+failure rather than an undocumented fix.
+Each repaired tile has a sidecar with source-member/checksum/original header,
+read warnings, native filter, original header point count, retained count and
+discarded synthetic count. Repair actions and retained-row mappings use
+**row IDs in the filtered input**, not original archive row numbers; native
+filtering does not produce individual discarded-row IDs. Later repair removals
+are audited separately. Density counts and area use the repaired, filtered source.
+
+Each density gets `round(target * repaired source area)` points. Thinning samples
+points without replacement. Densification retains the original points and adds
+seeded copies with XY jitter up to 0.25 m, rejecting collisions and coordinates
+outside the repaired source bounds, and Z noise drawn from
+`+/-seq(0.10, 0.50, 0.05)` m on the original coordinate grid. Copied GPS-time
+ranges are disjoint. Classification and other attributes/flags are preserved;
+**synthetic derivation is labeled in the preparation manifest**, not by changing
+the LAS synthetic flag. Distribute those provenance files with the data; these
+copies are not additional observed laser returns. Z perturbation also applies
+to copied ground points and is not a model of new ground-truth measurements.
+This differs deliberately from historical Z-only densification and its rounded
+source-density multiplier.
+
+Outputs are under `pilot/` or `full/`: repaired sources and action sidecars in
+`repaired/`, then benchmark LAZ/LAX files in
+`prepared/1_org/tile_1000_density_<density>/`, preparation identity in
+`prepared/preparation.rds`, and `ready.rds` only after all checks pass.
+Checks cover finite/valid return attributes, warning/error-free `las_check()`,
+non-collinear terrain support, named-tile bounds, confirmed CRS, exact target
+counts, persisted full point records, original precision/format, sorting,
+LAX signature plus an isolated lidR/rlas native indexed query against decoded
+reference records,
+and final inventory/checksums. Verification recomputes checksums and rereads
+every prepared cloud; it is not a cheap existence check. The seed schedule is
+stable across pilot/full: base seed + 100 * density position (zero-based) +
+tile position in the sorted 100-tile inventory (one-based).
+
+The LAS synthetic flag marks points according to their producer, not necessarily
+this workflow. V3 deliberately excludes those source points without clearing
+their flags or changing the archive. Retained records must have complete,
+nonmissing logical synthetic flags, all FALSE. Source preflight, round-trip
+validation and isolated index queries use the same strict checked reader;
+prepared reads reject every warning. Raw reads retain non-synthetic diagnostics
+for the approved repair audit, but reject every synthetic diagnostic.
+All `las_check()` warnings/errors still fail.
+
+Keep the archive, source/action receipts, manifests, process logs and final
+checksums. Resume accepts only the same configuration, implementation, archive,
+tools/runtime and intact completed outputs. Failed transfers retain `.part`;
+failed repair diagnostics stay in the stage directory. Extraction scratch is
+cleaned safely. Budget for the ZIP, repaired copies, all six density variants,
+native sort scratch and several in-memory copies of a dense tile **per active
+worker**. Parallel executions retain worker stdout/stderr under
+`execution-<unique-id>/repair/` and `prepare/` in the stage directory, plus
+start/finish receipts recording the requested/effective worker budget and
+implementation. New artifact sidecars identify their execution; existing
+completed sidecars remain unchanged. A worker failure stops active siblings
+and their children rather than leaving the rest of the pool running. At a full
+1 km2 per tile the six targets total approximately **176 million points for
+the pair, or 8.8 billion for 100 tiles**, before scratch/repaired-source overhead.
+
+### Resuming the v3 full repair after the negative-elevation stop
+
+The reported failure for `309000_5091000` (`1 points below 0`) occurred during
+repair QC, before the repaired tile was published. The user authorized dropping
+negative-Z source points. Use the **same** synthetic-filtered configuration,
+root and downloaded archive; do not edit existing identities or receipts:
+
+```sh
+CONFIG=/data/nvme2/LidarSpeedTestWorkingDir/fresh-data-no-synthetic.local.R
+Rscript --vanilla R/prepare_fresh_data.R --resume-negative-z-full "$CONFIG" && \
+Rscript --vanilla R/prepare_fresh_data.R --verify-full "$CONFIG"
+```
+
+Defaults remain eight tile workers with one native thread each; append
+`--cores N` to the preparation command to change the budget.
+Before resuming, confirm no prior workers/native children remain. A stale lock
+must be inspected explicitly, never removed automatically.
+
+This command supports only the exact prior v3 implementation pair
+`3d79583687c92ed0cd74afab1defbbcb` / `b0a94be880119b1df463a011fc1b76a2`,
+with unchanged other implementation files, configuration, archive, tools and
+runtime. It requires the verified pilot and an interrupted **full repair**
+stage without full prepared products/readiness. It records the explicit
+v3-to-v4 transition in `negative-z-transition.rds` and the execution transition
+in `full/parallel-transition.rds`, preserving the old root/stage identities,
+pilot manifest/readiness and completed repair bytes/sidecars. Transition
+receipts bind the old frozen-file hashes and the new implementation.
+
+The pilot is reverified, and completed repairs are checksum/QC-checked before
+reuse. Old repair action audits must show **no negative source Z**: negative
+points removed by an earlier rule could have affected ground/pulse selection,
+even if the final old repair has no negatives. Missing/ambiguous audits or such
+negative removals therefore stop reuse rather than claiming equivalent output.
+New repair receipts identify v4 explicitly and retain their negative-Z audit.
+Unreceipted partial products and interrupted owned scratch are archived, not
+deleted. The failed/missing repairs are generated under v4; existing completed
+repairs and the pilot keep their original provenance. Density area/counts
+derive from each repaired source as before. Ordinary `--full` works after a
+successful explicit transition; repeat the explicit command if another
+interruption leaves partial products.
+
+### Restarting the first failed v1 pilot without another download
+
+**Historical v1-to-v2 instructions only.** V3's source filtering is a different
+policy and requires a new root; the current script refuses this upgrade.
+
+If v1 stopped on repeated ground XY/different Z **before writing any repaired
+or prepared files**, keep the existing configuration and download. After updating
+the script, explicitly run:
+
+```sh
+CONFIG=/data/nvme2/LidarSpeedTestWorkingDir/fresh-data.local.R
+Rscript --vanilla R/prepare_fresh_data.R --upgrade-failed-pilot "$CONFIG"
+Rscript --vanilla R/prepare_fresh_data.R --pilot "$CONFIG"
+Rscript --vanilla R/prepare_fresh_data.R --verify-pilot "$CONFIG"
+```
+
+The upgrade archives the old pilot directory and its root identity under
+`pilot-failed-v1-<unique-id>/`, retaining the failure/read diagnostics, then
+records the approved v2 policy. It neither downloads nor alters the ZIP.
+It refuses changed configuration, active/stale execution locks, retained scratch,
+any repaired/prepared files, a successful pilot or a full stage. Those cases
+require inspection/a new root, not deletion of manifests or bypassing identity
+guards. Only the failed v1-to-v2 ground-repair transition is supported.
+
+### Retrying the failed v2 preparation after the index-query fix
+
+The installed `lassort64` can reject a filtered spatial query because it expects
+the unfiltered header count. Its documented `-extra_pass` did not resolve this
+in the tested build. This was an error in our validation route, not evidence
+that a spatial subset should contain every input point.
+The query now runs through `lidR::readLAS(filter = "-inside ...")` in a supervised
+R subprocess using the native rlas reader. All R warnings and captured native
+warning/error diagnostics fail the check, including index failures followed by
+scan fallback. Query counts, attributes and coordinates must still match the
+full decoded reference. No native failure is reclassified as success.
+
+For a failed v2 pilot with completed repaired tiles and no readiness receipt,
+the following is **historical v2-only recovery documentation**, not a way to
+switch to v3. The current v3 policy refuses that root; use a new root instead.
+Under the matching v2 policy, the explicit preparation retry was:
+
+```sh
+CONFIG=/data/nvme2/LidarSpeedTestWorkingDir/fresh-data.local.R
+Rscript --vanilla R/prepare_fresh_data.R --retry-failed-preparation "$CONFIG"
+Rscript --vanilla R/prepare_fresh_data.R --verify-pilot "$CONFIG"
+```
+
+This is potentially long-running: it verifies the archive and repaired
+bytes/receipts/QC, archives the prior `prepared/` tree and stage identity under
+`pilot-preparation-failed-<unique-id>/`, then regenerates **all** density variants.
+The repaired source files and ZIP stay in place and unchanged. Provenance links
+the reused repairs to the archived preparation and its original implementation.
+Changed configuration, repair policy, inputs, tools/runtime, retained scratch,
+a successful pilot or a full stage are refused. Do not delete or edit frozen
+manifests to make an ordinary `--pilot` call bypass identity checks.
+
+### Resuming the stopped full run with parallel workers
+
+For the full run stopped under the known preceding serial implementation, or
+the initial parallel implementation that rejected valid source synthetic flags,
+keep the same configuration, archive, verified pilot and completed outputs.
+**Historical v2 recovery, not a v2-to-v3 migration.** V3 requires a new root and
+refuses reuse of these products. For the old v2 run, do not execute this
+recovery until the dependency and all mixed-flag checks have been fixed and the
+frozen runtime/build transition explicitly authorized.
+After confirming no preparation process remains and resolving any stale empty
+lock as described above, run manually:
+
+```sh
+CONFIG=/data/nvme2/LidarSpeedTestWorkingDir/fresh-data.local.R
+# Defaults to eight workers; optionally append --cores N.
+Rscript --vanilla R/prepare_fresh_data.R --resume-parallel-full "$CONFIG" && \
+Rscript --vanilla R/prepare_fresh_data.R --verify-full "$CONFIG"
+```
+
+This explicit transition accepts only these known preceding code identities
+(or the current code), with unchanged policy, configuration, archive/members,
+tools and runtime. Unknown implementation changes are refused. It preserves
+the original stage identity and any frozen preparation manifest, recording
+old/new identities separately in `parallel-transition.rds`. Completed files and
+their receipts are retained and checked; unreceipted LAZ/LAX files and interrupted
+`lidar-run-*` scratch move to the new execution's `interrupted/` archive, not
+deletion. Missing products are generated with the unchanged per-tile/density
+seed schedule and full QC. No redownload or unnecessary re-repair is required.
+After this transition, ordinary `--full "$CONFIG"` resumes with the same code
+and may use a different `--cores` budget. A completed full stage is not a valid
+target for the explicit interrupted-run command. Do not edit frozen manifests
+or delete partial products to force reuse.
+
+`data-qc-passed` does **not** mean cross-tool numerical acceptance or resolution
+of lasR/native workload defects. A new benchmark pilot and campaign ID are
+still required. Do not use `R/6_pilot.R` unchanged: it is checksum-bound to the
+old recovered files. The default runner's `benchmark_data/1_org` paths also do
+not match these new `prepared/1_org` paths; review dataset mapping before any
+separately authorized benchmark run. Retain the source attribution and
+Open Government Licence - Canada terms described below.
+
+Short checks use only temporary synthetic ZIP/LAS fixtures, with real
+sampling/repair/LAS IO and LAX construction but stubbed LAStools sort/query
+processes. They require `zip` for the ZIP fixture (explicit skip if absent);
+production download/extraction does not require that executable. No native
+LAStools correctness, original-archive acceptance or full-scale memory claim is
+established by these tests:
+
+```sh
+timeout 90s Rscript --vanilla -e \
+  'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "^fresh-data$|^chat4-data$", stop_on_failure = TRUE)'
+```
+
+An additional opt-in `fresh-native` case uses just 225 synthetic points with
+the installed `lassort64`/`lasindex64`, reproduces the failing filtered count,
+and checks the supervised-reader replacement and corrupt-index rejection:
+
+```sh
+LIDAR_FRESH_LASTOOLS_PATH=/home/ptompals/opt/lastools/bin \
+  Rscript --vanilla -e \
+  'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "^fresh-native$", stop_on_failure = TRUE)'
+```
+
+Without that environment variable this native case skips explicitly. It does
+not establish acceptance of real inputs or all native benchmark workloads.
+
+Bounded parallel tests check real process overlap, single-thread limits,
+seed/RNG preservation, thread restoration, failure cleanup, partial-file
+archiving and the guarded full-stage transition. A separate opt-in native case
+repairs two 225-point synthetic tiles in isolated workers and prepares one
+density with actual sort/index/query tools, comparing complete point records
+against the deterministic reference. Those native fixtures deliberately carry
+138 source synthetic flags; native filtering discards exactly those records
+before repair. One additional negative-Z source point is removed and audited;
+the filtered index query must match the flag-free, nonnegative reference:
+
+```sh
+timeout 60s Rscript --vanilla -e \
+  'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "^fresh-parallel$", stop_on_failure = TRUE)'
+timeout 60s Rscript --vanilla -e \
+  'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "^fresh-negative-z$", stop_on_failure = TRUE)'
+timeout 60s env LIDAR_FRESH_LASTOOLS_PATH=/home/ptompals/opt/lastools/bin \
+  Rscript --vanilla -e \
+  'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "^fresh-parallel-native$", stop_on_failure = TRUE)'
+```
+
+The tiny `^fresh-flags$` cases exercise zero/one/138/all flagged source points,
+exact native-filtered record retention, repeated reads, empty-source rejection,
+flag-free repair/thinning/densification and fatal synthetic diagnostics/flags.
+Independent disk-bit cases retain source/variant vector and mutation checks,
+with GPS-time record matching. The fixture decoder checks
+the signature, version, header size, data offset, point format/record length
+and count/file size before inspecting the legacy classification flag bit.
+These mixed-flag cases verify the workaround, not a fix to the dependency:
+
+```sh
+timeout 45s Rscript --vanilla -e \
+  'source("renv/activate.R"); testthat::test_dir("tests/testthat", filter = "^fresh-flags$", stop_on_failure = TRUE)'
+```
+
+## Petawawa input preparation (Chat 4, historical-method route)
 
 **Historical preparation was recovered**, not invented, from the user-supplied
 `_OLD/R/2_data.R`, `99_IncreaseDensity.R`, and `99_repairPetawawaALS2012.R`.
@@ -857,6 +1240,73 @@ LIDAR_CHAT11_PILOT_ROOT=/data/nvme2/LidarSpeedTestWorkingDir/reports/campaigns/p
 TMPDIR=/data/nvme2/LidarSpeedTestWorkingDir/chat11-diagnostics \
 Rscript --vanilla tests/testthat.R
 ```
+
+## Full campaign (Chat 12): blocked, not executed
+
+The Chat 11 accepted-output prerequisite is **not met**. The saved pilot has
+169 failed validations and 48 unsupported/not-run validations, with zero eligible
+or comparable measurements. Its report is diagnostic, not publishable benchmark
+evidence. Requesting Chat 12 preparation does not waive those failures.
+
+Before freezing or executing a full campaign:
+
+- Resolve the input return-field compliance, shared-cell numerical/geometry,
+  native warning/exit and deferred lasR normalization/complex blockers; rerun and
+  review an explicitly authorized small pilot with accepted outputs.
+- Obtain explicit approval of the input inventory/densities, task/tool/core
+  matrix, repetitions/warm-ups, compute duration, scratch/report/archive storage
+  budget and output-retention policy. The two-tile pilot approval is not approval
+  for the remaining tiles or a full campaign.
+- Review `benchmark.local.R` (or `LIDAR_BENCHMARK_CONFIG`), dataset paths in
+  `R/0_setup.R` and selection `B` in `R/3_runBenchmarks.R` against that approval.
+  **The current runner selects only `pixel_metrics_2`, not a full campaign.**
+  Its default dataset paths also differ from the staged pilot layout. Do not
+  run it as-is or assume uncommenting the entire matrix is authorized.
+- Freeze the final execution sources, lockfile/runtime/native tools, approved
+  inputs, hardware/storage and measurement policy before the first attempt.
+  For uncommitted work, retain an exact source snapshot and base revision/patch
+  privately alongside the manifest; a revision alone cannot restore dirty code.
+  Keep dependencies, sources and inputs unchanged throughout execution.
+
+The following are **manual, potentially long-running commands**, not commands
+executed during this Chat 12 preparation. Use them only after the gates above
+and configuration/selection review, from the repository root. Replace the
+example configuration path and campaign ID with the approved values:
+
+```sh
+# Full regression suite (the previous run took about 25 minutes).
+Rscript --vanilla tests/testthat.R
+Rscript --vanilla R/check_environment.R
+
+# Execution fingerprints inputs/environment and then runs the reviewed selection.
+LIDAR_BENCHMARK_CONFIG=/path/to/approved-full-config.R \
+LIDAR_CAMPAIGN_ID=approved-full-campaign \
+  Rscript --vanilla -e 'source("renv/activate.R"); source("R/3_runBenchmarks.R")'
+
+# Only after execution has stopped; use reports_path from the approved config.
+LIDAR_REPORTS_PATH=/path/to/reports \
+LIDAR_CAMPAIGN_ID=approved-full-campaign \
+  Rscript --vanilla R/5_report.R
+```
+
+Reinvoking execution is not a no-op: warm-ups rerun and failed measurements
+retry, retaining immutable attempts. Identity changes require a new ID.
+Do not bypass identity guards or delete interrupted attempts to compile.
+
+After review, archive the entire campaign directory (manifest, all attempts,
+logs, validation/monitoring files, report builds and their receipts), the exact
+source snapshot and restoration instructions. Retain checksums of the archive
+and verify a separate restored copy before publication. This is a private
+archive until checked for machine-local information and licence diagnostics;
+never include licence secrets. Current cleanup removes primary products even
+after failed validation, so this is **not** a complete output-product archive.
+Any requirement to preserve those products needs an explicit retention decision
+before execution, not a claim that checksums reconstruct deleted outputs.
+
+Review coverage of the approved frozen schedule, all failures/retries/exclusions,
+accepted exceptions versus comparable results, sample counts and uncertainty.
+Publish only with separate approval; keep historical `docs/` unchanged until
+then. No new accepted results or completed full-campaign archive exist yet.
 
 ## Tests
 

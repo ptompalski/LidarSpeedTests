@@ -26,7 +26,7 @@ petawawa_process <- function(executable, args) {
   result
 }
 
-petawawa_preflight <- function(config, full = FALSE) {
+petawawa_preflight <- function(config, full = FALSE, read = lidR::readLAS) {
   required <- c("source_root", "output_root", "source_citation", "license",
                 "crs", "repaired", "repair_provenance", "lastools_path",
                 "tool_license", "executables", "tiles", "seed")
@@ -93,7 +93,7 @@ petawawa_preflight <- function(config, full = FALSE) {
   config$output_root <- output
   config$crs <- crs$wkt
   for (i in seq_along(files)) {
-    petawawa_validate_source(lidR::readLAS(files[i]), selected[i], config$crs)
+    petawawa_validate_source(read(files[i]), selected[i], config$crs)
   }
   list(
     schema = 1L, method = "seeded-recovered-petawawa-v1", config = config,
@@ -201,8 +201,8 @@ petawawa_variant <- function(las, density, seed) {
   result
 }
 
-petawawa_validate_output <- function(path, expected) {
-  actual <- lidR::readLAS(path)
+petawawa_validate_output <- function(path, expected, read = lidR::readLAS) {
+  actual <- read(path)
   if (is.null(actual) || lidR::npoints(actual) != lidR::npoints(expected) ||
       !identical(sort(names(actual)), sort(names(expected))) ||
       !isTRUE(sf::st_crs(actual) == sf::st_crs(expected))) {
@@ -250,7 +250,11 @@ petawawa_save <- function(value, path) {
   if (!file.rename(temporary, path)) stop("Cannot publish preparation metadata: ", path)
 }
 
-petawawa_prepare_tile <- function(plan, row, density, stream) {
+petawawa_prepare_tile <- function(plan, row, density, stream,
+                                 variant = petawawa_variant,
+                                 validate = petawawa_validate_output,
+                                 validate_index = NULL, execution = NULL,
+                                 read = lidR::readLAS) {
   config <- plan$config
   folder <- file.path(config$output_root, "1_org",
                       paste0("tile_1000_density_", density))
@@ -277,20 +281,21 @@ petawawa_prepare_tile <- function(plan, row, density, stream) {
   owner <- benchmark_scratch_create(config$output_root, config$source_root)
   stage <- owner$path
   on.exit(benchmark_scratch_cleanup(owner))
-  las <- petawawa_validate_source(lidR::readLAS(row$path), row$tile, config$crs)
-  expected <- petawawa_variant(las, density, stream)
+  las <- petawawa_validate_source(read(row$path), row$tile, config$crs)
+  expected <- variant(las, density, stream)
   unsorted <- file.path(stage, "variant.laz")
   sorted <- file.path(stage, "sorted.laz")
   lidR::writeLAS(expected, unsorted)
   sort_log <- petawawa_process(plan$tools$path[plan$tools$name == "sort"],
     c("-i", unsorted, "-o", sorted, "-point_source", "-gps_time", "-olaz"))
-  summary <- petawawa_validate_output(sorted, expected)
+  summary <- validate(sorted, expected)
   index_log <- petawawa_process(plan$tools$path[plan$tools$name == "index"],
                                  c("-i", sorted))
   staged_index <- sub("\\.laz$", ".lax", sorted)
   if (!file.exists(staged_index) || file.info(staged_index)$size == 0) {
     stop("Index was not created: ", sorted)
   }
+  index_validation <- if (!is.null(validate_index)) validate_index(sorted, expected, plan$tools) else NULL
   record <- list(tile = row$tile, target_density = density, seed = stream,
                  source_md5 = row$md5, source_area_m2 = lidR::area(las),
                  source_density = lidR::density(las), summary = summary,
@@ -298,6 +303,8 @@ petawawa_prepare_tile <- function(plan, row, density, stream) {
                  source_bounds = sf::st_bbox(las),
                  md5 = petawawa_checksum(c(sorted, staged_index)),
                  processes = list(sort = sort_log, index = index_log))
+  if (!is.null(index_validation)) record$index_validation <- index_validation
+  if (!is.null(execution)) record$execution <- execution
   if (!file.rename(sorted, output) || !file.rename(staged_index, index)) {
     stop("Cannot publish prepared tile; inspect partial output: ", output)
   }
@@ -307,6 +314,10 @@ petawawa_prepare_tile <- function(plan, row, density, stream) {
 
 prepare_petawawa <- function(config, full = FALSE) {
   plan <- petawawa_preflight(config, full)
+  petawawa_execute_plan(plan)
+}
+
+petawawa_initialize_plan <- function(plan) {
   manifest <- file.path(plan$config$output_root, "preparation.rds")
   if (file.exists(manifest)) {
     if (!identical(readRDS(manifest), plan)) {
@@ -318,11 +329,19 @@ prepare_petawawa <- function(config, full = FALSE) {
     }
     petawawa_save(plan, manifest)
   }
+  invisible(plan)
+}
+
+petawawa_execute_plan <- function(plan, variant = petawawa_variant,
+                                  validate = petawawa_validate_output,
+                                  validate_index = NULL) {
+  petawawa_initialize_plan(plan)
   for (density in plan$densities) {
     for (i in seq_len(nrow(plan$sources))) {
       position <- match(plan$sources$tile[i], petawawa_tiles())
-      stream <- config$seed + (match(density, plan$densities) - 1L) * 100L + position
-      petawawa_prepare_tile(plan, plan$sources[i, ], density, stream)
+      stream <- plan$config$seed + (match(density, plan$densities) - 1L) * 100L + position
+      petawawa_prepare_tile(plan, plan$sources[i, ], density, stream, variant, validate,
+                            validate_index)
     }
   }
   invisible(plan)
