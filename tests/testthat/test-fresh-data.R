@@ -5,6 +5,8 @@ fresh_fixture <- function(envir = parent.frame()) {
   sys.source("R/prepare_fresh_data.R", env)
   original_prepare <- env$fresh_prepare
   env$fresh_prepare <- function(..., cores = 1L) original_prepare(..., cores = 1L)
+  original_verify <- env$fresh_verify
+  env$fresh_verify <- function(..., cores = 1L) original_verify(..., cores = 1L)
   config <- dget("fresh-data.example.R")
   config$metadata_confirmation <- "Synthetic metre fixture: EPSG:2959; vertical declaration EPSG:5713."
   config$root <- file.path(directory, "fresh")

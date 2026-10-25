@@ -41,7 +41,7 @@ fresh_release_lock <- function(lock) {
       unlink(lock, recursive = TRUE) != 0L) stop("Cannot safely release preparation lock: ", lock)
 }
 
-fresh_cores <- function(cores = 8L) {
+fresh_cores <- function(cores = 16L) {
   if (!is.numeric(cores) || length(cores) != 1L || is.na(cores) ||
       !is.finite(cores) || cores < 1 || cores != floor(cores) ||
       cores > .Machine$integer.max) stop("cores must be a positive integer.")
@@ -65,14 +65,15 @@ fresh_limit_threads <- function(envir = parent.frame()) {
   lidR::set_lidr_threads(1L)
 }
 
-fresh_map <- function(jobs, cores = 8L, logdir, execute = "fresh_dispatch") {
+fresh_map <- function(jobs, cores = 16L, logdir, execute = "fresh_dispatch") {
   cores <- min(fresh_cores(cores), length(jobs))
   if (!length(jobs)) return(invisible(list()))
   fresh_limit_threads()
   result <- vector("list", length(jobs))
   completed <- 0L
   phase <- jobs[[1L]]$phase
-  label <- if (identical(phase, "repair")) "Repair/check tiles" else "Prepare tiles"
+  label <- if (identical(phase, "repair")) "Repair/check tiles" else
+    if (identical(phase, "verify")) "Verify tiles" else "Prepare tiles"
   progress <- cli::cli_progress_bar(name = label, total = length(jobs),
     auto_terminate = FALSE)
   on.exit(cli::cli_progress_done(id = progress,
@@ -133,6 +134,7 @@ fresh_map <- function(jobs, cores = 8L, logdir, execute = "fresh_dispatch") {
 
 fresh_dispatch <- function(job) {
   if (job$phase == "repair") return(fresh_repair_tile(job))
+  if (job$phase == "verify") return(fresh_verify_tile(job))
   if (job$phase != "prepare") stop("Unknown preparation worker phase.")
   for (density in job$plan$densities) {
     position <- match(job$row$tile, petawawa_tiles())
@@ -241,7 +243,8 @@ fresh_upgrade_negative_z <- function(root, previous, identity) {
                 file.path(root, "negative-z-transition.rds"))
 }
 
-fresh_root <- function(config, upgrade_failed_pilot = FALSE, resume_negative_z = FALSE) {
+fresh_root <- function(config, upgrade_failed_pilot = FALSE, resume_negative_z = FALSE,
+                       verification_only = FALSE) {
   if (!is.list(config) || !all(c("root", "protected_roots", "archive_url",
       "archive_md5", "crs", "vertical_epsg", "metadata_confirmation", "seed",
       "lastools_path", "executables", "tool_license") %in% names(config))) {
@@ -286,6 +289,10 @@ fresh_root <- function(config, upgrade_failed_pilot = FALSE, resume_negative_z =
       length(config$archive_md5) != 1L || is.na(config$archive_md5) ||
       !grepl("^[[:xdigit:]]{32}$", config$archive_md5))) stop("Invalid archive_md5.")
   config$root <- root
+  if (verification_only &&
+      (!dir.exists(root) || !file.exists(file.path(root, "fresh-root.rds")))) {
+    stop("Verification requires an existing preparation root and identity.")
+  }
   if (!dir.exists(root) && !dir.create(root)) stop("Cannot create fresh root.")
   receipt <- file.path(root, "fresh-root.rds")
   identity <- list(config = config, policy = fresh_policy())
@@ -298,8 +305,9 @@ fresh_root <- function(config, upgrade_failed_pilot = FALSE, resume_negative_z =
         if (!identical(record$previous, previous) || !identical(record$current, identity) ||
             !fresh_negative_z_policy(previous$policy, identity$policy) ||
             !identical(record$frozen_md5, petawawa_checksum(fresh_negative_z_paths(root))) ||
-            !identical(record$implementation, petawawa_checksum(c(
-              "R/prepare_fresh_data.R", "R/2_data.R", "R/1_functions.R", "renv.lock", "ALS_tiles.gpkg")))) {
+            (!verification_only &&
+             !identical(record$implementation, petawawa_checksum(c(
+               "R/prepare_fresh_data.R", "R/2_data.R", "R/1_functions.R", "renv.lock", "ALS_tiles.gpkg"))))) {
           stop("Negative-Z transition differs from frozen identities or the current policy.")
         }
       } else if (resume_negative_z) {
@@ -609,7 +617,8 @@ fresh_validate_index <- function(path, expected, tools) {
        method = "LASX signature plus isolated lidR/rlas native indexed query versus full decoded point records")
 }
 
-fresh_verify <- function(folder, tiles) {
+fresh_verify <- function(folder, tiles, cores = 16L) {
+  cores <- fresh_cores(cores)
   manifest <- file.path(folder, "prepared", "preparation.rds")
   plan <- readRDS(manifest)
   ready <- file.path(folder, "ready.rds")
@@ -630,8 +639,9 @@ fresh_verify <- function(folder, tiles) {
     }
   }
   repair_receipts <- paste0(plan$sources$path, ".rds")
-  if (!identical(petawawa_checksum(repair_receipts), plan$fresh$repairs_md5) ||
-      !identical(petawawa_checksum(plan$sources$path), plan$sources$md5)) {
+  if (!identical(plan$sources$path,
+                 file.path(folder, "repaired", paste0(plan$sources$tile, ".laz"))) ||
+      !identical(petawawa_checksum(repair_receipts), plan$fresh$repairs_md5)) {
     stop("Repair receipts or source bytes changed.")
   }
   expected_files <- c("preparation.rds", unlist(lapply(plan$densities, function(density) {
@@ -641,28 +651,94 @@ fresh_verify <- function(folder, tiles) {
   actual_files <- list.files(file.path(folder, "prepared"), recursive = TRUE,
                             all.files = TRUE)
   if (!setequal(actual_files, expected_files)) stop("Unexpected/missing prepared inventory.")
-  for (tile in tiles) {
-    repaired <- file.path(folder, "repaired", paste0(tile, ".laz"))
-    receipt <- readRDS(paste0(repaired, ".rds"))
-    fresh_check_repair_policy(receipt, repaired)
-    if (!identical(petawawa_checksum(repaired), receipt$md5)) stop("Repaired source checksum mismatch.")
-    fresh_qc(fresh_read(repaired)$las, tile, plan$config$crs)
-    for (density in plan$densities) {
-      path <- file.path(folder, "prepared", "1_org",
-                        paste0("tile_1000_density_", density), paste0(tile, ".laz"))
-      record <- readRDS(paste0(path, ".rds"))
-      if (!identical(petawawa_checksum(c(path, sub("\\.laz$", ".lax", path))), record$md5)) {
-        stop("Prepared output/index checksum mismatch: ", path)
-      }
-      fresh_index_signature(path)
-      if (!identical(record$index_validation$status, "passed")) stop("Missing index-query validation.")
-      qc <- fresh_qc(fresh_read(path)$las, tile, plan$config$crs)
-      if (qc$points != round(density * receipt$qc$area_m2) ||
-          !identical(record$source_md5, plan$sources$md5[match(tile, plan$sources$tile)])) {
-        stop("Target density count/source identity mismatch.")
-      }
+  frozen_paths <- c(manifest, repair_receipts)
+  frozen_md5 <- petawawa_checksum(frozen_paths)
+  logdir <- fresh_subdir(folder, basename(tempfile("verification-")))
+  petawawa_save(list(started = Sys.time(), requested_cores = cores,
+    workers = min(cores, length(tiles)), threads_per_worker = 1L,
+    preparation_md5 = frozen_md5[1],
+    implementation = petawawa_checksum(c("R/prepare_fresh_data.R", "R/2_data.R",
+                                         "R/1_functions.R", "renv.lock"))),
+    file.path(logdir, "started.rds"))
+  completed <- FALSE
+  on.exit(petawawa_save(list(status = if (completed) "completed" else "failed_or_interrupted",
+    ended = Sys.time()), file.path(logdir, "finished.rds")), add = TRUE)
+  cli::cli_inform("Verification: up to {min(cores, length(tiles))} tile workers; logs in {.path {logdir}}.")
+  jobs <- lapply(tiles, function(tile) list(phase = "verify", tile = tile,
+    folder = folder, plan = plan, logdir = logdir))
+  fresh_map(jobs, cores, logdir)
+  if (!identical(petawawa_checksum(frozen_paths), frozen_md5) ||
+      !setequal(list.files(file.path(folder, "prepared"), recursive = TRUE,
+                          all.files = TRUE), expected_files)) {
+    stop("Preparation records or inventory changed during verification.")
+  }
+  completed <- TRUE
+  invisible(TRUE)
+}
+
+fresh_verify_tile <- function(job) {
+  tile <- job$tile
+  plan <- job$plan
+  source_md5 <- plan$sources$md5[match(tile, plan$sources$tile)]
+  repaired <- file.path(job$folder, "repaired", paste0(tile, ".laz"))
+  receipt <- readRDS(paste0(repaired, ".rds"))
+  fresh_check_repair_policy(receipt, repaired)
+  if (!identical(petawawa_checksum(repaired), receipt$md5) ||
+      !identical(receipt$md5, source_md5)) stop("Repaired source checksum mismatch: ", tile)
+  fresh_qc(fresh_read(repaired)$las, tile, plan$config$crs)
+  for (density in plan$densities) {
+    path <- file.path(job$folder, "prepared", "1_org",
+                      paste0("tile_1000_density_", density), paste0(tile, ".laz"))
+    record <- readRDS(paste0(path, ".rds"))
+    if (!identical(petawawa_checksum(c(path, sub("\\.laz$", ".lax", path))), record$md5)) {
+      stop("Prepared output/index checksum mismatch: ", path)
+    }
+    fresh_index_signature(path)
+    if (!identical(record$index_validation$status, "passed")) stop("Missing index-query validation.")
+    qc <- fresh_qc(fresh_read(path)$las, tile, plan$config$crs)
+    if (qc$points != round(density * receipt$qc$area_m2) ||
+        !identical(record$source_md5, source_md5)) {
+      stop("Target density count/source identity mismatch: ", path)
     }
   }
+  result <- list(tile = tile, status = "verified", pid = Sys.getpid(), finished = Sys.time())
+  petawawa_save(result, file.path(job$logdir, paste0(tile, ".rds")))
+  result
+}
+
+fresh_verify_stage <- function(config, full = FALSE, cores = 16L) {
+  cores <- fresh_cores(cores)
+  config <- fresh_root(config, verification_only = TRUE)
+  lock <- file.path(config$root, ".preparation-lock")
+  if (!dir.create(lock, showWarnings = FALSE)) stop("Preparation is active or interrupted: ", lock)
+  on.exit(fresh_release_lock(lock), add = TRUE)
+  folder <- file.path(config$root, if (full) "full" else "pilot")
+  stage_path <- file.path(folder, "stage-identity.rds")
+  manifest <- file.path(folder, "prepared", "preparation.rds")
+  stage <- readRDS(stage_path)
+  plan <- readRDS(manifest)
+  if (!identical(stage$config, config) || !identical(plan$fresh$config, config) ||
+      !identical(plan$parameters, fresh_policy()) ||
+      !identical(plan$fresh$archive_md5, stage$archive_md5)) {
+    stop("Verification requires matching frozen configuration, current repair policy and archive identity.")
+  }
+  frozen_paths <- c(file.path(config$root, "fresh-root.rds"), stage_path, manifest)
+  transition <- file.path(config$root, "negative-z-transition.rds")
+  if (file.exists(transition)) frozen_paths <- c(frozen_paths, transition)
+  frozen_md5 <- petawawa_checksum(frozen_paths)
+  fresh_verify(folder, if (full) petawawa_tiles() else c("298000_5093000", "298000_5094000"),
+               cores = cores)
+  if (!identical(petawawa_checksum(frozen_paths), frozen_md5)) {
+    stop("Frozen preparation identity changed during verification.")
+  }
+  ready <- file.path(folder, "ready.rds")
+  if (!file.exists(ready)) {
+    petawawa_save(list(status = "data-qc-passed", policy = fresh_policy(),
+      archive_md5 = plan$fresh$archive_md5, preparation_md5 = petawawa_checksum(manifest)),
+      ready)
+  }
+  cli::cli_alert_success("Data QC passed: {.path {file.path(folder, 'prepared')}}.")
+  cli::cli_inform("Benchmark acceptance still requires a new pilot.")
   invisible(TRUE)
 }
 
@@ -835,7 +911,7 @@ fresh_repair_tile <- function(job) {
 }
 
 fresh_prepare <- function(config, full = FALSE, retry_failed_preparation = FALSE,
-                          cores = 8L, resume_parallel = FALSE) {
+                          cores = 16L, resume_parallel = FALSE) {
   cores <- fresh_cores(cores)
   fresh_limit_threads()
   config <- fresh_root(config)
@@ -848,7 +924,7 @@ fresh_prepare <- function(config, full = FALSE, retry_failed_preparation = FALSE
   if (full) {
     receipt <- file.path(config$root, "pilot", "ready.rds")
     if (!file.exists(receipt)) stop("Prepare and verify the two-tile pilot before --full.")
-    fresh_verify(file.path(config$root, "pilot"), pilot)
+    fresh_verify(file.path(config$root, "pilot"), pilot, cores = cores)
   }
   tiles <- if (full) all_tiles else pilot
   members <- fresh_members(archive, tiles)
@@ -979,7 +1055,7 @@ fresh_prepare <- function(config, full = FALSE, retry_failed_preparation = FALSE
     prepare_jobs <- lapply(seq_len(nrow(plan$sources)), function(i) list(
       phase = "prepare", plan = plan, row = plan$sources[i, ], execution = execution))
     fresh_map(prepare_jobs, cores, fresh_subdir(execution_dir, "prepare"))
-    fresh_verify(folder, tiles)
+    fresh_verify(folder, tiles, cores = cores)
   }, error = function(error) {
     petawawa_save(list(diagnostic = conditionMessage(error)),
       tempfile("preparation-failure-", tmpdir = folder, fileext = ".rds"))
@@ -997,7 +1073,7 @@ fresh_prepare <- function(config, full = FALSE, retry_failed_preparation = FALSE
 
 fresh_main <- function(args) {
   if (length(args) && args[1] == "--query-index") return(fresh_query_index_child(args[-1]))
-  cores <- 8L
+  cores <- 16L
   if (length(args) == 4L && args[3] == "--cores" && grepl("^[0-9]+$", args[4])) {
     cores <- fresh_cores(as.numeric(args[4]))
     args <- args[1:2]
@@ -1007,6 +1083,9 @@ fresh_main <- function(args) {
                                           "--upgrade-failed-pilot", "--retry-failed-preparation",
                                           "--resume-parallel-full", "--resume-negative-z-full")) {
     stop("Usage: Rscript --vanilla R/prepare_fresh_data.R <stage> /path/to/config.R; see README.")
+  }
+  if (args[1] %in% c("--verify-pilot", "--verify-full")) {
+    return(fresh_verify_stage(dget(args[2]), full = args[1] == "--verify-full", cores = cores))
   }
   config <- fresh_root(dget(args[2]), upgrade_failed_pilot = args[1] == "--upgrade-failed-pilot",
                        resume_negative_z = args[1] == "--resume-negative-z-full")
@@ -1020,14 +1099,6 @@ fresh_main <- function(args) {
     if (!dir.create(lock, showWarnings = FALSE)) stop("Preparation is active or interrupted: ", lock)
     on.exit(fresh_release_lock(lock))
     return(invisible(fresh_archive(config, download = TRUE)))
-  }
-  if (args[1] %in% c("--verify-pilot", "--verify-full")) {
-    full <- args[1] == "--verify-full"
-    folder <- file.path(config$root, if (full) "full" else "pilot")
-    if (dir.exists(file.path(config$root, ".preparation-lock"))) stop("Preparation is active or interrupted.")
-    if (!file.exists(file.path(folder, "ready.rds"))) stop("No successful readiness receipt.")
-    return(fresh_verify(folder,
-      if (full) petawawa_tiles() else c("298000_5093000", "298000_5094000")))
   }
   fresh_prepare(config, full = args[1] %in% c("--full", "--resume-parallel-full", "--resume-negative-z-full"),
                 retry_failed_preparation = args[1] == "--retry-failed-preparation",

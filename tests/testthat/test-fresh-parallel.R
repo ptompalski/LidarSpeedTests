@@ -47,10 +47,10 @@ test_that("tile progress is parent-owned and counts only successful jobs", {
     1L, f$directory, function(job) NULL), list(NULL, NULL))
 })
 
-test_that("preparation defaults to eight bounded workers with explicit thread limits and stable seeds", {
+test_that("preparation defaults to sixteen bounded workers with explicit thread limits and stable seeds", {
   f <- fresh_parallel_fixture()
   e <- f$env
-  expect_identical(e$fresh_cores(), 8L)
+  expect_identical(e$fresh_cores(), 16L)
   for (bad in list(0, -1, 1.5, NA_real_, Inf, "8")) {
     expect_error(e$fresh_cores(bad), "positive integer")
   }

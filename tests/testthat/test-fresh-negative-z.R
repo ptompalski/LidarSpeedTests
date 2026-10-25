@@ -65,8 +65,10 @@ test_that("explicit v3 negative-Z transition preserves frozen identities and com
   receipt$implementation[1] <- "changed"
   saveRDS(receipt, file.path(root, "negative-z-transition.rds"))
   expect_error(e$fresh_root(f$config), "transition differs")
+  expect_identical(e$fresh_root(f$config, verification_only = TRUE), f$config)
   saveRDS(list(changed = TRUE), file.path(root, "full", "stage-identity.rds"))
   expect_error(e$fresh_root(f$config), "transition differs")
+  expect_error(e$fresh_root(f$config, verification_only = TRUE), "transition differs")
   expect_identical(e$petawawa_checksum(c(completed, paste0(completed, ".rds"))), tail(before, 2))
 })
 
@@ -143,7 +145,7 @@ test_that("v3 repair-stage recovery completes with unchanged prior repairs and p
   e$benchmark_lastools_executable <- function(path, tool) file.path(bin, tool)
   e$petawawa_process <- function(...) list(status = 0L, stdout = "fixture version", stderr = "")
   verified <- character()
-  e$fresh_verify <- function(folder, tiles) {
+  e$fresh_verify <- function(folder, tiles, cores = 16L) {
     verified <<- c(verified, basename(folder))
     invisible(TRUE)
   }
