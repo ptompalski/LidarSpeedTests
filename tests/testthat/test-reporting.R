@@ -13,7 +13,7 @@ reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE)
   f$append <- function(task = "pixel_metrics_1a", run = f$runs$ID[1L],
                        repetition = 1L, seconds = 2, status = "succeeded",
                        validation = "passed", phase = "measurement", monitor = "available",
-                       comparison = "matched_definition_pending_validation") {
+                       comparison = "matched_definition_pending_validation", boundary_points = 0L) {
     attempt <- env$benchmark_attempt_start(f$campaign, task, run, "lidR", repetition, phase)
     # Synthetic receipts exercise reporting/ingestion, not numerical acceptance.
     validation_path <- file.path(attempt$path, "validation.rds")
@@ -28,6 +28,7 @@ reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE)
       monitoring_status = monitor, monitoring_scope = "whole-machine", monitoring_platform = "Linux",
       comparison_status = comparison, comparison_group = paste0("workloads-v1/", task),
       comparison_note = "synthetic reporting fixture, not benchmark evidence",
+      boundary_difference_points = boundary_points,
       workload_contract = "workloads-v1", cores = 1L
     )
     if (monitor %in% c("available", "partial")) {
@@ -107,6 +108,19 @@ test_that("accepted surface exceptions are descriptive measurements, not validat
   expect_true(report$attempts$measurement_eligible)
   expect_true(f$env$benchmark_campaign_completed(
     f$campaign, "pixel_metrics_1a", f$runs$ID[1L], "lidR", 1L))
+})
+
+test_that("tool-owned boundary differences allow descriptive but not comparable timings", {
+  f <- reporting_fixture()
+  f$append(boundary_points = 6L)
+  f$append(repetition = 2L)
+  report <- f$read()
+  row <- subset(report$summary, task_id == "pixel_metrics_1a" & run_id == f$runs$ID[1L])
+  expect_equal(row$n_included, 2)
+  expect_equal(row$n_comparable, 1)
+  expect_true(all(report$attempts$validated_success))
+  expect_equal(report$attempts$boundary_difference_points, c(6L, 0L))
+  expect_equal(report$attempts$comparison_eligible, c(FALSE, TRUE))
 })
 
 test_that("short, invalid, unvalidated, partial and non-comparable results stay explicit", {

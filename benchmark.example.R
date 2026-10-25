@@ -10,6 +10,10 @@ list(
     native_threads = 1L
   ),
   tools = c("lidR", "lasR", "lastools"),
+  # For R/6_pilot.R only: select exactly one source and set cores = c(1L, 2L).
+  # prepared_stage_root = "/path/to/fresh-data/full", # Requires full/ready.rds.
+  # historical_input_root = "/path/to/recovered-inputs/1_org",
+  # Pilot input_roots must point to <parent of reports_path>/pilot-inputs.
   # Opt-in policies are frozen in the campaign; defaults retain strict validation.
   input_metadata = NULL,
   # Confirmed historical Petawawa declaration (does not rewrite source files):
@@ -18,6 +22,8 @@ list(
   #   confirmation = "Custodian confirmed source lineage and unchanged XYZ units/datum."
   # ),
   accept_known_surface_discrepancies = FALSE,
+  # Retain the full core; allow one aligned extra cell per edge, not mask/value changes.
+  accept_known_extent_discrepancies = FALSE,
   diagnostic_lasR = FALSE,
   lastools_path = "/path/to/LAStools/bin",
   workstation_id = unname(Sys.info()[["nodename"]]),

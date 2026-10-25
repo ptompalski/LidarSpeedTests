@@ -34,6 +34,73 @@ records the verifier implementation, worker logs, per-tile successes and final
 status. A failed verification never creates a readiness receipt, and a hard-killed
 verifier may leave no final status record.
 
+## Benchmark pilot on prepared data
+
+The benchmark pilot is separate from preparation's `--pilot` stage. It stages
+unchanged copies of the two approved neighboring density-1 tiles and their
+indexes from a verified preparation. It checks readiness, manifest identity and
+completion-receipt checksums, and freezes that provenance with the campaign.
+It never processes all 100 tiles or repeats data preparation.
+
+From the repository root, initialize a **new** pilot workspace, check it, then
+explicitly start the benchmark:
+
+```sh
+Rscript --vanilla R/6_pilot.R --init /path/to/fresh-data/full /path/to/new-pilot-workspace
+Rscript --vanilla R/6_pilot.R --preflight /path/to/new-pilot-workspace
+# Run only after the preflight succeeds:
+Rscript --vanilla R/6_pilot.R --run /path/to/new-pilot-workspace fresh-pilot-001
+```
+
+Initialization creates `benchmark.R`, `scratch/` and `reports/` in the workspace.
+It inherits confirmed CRS/datum metadata and the LAStools directory from the
+preparation, uses the repository's benchmark defaults with the 1-/2-core matrix,
+and refuses to overwrite an existing workspace. It does not stage inputs or run
+workloads. Review/edit `benchmark.R` before preflight if needed.
+
+Preflight only stages/checks inputs and checks configuration and executable
+availability; it does not run workloads or establish numerical acceptance.
+The pilot tests all defined tasks with lidR, lasR and LAStools at 1 and 2 cores,
+with one warm-up and three measured repetitions per task/tool/core combination.
+Tools run sequentially, not as 16 competing benchmark workers. The 16-worker
+default applies to data preparation/verification, not this small pilot matrix.
+Strict validation remains enabled: unsupported/blocked combinations are skipped,
+and known cross-tool differences can fail validation; timings alone are not
+acceptance. LAStools requires the appropriate installed tools and entitlement.
+Results are recorded under `<workspace>/reports/campaigns/<campaign-id>`.
+Use the same configuration and ID to resume an unchanged campaign; use a new
+ID after changing the code, configuration or inputs.
+
+To accept documented raster edge conventions, set
+`accept_known_extent_discrepancies = TRUE` in the workspace configuration and
+use a new campaign ID. This allows at most one aligned extra cell per edge,
+never missing core cells or changed core values/NoData masks. Accepted R outputs
+are labeled `accepted_exception`; native numerical checks remain `unverified`.
+This does not enable the broader surface-support exception policy.
+
+Native software identity records executable checksums and LAStools software
+builds, not the licensing banner, which can vary between identical `-version`
+queries. Licensing notices are still shown; this does not establish entitlement
+or relax processing exit-status checks. In particular, the pinned `lascanopy`
+can exit with status 1 when an all-point elevation metric deliberately sets its
+cutoff below every input point. Such attempts remain failed, not accepted
+benchmarks; do not normalize the elevations or raise the cutoff merely to hide
+that warning.
+
+Historical pilots remain supported by selecting `historical_input_root` instead
+of `prepared_stage_root`; do not configure both sources. The original
+`--preflight`/`--run` forms without workspace arguments still use
+`LIDAR_BENCHMARK_CONFIG` and `LIDAR_CAMPAIGN_ID`.
+
+Metrics and maximum DSM are checked against each tool's grid-edge ownership.
+`boundary_difference_points` records differing point assignments; affected
+attempts are descriptive only, excluded from cross-tool comparison counts.
+lasR DEM uses an independent unextrapolated ground TIN and an explicit
+Float32 precision budget; DEM remains non-comparable. Non-repeatable lasR
+first-return TIN DSM is always skipped, including diagnostic mode. Native
+warnings, errors and missing tiles remain rejected. Use a new campaign ID
+after these validator changes; historical results are not rewritten.
+
 Tests are named by responsibility (for example, workloads, validation, monitoring
 and reporting). See [WORKLOADS.md](WORKLOADS.md) for current saved-data identifiers
 and compatibility requirements. The optional completed-pilot review test uses

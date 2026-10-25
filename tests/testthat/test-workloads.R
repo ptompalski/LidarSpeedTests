@@ -63,7 +63,7 @@ test_that("every task/tool has a supported-artifact and comparability contract",
   env <- workload_setup()
   contracts <- env$benchmark_contracts
   expect_equal(nrow(contracts), 27L)
-  expect_equal(sum(contracts$supported), 18L)
+  expect_equal(sum(contracts$supported), 17L)
   for (i in seq_len(nrow(contracts))) {
     row <- contracts[i, ]
     task <- env$benchmark_tasks[env$benchmark_tasks$task_id == row$task_id, ]
@@ -173,6 +173,7 @@ test_that("surface and tree calls persist explicit raster and vector products", 
   lasR::set_exec_options(ncores = lasR::sequential())
   for (task in c("generate_DSM1", "generate_DSM2")) {
     for (tool in c("lidR", "lasR")) {
+      if (task == "generate_DSM2" && tool == "lasR") next
       run <- workload_call(env, fixture, task, tool)
       files <- list.files(run$output, "\\.tif$", full.names = TRUE)
       expect_length(files, 1L)
@@ -210,6 +211,20 @@ test_that("surface and tree calls persist explicit raster and vector products", 
   }
 })
 
+test_that("non-repeatable lasR first-return TIN stays blocked even in diagnostic mode", {
+  env <- workload_setup()
+  row <- env$benchmark_tasks[env$benchmark_tasks$task_id == "generate_DSM2", ]
+  expect_true(nzchar(row$task_candidate_lasR))
+  expect_identical(row$task_call_lasR, "")
+  for (diagnostic in c(FALSE, TRUE)) {
+    contract <- env$benchmark_workload_contract("generate_DSM2", "lasR", diagnostic)
+    expect_identical(contract$comparison_status, "blocked")
+    expect_false(contract$supported)
+    expect_match(contract$comparison_note, "non-repeatable")
+    expect_true(is.na(contract$comparison_group))
+  }
+})
+
 test_that("the all-Z cutoff placeholder expands without invoking native LAStools", {
   with_execution_fixture({
     call_env$height_cutoff <- "-11"
@@ -224,7 +239,7 @@ test_that("the all-Z cutoff placeholder expands without invoking native LAStools
   })
 })
 
-test_that("blocked runner attempts retain the contract and native blocker diagnostic", {
+test_that("blocked runner attempts retain the contract and workload blocker diagnostic", {
   with_execution_fixture({
     setup <- new.env()
     setup$source <- function(file) sys.source(file.path(repo, file), setup)
@@ -235,25 +250,31 @@ test_that("blocked runner attempts retain the contract and native blocker diagno
     env$catalog <- function(...) stop("Blocked attempts must not read point clouds")
     env$prepare_input <- function(...) stop("Blocked attempts must not prepare inputs")
     before <- list.files(scratch, all.files = TRUE)
+    tasks <- c("normalization", "generate_DSM2")
     campaign <- env$benchmark_campaign(
-      "blocked", data.frame(task_id = "normalization", run_id = run$ID),
+      "blocked", data.frame(task_id = tasks, run_id = run$ID),
       setup$benchmark_tasks, setup$benchmark_runs, config, repo_root = repo
     )
-    env$benchmark_run(
-      task_id = "normalization", run_id = run$ID,
-      run_lidR = FALSE, run_lasR = TRUE, run_lastools = FALSE,
-      benchmark_tasks = setup$benchmark_tasks, benchmark_runs = setup$benchmark_runs,
-      sysinfo = list(lasR_version = "0.21.2"), config = config, campaign = campaign
-    )
+    for (task in tasks) {
+      env$benchmark_run(
+        task_id = task, run_id = run$ID,
+        run_lidR = FALSE, run_lasR = TRUE, run_lastools = FALSE,
+        benchmark_tasks = setup$benchmark_tasks, benchmark_runs = setup$benchmark_runs,
+        sysinfo = list(lasR_version = "0.21.2"), config = config, campaign = campaign
+      )
+    }
     files <- fixture_attempt_files(reports)
-    expect_length(files, 1L)
-    result <- read.csv(files)
-    expect_identical(result$execution_status, "skipped")
-    expect_equal(result$success, 0)
-    expect_identical(result$workload_contract, "workloads-v1")
-    expect_identical(result$comparison_status, "blocked")
-    expect_true(is.na(result$comparison_group))
-    expect_match(result$diagnostic, "ground hull boundaries")
+    expect_length(files, 2L)
+    for (file in files) {
+      result <- read.csv(file)
+      expect_identical(result$execution_status, "skipped")
+      expect_equal(result$success, 0)
+      expect_identical(result$workload_contract, "workloads-v1")
+      expect_identical(result$comparison_status, "blocked")
+      expect_true(is.na(result$comparison_group))
+      expect_match(result$diagnostic, if (result$task_id == "generate_DSM2")
+        "non-repeatable" else "ground hull boundaries")
+    }
     expect_identical(list.files(scratch, all.files = TRUE), before)
   })
 })

@@ -59,6 +59,139 @@ validation_run <- function(fixture, task, tool) {
   list(output = output, manifest = manifest, checked = checked, execution = execution)
 }
 
+test_that("metric references retain outer-edge clamping and right/down buffered ownership", {
+  f <- benchmark_fixture()
+  previous <- get0("metrics_multiple", envir = globalenv(), inherits = FALSE)
+  assign("metrics_multiple", f$env$metrics_multiple, globalenv())
+  withr::defer({
+    if (is.null(previous)) rm("metrics_multiple", envir = globalenv()) else
+      assign("metrics_multiple", previous, globalenv())
+  })
+  for (maximum in c(20, 40)) {
+    data <- expand.grid(X = c(0, maximum), Y = c(0, maximum))
+    data$Z <- c(1, 2, 3, 4)
+    cloud <- lidR::LAS(data)
+    grid <- terra::rast(xmin = 0, xmax = maximum, ymin = 0, ymax = maximum,
+                        resolution = 20, crs = "")
+    actual_mean <- lidR::pixel_metrics(cloud, ~list(z_mean = mean(Z)), res = 20)
+    actual_multiple <- lidR::pixel_metrics(cloud, ~metrics_multiple(Z), res = 20)
+    reference_mean <- f$env$benchmark_reference_raster(cloud, grid, "pixel_metrics_1a")
+    reference_multiple <- f$env$benchmark_reference_raster(cloud, grid, "pixel_metrics_2")
+    expect_equal(terra::values(terra::crop(actual_mean, grid)), terra::values(reference_mean))
+    expect_equal(terra::values(terra::crop(actual_multiple, grid)), terra::values(reference_multiple))
+  }
+  cloud <- lidR::LAS(data.frame(X = rep(10, 4), Y = c(0, 20, 40, 60),
+                                Z = c(10, 20, 40, 60)))
+  grid <- terra::rast(xmin = 0, xmax = 20, ymin = 20, ymax = 40,
+                      resolution = 20, crs = "")
+  reference <- f$env$benchmark_reference_raster(cloud, grid, "pixel_metrics_1a")
+  expect_equal(as.vector(terra::values(reference)), 40)
+})
+
+test_that("tool-specific metric and maximum ownership retains strict masks and interior values", {
+  f <- benchmark_fixture()
+  cloud <- lidR::LAS(data.frame(X = c(110, 110, 110, 130, 140),
+                                Y = c(100, 120, 140, 110, 130),
+                                Z = c(99, 20, 40, 30, 88)))
+  sf::st_crs(cloud) <- 32618
+  tile <- data.frame(Min.X = 100, Max.X = 140, Min.Y = 100, Max.Y = 140)
+  manifest <- list(crs = sf::st_crs(cloud))
+  for (task in c("pixel_metrics_1a", "pixel_metrics_2", "generate_DSM1")) {
+    spec <- f$env$benchmark_artifact_specs(task, "lidR")[[1L]]
+    grid <- f$env$benchmark_validation_grid(tile, spec$resolution, manifest$crs)
+    for (tool in c("lidR", "lasR")) {
+      reference <- f$env$benchmark_reference_raster(cloud, grid, task, tool)
+      bottom <- terra::cellFromXY(grid, matrix(c(110, 100), ncol = 2))
+      if (task == "generate_DSM1") {
+        expect_equal(unname(terra::values(reference)[bottom, 1L]),
+                     if (tool == "lidR") 99 else NA_real_)
+      }
+      file <- file.path(f$test_dir, paste0(task, "-", tool, ".tif"))
+      terra::writeRaster(reference, file, overwrite = TRUE, datatype = "FLT8S")
+      validate <- function() f$env$benchmark_validate_raster(
+        file, spec, tile, manifest, cloud, numerical = TRUE, tool = tool)
+      detail <- validate()
+      expect_equal(detail$boundary_difference_points, 1L)
+      expect_match(detail$boundary_convention, if (tool == "lasR") "excluded" else "clamped")
+      values <- terra::values(reference)
+      first <- which(is.finite(values))[1L]
+      values[first] <- values[first] + 1
+      terra::values(reference) <- values
+      terra::writeRaster(reference, file, overwrite = TRUE, datatype = "FLT8S")
+      expect_error(validate(), "Numerical tolerance exceeded")
+      values[first] <- NA_real_
+      terra::values(reference) <- values
+      terra::writeRaster(reference, file, overwrite = TRUE, datatype = "FLT8S")
+      expect_error(validate(), "mask mismatch")
+    }
+  }
+})
+
+test_that("buffered ownership matches lidR at positive, zero and negative grid boundaries", {
+  f <- benchmark_fixture()
+  for (lower in c(-40, 0, 100)) {
+    cloud <- lidR::LAS(data.frame(X = lower + c(10, 10, 10, 30),
+                                  Y = lower + c(0, 20, 40, 10),
+                                  Z = c(99, 20, 40, 30)))
+    grid <- terra::rast(xmin = lower, xmax = lower + 40,
+                        ymin = lower, ymax = lower + 40, resolution = 20, crs = "")
+    actual <- lidR::pixel_metrics(cloud, ~list(z_mean = mean(Z)), res = 20)
+    reference <- f$env$benchmark_reference_raster(cloud, grid, "pixel_metrics_1a", "lidR")
+    expect_equal(terra::values(terra::crop(actual, grid)), terra::values(reference))
+  }
+})
+
+test_that("lasR terrain reference is an unrounded, unextrapolated independent plane", {
+  f <- benchmark_fixture()
+  xy <- data.frame(X = c(.5, 3.5, .5), Y = c(.5, .5, 3.5))
+  data <- data.frame(xy, Z = c(100.001, 100.004, 100.011),
+                     Classification = 2L)
+  cloud <- lidR::LAS(data)
+  sf::st_crs(cloud) <- 32618
+  tile <- data.frame(Min.X = 0, Max.X = 4, Min.Y = 0, Max.Y = 4)
+  manifest <- list(crs = sf::st_crs(cloud))
+  spec <- f$env$benchmark_artifact_specs("generate_DEM", "lasR")[[1L]]
+  grid <- f$env$benchmark_validation_grid(tile, 1, manifest$crs)
+  reference <- f$env$benchmark_reference_raster(cloud, grid, "generate_DEM", "lasR")
+  centers <- terra::xyFromCell(grid, seq_len(terra::ncell(grid)))
+  inside <- centers[, 1] + centers[, 2] <= 4
+  expected <- rep(NA_real_, nrow(centers))
+  expected[inside] <- 100.001 + .001 * (centers[inside, 1] - .5) +
+    (.01 / 3) * (centers[inside, 2] - .5)
+  expect_equal(as.vector(terra::values(reference)), expected, tolerance = 1e-12)
+  duplicate <- lidR::LAS(rbind(data, data[1L, ]))
+  sf::st_crs(duplicate) <- manifest$crs
+  expect_equal(terra::values(f$env$benchmark_reference_dem(duplicate, grid)),
+               terra::values(reference))
+  ambiguous <- rbind(data, transform(data[1L, ], Z = Z + 1))
+  expect_error(f$env$benchmark_reference_dem(lidR::LAS(ambiguous), grid), "ambiguous duplicate XY")
+  collinear <- data
+  collinear$X <- c(.5, 1.5, 2.5)
+  collinear$Y <- collinear$X
+  expect_error(f$env$benchmark_reference_dem(lidR::LAS(collinear), grid), "nondegenerate")
+
+  file <- file.path(f$test_dir, "terrain.tif")
+  validate <- function(tool = "lasR") f$env$benchmark_validate_raster(
+    file, spec, tile, manifest, cloud, numerical = TRUE, tool = tool)
+  values <- terra::values(reference)
+  first <- which(is.finite(values))[1L]
+  limit <- 2e-6 + 4 * 2^-23 * abs(values[first])
+  values[first] <- values[first] + limit / 2
+  terra::values(reference) <- values
+  terra::writeRaster(reference, file, overwrite = TRUE, datatype = "FLT8S")
+  detail <- validate()
+  expect_equal(detail$relative_tolerance, 4 * 2^-23)
+  expect_match(detail$reference_method, "unextrapolated GEOS")
+  values[first] <- values[first] + 2 * limit
+  terra::values(reference) <- values
+  terra::writeRaster(reference, file, overwrite = TRUE, datatype = "FLT8S")
+  expect_error(validate(), "Numerical tolerance exceeded")
+  values[first] <- NA_real_
+  terra::values(reference) <- values
+  terra::writeRaster(reference, file, overwrite = TRUE, datatype = "FLT8S")
+  expect_error(validate(), "mask mismatch")
+})
+
 test_that("input-derived artifacts and numerical references validate neighboring R tiles", {
   fixture <- validation_fixture()
   for (task in c("pixel_metrics_1a", "pixel_metrics_2")) {
@@ -72,12 +205,13 @@ test_that("input-derived artifacts and numerical references validate neighboring
   }
 })
 
-test_that("surface boundary discrepancies are rejected rather than cropped or filled", {
+test_that("strict surface extents are rejected while owned values and masks are validated", {
   fixture <- validation_fixture()
   for (task in c("generate_DSM1", "generate_DSM2", "generate_DEM")) {
     for (tool in c("lidR", "lasR")) {
+      if (task == "generate_DSM2" && tool == "lasR") next
       run <- validation_run(fixture, task, tool)
-      if (task == "generate_DSM1" || tool == "lasR") {
+      if (tool == "lasR") {
         expect_identical(run$checked$validation_status, "failed")
         expect_match(run$checked$validation_diagnostic, "mask mismatch|extent")
       } else {
@@ -219,7 +353,7 @@ test_that("required vectors and disabled complex products cannot be replaced by 
   expect_match(complex$validation_diagnostic, "tile1_metrics.tif")
   native <- env$check_results(run$output, run$manifest, "pixel_metrics_2", "lastools")
   expect_equal(native$expected_output_file_count, 18L)
-  expect_match(native$validation_diagnostic, "tile1_p5.tif")
+  expect_match(native$validation_diagnostic, "tile1_p05.tif")
   expect_match(native$validation_diagnostic, "tile1_p95.tif")
 })
 
@@ -301,6 +435,137 @@ test_that("native structural success never certifies unverified numerical conven
   expect_equal(checked$expected_output_file_count, 2L)
   expect_identical(checked$validation_status, "unverified")
   expect_match(checked$validation_diagnostic, "native numerical/ownership")
+  warned <- run$execution
+  warned$exit_status <- 0L
+  warned$diagnostic <- "WARNING: child process reported a cutoff warning."
+  checked <- env$check_results(
+    run$output, run$manifest, "pixel_metrics_1a", "lastools", warned)
+  expect_identical(checked$validation_status, "failed")
+  expect_match(checked$validation_diagnostic, "child process")
+})
+
+test_that("native percentile inventory uses the observed zero-padded fifth percentile", {
+  fixture <- validation_fixture()
+  env <- fixture$env
+  run <- validation_run(fixture, "pixel_metrics_2", "lidR")
+  specs <- env$benchmark_artifact_specs("pixel_metrics_2", "lastools")
+  for (id in run$manifest$tiles$id) {
+    file <- file.path(run$output, paste0(id, ".tif"))
+    raster <- terra::rast(file)
+    for (i in seq_along(specs)) {
+      terra::writeRaster(raster[[i]], file.path(run$output, paste0(id, specs[[i]]$suffix)))
+    }
+    unlink(file)
+  }
+  check <- function(execution = run$execution) env$check_results(
+    run$output, run$manifest, "pixel_metrics_2", "lastools", execution)
+  expect_identical(check()$validation_status, "unverified")
+  failed <- run$execution
+  failed$execution_status <- "failed"
+  failed$diagnostic <- "LAStools exited with status 1."
+  expect_identical(check(failed)$validation_status, "failed")
+  expect_true(file.rename(file.path(run$output, "tile1_p05.tif"),
+                          file.path(run$output, "tile1_p5.tif")))
+  expect_match(check()$validation_diagnostic, "Missing: tile1_p05.tif")
+  expect_match(check()$validation_diagnostic, "unexpected: tile1_p5.tif")
+})
+
+test_that("terrain references construct support from the catalog ground population", {
+  fixture <- validation_fixture()
+  for (file in list.files(fixture$input, full.names = TRUE)) {
+    cloud <- lidR::readLAS(file)
+    corners <- cloud$X %in% range(cloud$X) & cloud$Y %in% range(cloud$Y)
+    cloud$Classification[corners] <- 1L
+    cloud$Z[corners] <- 50
+    lidR::writeLAS(cloud, file)
+  }
+  run <- validation_run(fixture, "generate_DEM", "lidR")
+  expect_identical(run$checked$validation_status, "passed",
+                   info = run$checked$validation_diagnostic)
+  for (i in seq_len(nrow(run$manifest$tiles))) {
+    cloud <- fixture$env$benchmark_validation_points(
+      run$manifest, run$manifest$tiles[i, ], "generate_DEM", "lidR")
+    expect_true(all(cloud$Classification %in% c(2L, 9L)))
+  }
+})
+
+test_that("catalog references preserve primary-first reader order and half-open halos", {
+  fixture <- validation_fixture()
+  env <- fixture$env
+  for (file in list.files(fixture$input, full.names = TRUE)) {
+    cloud <- lidR::readLAS(file)
+    data <- as.data.frame(cloud@data)
+    duplicate <- data[1L, ]
+    duplicate$Z <- 25
+    data <- rbind(data, duplicate)
+    if (basename(file) == "tile2.las") {
+      edge <- duplicate
+      edge$X <- 59
+      edge$Y <- 20
+      data <- rbind(data, edge)
+    }
+    lidR::writeLAS(lidR::LAS(data, header = cloud@header, crs = sf::st_crs(cloud)),
+                   file, index = TRUE)
+  }
+  ctg <- env$prepare_input(fixture$input, fixture$root)
+  manifest <- env$benchmark_validation_manifest(ctg)
+  tile <- manifest$tiles[2L, ]
+  files <- c(tile$filename, manifest$tiles$filename[1L])
+  filter <- paste("-inside", tile$Min.X - 20, tile$Min.Y - 20,
+                   tile$Max.X + 20, tile$Max.Y + 20)
+  expected <- lidR::readLAS(files, select = "xyzr", filter = filter)
+  actual <- env$benchmark_validation_points(manifest, tile, "generate_DSM2", "lidR")
+  expect_identical(actual@data, expected@data)
+  expect_identical(actual@header, expected@header)
+  expect_true(all(actual$X < tile$Max.X + 20 & actual$Y < tile$Max.Y + 20))
+  tile <- manifest$tiles[1L, ]
+  actual <- env$benchmark_validation_points(manifest, tile, "generate_DSM2", "lidR")
+  expect_false(any(actual$X == tile$Max.X + 20))
+  run <- validation_run(fixture, "generate_DSM2", "lidR")
+  expect_identical(run$checked$validation_status, "passed",
+                   info = run$checked$validation_diagnostic)
+  read <- lidR::readLAS
+  testthat::local_mocked_bindings(readLAS = function(files, select = "*", filter = "") {
+    cloud <- read(files, select = select, filter = filter)
+    if (nzchar(filter)) cloud <- cloud[-1L]
+    cloud
+  }, .package = "lidR")
+  expect_error(env$benchmark_validation_points(manifest, tile, "generate_DSM2", "lidR"),
+               "differs from full input payload")
+})
+
+test_that("treetop references retain maximum boundaries and restore caller threads", {
+  fixture <- validation_fixture()
+  env <- fixture$env
+  for (file in list.files(fixture$input, full.names = TRUE)) {
+    cloud <- lidR::readLAS(file)
+    corner <- cloud$X == max(cloud$X) & cloud$Y == max(cloud$Y)
+    cloud$Z[corner] <- 50
+    lidR::writeLAS(cloud, file)
+  }
+  run <- validation_run(fixture, "tree_detection", "lidR")
+  expect_identical(run$checked$validation_status, "passed",
+                   info = run$checked$validation_diagnostic)
+  trees <- sf::st_read(file.path(run$output, "tile2.gpkg"), quiet = TRUE)
+  xyz <- sf::st_coordinates(trees)
+  tile <- run$manifest$tiles[2L, ]
+  expect_true(any(xyz[, "X"] == tile$Max.X & xyz[, "Y"] == tile$Max.Y))
+  previous <- lidR::get_lidr_threads()
+  withr::defer(lidR::set_lidr_threads(previous))
+  lidR::set_lidr_threads(2L)
+  caller_threads <- lidR::get_lidr_threads()
+  validate <- env$benchmark_validate_vector
+  env$benchmark_validate_vector <- function(...) {
+    expect_identical(lidR::get_lidr_threads(), 1L)
+    validate(...)
+  }
+  checked <- env$check_results(
+    run$output, run$manifest, "tree_detection", "lidR", run$execution)
+  expect_identical(checked$validation_status, "passed")
+  expect_identical(lidR::get_lidr_threads(), caller_threads)
+  expect_error(env$benchmark_validate_artifacts(
+    run$output, run$manifest, "unknown", "lidR"), "Unknown workload")
+  expect_identical(lidR::get_lidr_threads(), caller_threads)
 })
 
 test_that("validation persists outside timing, protects report bytes and controls resume", {

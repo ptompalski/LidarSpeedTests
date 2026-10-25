@@ -167,13 +167,14 @@ benchmark_tasks <-
 
 benchmark_tasks$workload_contract <- "workloads-v1"
 blocked_lasR <- benchmark_tasks$task_id %in%
-  c("normalization", "complex_task1", "complex_task2")
+  c("normalization", "complex_task1", "complex_task2", "generate_DSM2")
 benchmark_tasks$task_candidate_lasR <- ifelse(
   blocked_lasR, benchmark_tasks$task_call_lasR, NA_character_
 )
 if (!isTRUE(benchmark_config$diagnostic_lasR)) {
   benchmark_tasks$task_call_lasR[blocked_lasR] <- ""
 }
+benchmark_tasks$task_call_lasR[benchmark_tasks$task_id == "generate_DSM2"] <- ""
 benchmark_contracts <- purrr::map_dfr(benchmark_tasks$task_id, function(task_id) {
   purrr::map_dfr(c("lidR", "lasR", "lastools"), function(tool) {
     contract <- benchmark_workload_contract(

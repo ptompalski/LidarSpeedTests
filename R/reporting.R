@@ -5,6 +5,7 @@ benchmark_report_prepare <- function(records, manifest) {
   defaults <- list(
     workload_contract = NA_character_, comparison_group = NA_character_,
     comparison_status = "unverified", comparison_note = "No comparability metadata.",
+    boundary_difference_points = 0L,
     monitoring_scope = NA_character_, monitoring_platform = NA_character_,
     cpu_mean_percent = NA_real_, cpu_peak_percent = NA_real_,
     ram_mean_used_bytes = NA_real_, ram_peak_used_bytes = NA_real_,
@@ -43,6 +44,7 @@ benchmark_report_prepare <- function(records, manifest) {
   r$report_included <- r$exclusion == "included"
   r$comparison_eligible <- dplyr::coalesce(r$report_included &
     r$validation_status == "passed" &
+    r$boundary_difference_points == 0 &
     r$comparison_status == "matched_definition_pending_validation" &
     !is.na(r$comparison_group), FALSE)
   planned <- manifest$identity$schedule

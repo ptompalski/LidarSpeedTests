@@ -22,7 +22,8 @@ benchmark_workload_contract <- function(task_id, tool, diagnostic_lasR = FALSE) 
     !(tool == "lastools" && task_id %in% c("generate_DSM2", "tree_detection"))
   affected <- tool == "lasR" &&
     task_id %in% c("normalization", "complex_task1", "complex_task2")
-  blocked <- affected && !diagnostic_lasR
+  unstable_tin <- tool == "lasR" && task_id == "generate_DSM2"
+  blocked <- unstable_tin || (affected && !diagnostic_lasR)
   implemented <- supported
   supported <- supported && !blocked
   matched <- supported && tool != "lastools" &&
@@ -42,7 +43,8 @@ benchmark_workload_contract <- function(task_id, tool, diagnostic_lasR = FALSE) 
   status <- if (affected && diagnostic_lasR) "diagnostic_only" else
     if (blocked) "blocked" else if (!supported) "unsupported" else if (matched)
     "matched_definition_pending_validation" else "non_comparable"
-  note <- if (affected && diagnostic_lasR)
+  note <- if (unstable_tin)
+      "Disabled: pinned lasR 0.21.2 first-return TIN is non-repeatable near duplicate XY with different Z; no deduplication policy or runtime fix is approved." else if (affected && diagnostic_lasR)
       "Diagnostic execution authorized: pinned lasR normalization can produce NA and corrupt LAZ elevations; numerical acceptance is not established." else if (blocked)
       "Disabled: pinned lasR 0.21.2 TIN normalization produces NA at ground hull boundaries and corrupt LAZ elevations; candidate only." else
     if (!supported) "No implemented pipeline; record an unsupported/skipped attempt." else
@@ -54,6 +56,8 @@ benchmark_workload_contract <- function(task_id, tool, diagnostic_lasR = FALSE) 
       "Class 2/9 TIN; lidR extrapolation and lasR outside-hull handling differ." else
     if (task_id == "tree_detection")
       "Local maxima window/tie/boundary semantics are not established as equivalent." else
+    if (task_id %in% c("pixel_metrics_1a", "pixel_metrics_2", "generate_DSM1"))
+      "Tool-specific grid-edge ownership; boundary_difference_points excludes affected attempts from cross-tool comparison." else
       "Same target definition; tiny fixtures do not establish neighboring-tile correctness."
   list(
     workload_contract = "workloads-v1", comparison_status = status,
@@ -181,7 +185,8 @@ benchmark_validate_config <- function(config) {
   }
   config$scheduling <- benchmark_scheduling_config(config$scheduling)
   config$input_metadata <- benchmark_input_metadata(config$input_metadata)
-  for (field in c("accept_known_surface_discrepancies", "diagnostic_lasR")) {
+  for (field in c("accept_known_surface_discrepancies", "accept_known_extent_discrepancies",
+                  "diagnostic_lasR")) {
     if (is.null(config[[field]])) config[[field]] <- FALSE
     if (!is.logical(config[[field]]) || length(config[[field]]) != 1L ||
         is.na(config[[field]])) stop(field, " must be TRUE or FALSE.")
@@ -406,6 +411,24 @@ benchmark_process <- function(executable, args = character()) {
   processx::run(executable, args, error_on_status = FALSE, cleanup_tree = TRUE)
 }
 
+benchmark_native_version <- function(executable) {
+  query <- benchmark_process(executable, "-version")
+  output <- paste0(query$stdout, query$stderr)
+  if (query$status != 0L || !nzchar(trimws(output))) {
+    stop("Native tool version query failed: ", executable, "\n", output)
+  }
+  lines <- strsplit(output, "\n", fixed = TRUE)[[1L]]
+  versions <- regmatches(lines, regexpr("^LAStools .+ version [0-9][[:alnum:]._-]*", lines))
+  if (length(versions) > 1L) stop("Native tool returned multiple software version lines: ", output)
+  if (length(versions) == 1L) {
+    if (length(lines) > 1L || any(grepl("\\(unlicensed\\)", lines))) {
+      cli::cli_alert_warning("LAStools version-query notice:\n{output}")
+    }
+    return(versions)
+  }
+  output
+}
+
 .benchmark_scratch_owners <- new.env(parent = emptyenv())
 
 benchmark_scratch_identity <- function(path) {
@@ -567,6 +590,10 @@ check_results <- function(path, manifest = NULL, task_id = NULL, tool = NULL,
   result$validation_status <- report$status
   result$validation_diagnostic <- report$diagnostic
   result$expected_output_file_count <- report$expected_file_count
+  result$boundary_difference_points <- sum(vapply(report$artifacts, function(artifact) {
+    count <- artifact$detail$boundary_difference_points
+    if (is.null(count)) 0 else count
+  }, numeric(1)))
   attr(result, "validation_report") <- report
   result
 }
@@ -650,6 +677,15 @@ benchmark_execute_call <- function(task_call, tool, envir = parent.frame()) {
           stop(paste0("LAStools exited with status ", process$status, ".\n",
                       process$stdout, process$stderr))
         }
+        lines <- strsplit(paste(process$stdout, process$stderr, sep = "\n"), "\n")[[1L]]
+        errors <- grep("^[[:space:]]*(ERROR|FATAL)(:|[[:space:]])", lines,
+                        value = TRUE, ignore.case = TRUE)
+        if (length(errors)) {
+          stop("LAStools reported an error despite exit status 0:\n",
+               paste(errors, collapse = "\n"))
+        }
+        diagnostics <- c(diagnostics, grep("^[[:space:]]*WARNING:", lines,
+                                           value = TRUE, ignore.case = TRUE))
       } else {
         value <- eval(parse(text = task_call), envir = envir)
         if (identical(value, FALSE)) stop("Processing returned FALSE (chunk/pipeline failure).")
@@ -1273,7 +1309,14 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
     benchmark_attempt_finish(attempt, c(result, common))
     if (!is.na(result$start_time)) Sys.sleep(config$scheduling$cooldown_seconds)
     if (result$success == 1L) {
-      cli::cli_alert_success("Finished in {result$finish_time-result$start_time} sec.")
+      elapsed <- result$finish_time - result$start_time
+      if (identical(result$validation_status, "passed")) {
+        cli::cli_alert_success("Finished in {elapsed} sec.; validation passed.")
+      } else if (identical(result$validation_status, "failed")) {
+        cli::cli_alert_danger("Execution finished in {elapsed} sec.; artifact validation failed.")
+      } else {
+        cli::cli_alert_warning("Execution finished in {elapsed} sec.; validation {result$validation_status}.")
+      }
     }
   }
   invisible(NULL)
@@ -1361,14 +1404,9 @@ benchmark_campaign_identity <- function(selection, tasks, runs, config, repo_roo
     for (call in calls) {
       if (benchmark_call_is_empty(call)) next
       executable <- benchmark_lastools_executable(config$lastools_path, call$executable)
-      version <- benchmark_process(executable, "-version")
-      if (version$status != 0L || !nzchar(trimws(paste0(version$stdout, version$stderr)))) {
-        stop("Native tool version query failed: ", executable, "\n",
-             version$stdout, version$stderr)
-      }
       native[[call$executable]] <- list(
         executable = benchmark_checksums(executable),
-        version = paste0(version$stdout, version$stderr)
+        version = benchmark_native_version(executable)
       )
     }
     native <- native[sort(names(native))]
@@ -1527,7 +1565,8 @@ benchmark_read_attempt <- function(attempt, manifest) {
     start_time = readr::col_datetime(), finish_time = readr::col_datetime(),
     recorded_at = readr::col_datetime(), output_file_count = readr::col_double(),
     exit_status = readr::col_integer(), density_points = readr::col_double(),
-    expected_output_file_count = readr::col_integer()
+    expected_output_file_count = readr::col_integer(),
+    boundary_difference_points = readr::col_double()
   )
   header <- names(readr::read_csv(
     result, n_max = 0, col_types = readr::cols(.default = readr::col_character()),
@@ -1569,8 +1608,9 @@ benchmark_read_attempt <- function(attempt, manifest) {
   }
   if ("validation_status" %in% names(record) &&
       record$validation_status == "accepted_exception" &&
-      !isTRUE(manifest$identity$config$accept_known_surface_discrepancies)) {
-    stop("Accepted surface exception requires the frozen opt-in policy: ", attempt)
+      !isTRUE(manifest$identity$config$accept_known_surface_discrepancies) &&
+      !isTRUE(manifest$identity$config$accept_known_extent_discrepancies)) {
+    stop("Accepted exception requires the frozen opt-in policy: ", attempt)
   }
   if ("monitoring_report_md5" %in% names(record) && !is.na(record$monitoring_report_md5)) {
     report_path <- file.path(attempt, "monitor-report.rds")
@@ -1657,6 +1697,7 @@ benchmark_validation_manifest <- function(ctg, config = NULL) {
        inputs = benchmark_checksums(tiles$filename), buffer = 20,
        input_metadata = config$input_metadata,
        accept_known_surface_discrepancies = isTRUE(config$accept_known_surface_discrepancies),
+       accept_known_extent_discrepancies = isTRUE(config$accept_known_extent_discrepancies),
        diagnostic_lasR = isTRUE(config$diagnostic_lasR))
 }
 
@@ -1673,7 +1714,7 @@ benchmark_artifact_specs <- function(task_id, tool) {
       if (tool == "lastools") "_avg.tif" else ".tif", 20, "z_mean")),
     pixel_metrics_2 = if (tool == "lastools") {
       Map(function(suffix, band) raster(suffix, 20, band),
-          paste0(c("_max", "_avg", "_std", "_dns", "_p5", "_p25",
+          paste0(c("_max", "_avg", "_std", "_dns", "_p05", "_p25",
                    "_p50", "_p75", "_p95"), ".tif"), metric_bands)
     } else list(raster(".tif", 20, metric_bands)),
     generate_DEM = list(raster()),
@@ -1694,7 +1735,7 @@ benchmark_artifact_specs <- function(task_id, tool) {
   specs
 }
 
-benchmark_validation_points <- function(manifest, tile) {
+benchmark_validation_points <- function(manifest, tile, task_id = NULL, tool = NULL) {
   tiles <- manifest$tiles
   b <- manifest$buffer
   selected <- tiles$Max.X >= tile$Min.X - b & tiles$Min.X <= tile$Max.X + b &
@@ -1713,6 +1754,37 @@ benchmark_validation_points <- function(manifest, tile) {
   })
   data <- do.call(rbind, clouds)
   if (!nrow(data)) stop("No reference points for tile: ", tile$id)
+  if (isTRUE(tool == "lidR") &&
+      isTRUE(task_id %in% c("generate_DEM", "generate_DSM2", "tree_detection"))) {
+    files <- tiles$filename[selected]
+    files <- c(tile$filename, files[files != tile$filename])
+    # Preserve the catalog reader's indexed point order and half-open halo.
+    bounds <- as.numeric(as.character(c(tile$Min.X - b, tile$Min.Y - b,
+                                        tile$Max.X + b, tile$Max.Y + b)))
+    filter <- paste("-inside", paste(bounds, collapse = " "))
+    select <- switch(task_id, generate_DEM = "xyzc", generate_DSM2 = "xyzr",
+                     tree_detection = "xyz")
+    if (task_id == "generate_DEM") filter <- paste(filter, "-keep_class 2 9")
+    cloud <- lidR::readLAS(files, select = select, filter = filter)
+    if (is.null(cloud) || lidR::is.empty(cloud)) {
+      stop("No catalog reference points for tile: ", tile$id)
+    }
+    columns <- c("X", "Y", "Z", switch(task_id, generate_DEM = "Classification",
+                                       generate_DSM2 = "ReturnNumber", NULL))
+    expected <- data[data$X >= bounds[1] & data$X < bounds[3] &
+                       data$Y >= bounds[2] & data$Y < bounds[4], columns, drop = FALSE]
+    if (task_id == "generate_DEM") {
+      expected <- expected[expected$Classification %in% c(2L, 9L), , drop = FALSE]
+    }
+    sorted <- function(x) data.table::setorderv(data.table::as.data.table(x), columns)
+    actual <- as.data.frame(cloud@data)[columns]
+    if (!isTRUE(all.equal(sorted(actual), sorted(expected),
+                           check.attributes = FALSE, tolerance = 0))) {
+      stop("Catalog reference read differs from full input payload: ", tile$id)
+    }
+    sf::st_crs(cloud) <- manifest$crs
+    return(cloud)
+  }
   lidR::LAS(data, header = lidR::readLASheader(tile$filename), crs = manifest$crs)
 }
 
@@ -1724,7 +1796,70 @@ benchmark_validation_grid <- function(tile, resolution, crs) {
               resolution = resolution, crs = if (is.na(crs)) "" else crs$wkt)
 }
 
-benchmark_reference_raster <- function(cloud, grid, task_id) {
+benchmark_reference_cells <- function(cloud, grid, tool = "lidR") {
+  xy <- as.matrix(cloud@data[, c("X", "Y"), with = FALSE])
+  cell <- terra::cellFromXY(grid, xy)
+  extent <- as.vector(terra::ext(grid))
+  if (identical(tool, "lasR")) {
+    cell[xy[, 1] >= extent[2] | xy[, 2] <= extent[3]] <- NA_integer_
+  } else {
+    resolution <- terra::res(grid)[1L]
+    # Pinned lidR clamps only the outer edges of its buffered raster layout.
+    edges <- (c(max(xy[, 1]), min(xy[, 2])) - resolution / 2) / resolution
+    edges <- sign(edges) * floor(abs(edges) + 0.5) * resolution
+    if (edges[1] + resolution > extent[2]) cell[xy[, 1] >= extent[2]] <- NA_integer_
+    if (edges[2] < extent[3]) cell[xy[, 2] <= extent[3]] <- NA_integer_
+  }
+  cell
+}
+
+benchmark_reference_dem <- function(cloud, grid) {
+  ground <- data.table::copy(cloud@data[Classification %in% c(2L, 9L), .(X, Y, Z)])
+  if (nrow(ground) < 3L) stop("Terrain reference requires at least three ground/water points.")
+  sites <- ground[, .(z_min = min(Z), z_max = max(Z)), by = .(X, Y)]
+  if (any(sites$z_min != sites$z_max)) {
+    stop("Terrain reference has ambiguous duplicate XY with different elevations.")
+  }
+  ground <- unique(ground)
+  geometry <- sf::st_sfc(sf::st_multipoint(as.matrix(ground[, .(X, Y)])),
+                          crs = sf::st_crs(cloud))
+  triangles <- sf::st_triangulate(geometry)
+  if (all(sf::st_is_empty(triangles))) stop("Terrain reference has no nondegenerate ground triangles.")
+  triangles <- sf::st_collection_extract(triangles, "POLYGON")
+  if (!length(triangles)) stop("Terrain reference has no nondegenerate ground triangles.")
+  vertices <- sf::st_coordinates(triangles)
+  if (nrow(vertices) != 4L * length(triangles)) stop("Invalid terrain reference triangulation.")
+  vertices <- data.table::data.table(X = vertices[, "X"], Y = vertices[, "Y"])
+  vertices$Z <- ground[vertices, on = .(X, Y), Z]
+  if (anyNA(vertices$Z)) stop("Terrain reference triangle vertex has no source elevation.")
+  vertex <- function(position) as.matrix(vertices[seq(position, nrow(vertices), by = 4L)])
+  a <- vertex(1L)
+  b <- vertex(2L) - a
+  c <- vertex(3L) - a
+  denominator <- b[, 1] * c[, 2] - b[, 2] * c[, 1]
+  if (any(!is.finite(denominator) | denominator == 0)) stop("Degenerate terrain reference triangle.")
+  values <- rep(NA_real_, terra::ncell(grid))
+  for (start in seq.int(1L, length(values), by = 100000L)) {
+    cells <- seq.int(start, min(start + 99999L, length(values)))
+    xy <- as.data.frame(terra::xyFromCell(grid, cells))
+    points <- sf::st_as_sf(xy, coords = c("x", "y"), crs = sf::st_crs(cloud))
+    hits <- sf::st_intersects(points, triangles)
+    inside <- lengths(hits) > 0L
+    ids <- vapply(hits[inside], `[`, integer(1), 1L)
+    dx <- xy$x[inside] - a[ids, 1]
+    dy <- xy$y[inside] - a[ids, 2]
+    u <- (dx * c[ids, 2] - dy * c[ids, 1]) / denominator[ids]
+    v <- (b[ids, 1] * dy - b[ids, 2] * dx) / denominator[ids]
+    values[cells[inside]] <- a[ids, 3] + u * b[ids, 3] + v * c[ids, 3]
+  }
+  terra::values(grid) <- values
+  grid
+}
+
+benchmark_reference_raster <- function(cloud, grid, task_id, tool = "lidR") {
+  if (task_id == "generate_DEM" && identical(tool, "lasR")) {
+    return(benchmark_reference_dem(cloud, grid))
+  }
   if (task_id %in% c("generate_DEM", "generate_DSM2")) {
     return(if (task_id == "generate_DEM") {
       lidR::rasterize_terrain(cloud, res = grid, algorithm = lidR::tin(),
@@ -1735,15 +1870,7 @@ benchmark_reference_raster <- function(cloud, grid, task_id) {
     })
   }
   data <- cloud@data
-  xy <- as.matrix(data[, c("X", "Y"), with = FALSE])
-  if (task_id == "generate_DSM1") {
-    resolution <- terra::res(grid)[1L]
-    xy <- floor(xy / resolution) * resolution + resolution / 2
-  }
-  cell <- terra::cellFromXY(grid, xy)
-  # Grid maximum edges have no owner; interior cells can use buffered points.
-  extent <- as.vector(terra::ext(grid))
-  cell[xy[, 1] >= extent[2] | xy[, 2] >= extent[4]] <- NA_integer_
+  cell <- benchmark_reference_cells(cloud, grid, tool)
   groups <- split(data$Z[!is.na(cell)], cell[!is.na(cell)])
   bands <- switch(task_id,
     pixel_metrics_1a = "z_mean",
@@ -1785,7 +1912,7 @@ benchmark_compare_values <- function(actual, expected, absolute = 2e-6, relative
 }
 
 benchmark_validate_raster <- function(file, spec, tile, manifest, cloud, numerical,
-                                      tool = NULL) {
+                                      tool = NULL, task_id = spec$reference) {
   raster <- terra::rast(file)
   grid <- benchmark_validation_grid(tile, spec$resolution, manifest$crs)
   exception <- isTRUE(manifest$accept_known_surface_discrepancies) &&
@@ -1793,6 +1920,9 @@ benchmark_validate_raster <- function(file, spec, tile, manifest, cloud, numeric
     isTRUE(tool %in% c("lidR", "lasR"))
   extent_exception <- exception &&
     (tool == "lasR" || spec$reference %in% c("generate_DSM1", "generate_DSM2"))
+  extent_only <- isTRUE(manifest$accept_known_extent_discrepancies) &&
+    task_id %in% c("pixel_metrics_1a", "pixel_metrics_2", "generate_DEM",
+                   "generate_DSM1", "generate_DSM2")
   mask_exception <- exception
   extent_delta <- as.vector(terra::ext(raster)) - as.vector(terra::ext(grid))
   geometry_matches <- terra::compareGeom(raster, grid, lyrs = FALSE, stopOnError = FALSE)
@@ -1806,12 +1936,17 @@ benchmark_validate_raster <- function(file, spec, tile, manifest, cloud, numeric
          "; expected ", paste(as.vector(terra::ext(grid)), collapse = ","), ".")
   }
   if (!geometry_matches) {
-    if (!extent_exception || any(abs(extent_delta) > spec$resolution + 1e-8)) {
+    covers_core <- all(extent_delta[c(1L, 3L)] <= 1e-8) &&
+      all(extent_delta[c(2L, 4L)] >= -1e-8)
+    if (!(extent_exception || (extent_only && covers_core)) ||
+        any(abs(extent_delta) > spec$resolution + 1e-8)) {
       stop("Raster extent mismatch; actual extent ",
            paste(as.vector(terra::ext(raster)), collapse = ","),
            "; expected ", paste(as.vector(terra::ext(grid)), collapse = ","), ".")
     }
-    waived <- c(waived, "Accepted known surface extent discrepancy (at most one cell per edge).")
+    waived <- c(waived, if (extent_only && covers_core)
+      "Accepted raster boundary convention (outward extension at most one cell per edge; full core retained)."
+      else "Accepted known surface extent discrepancy (at most one cell per edge).")
   }
   layers <- max(1L, length(spec$bands))
   if (terra::nlyr(raster) != layers) stop("Raster band count mismatch.")
@@ -1820,16 +1955,32 @@ benchmark_validate_raster <- function(file, spec, tile, manifest, cloud, numeric
   }
   actual <- terra::values(raster, mat = TRUE)
   if (any(is.infinite(actual))) stop("Infinite raster values.")
+  if (!geometry_matches) {
+    # Only the validation view is cropped; the timed product remains unchanged.
+    overlap <- terra::intersect(terra::ext(raster), terra::ext(grid))
+    if (is.null(overlap)) stop("Raster has no overlapping reference extent.")
+    actual <- terra::values(terra::crop(raster, overlap), mat = TRUE)
+  }
   if (!numerical) {
     if (!any(is.finite(actual))) stop("Raster has no finite coverage; native support is unverified.")
-    return(list(valid_values = sum(is.finite(actual))))
+    return(list(valid_values = sum(is.finite(actual)), accepted_exceptions = waived,
+                extent_delta = extent_delta))
   }
-  reference <- benchmark_reference_raster(cloud, grid, spec$reference)
+  reference <- benchmark_reference_raster(cloud, grid, spec$reference, tool)
+  boundary_difference_points <- 0L
+  boundary_convention <- NULL
+  if (spec$reference %in% c("pixel_metrics_1a", "pixel_metrics_2", "generate_DSM1")) {
+    lidr_cells <- benchmark_reference_cells(cloud, grid, "lidR")
+    lasr_cells <- benchmark_reference_cells(cloud, grid, "lasR")
+    boundary_difference_points <- sum(is.na(lidr_cells) != is.na(lasr_cells) |
+      (!is.na(lidr_cells) & !is.na(lasr_cells) & lidr_cells != lasr_cells), na.rm = TRUE)
+    boundary_convention <- if (identical(tool, "lasR"))
+      "right/down lookup; minimum Y and maximum X excluded" else
+      "right/down lookup; outer buffered-layout edges clamped"
+  }
+  terrain_float32 <- identical(tool, "lasR") && spec$reference == "generate_DEM"
+  relative <- if (terrain_float32) 4 * 2^-23 else 2e-7
   if (!geometry_matches) {
-    # Compare the aligned overlap; original products and extent deltas stay recorded.
-    overlap <- terra::intersect(terra::ext(raster), terra::ext(grid))
-    if (is.null(overlap)) stop("Surface has no overlapping reference extent.")
-    actual <- terra::values(terra::crop(raster, overlap), mat = TRUE)
     reference <- terra::crop(reference, overlap)
   }
   expected <- terra::values(reference, mat = TRUE)
@@ -1842,16 +1993,21 @@ benchmark_validate_raster <- function(file, spec, tile, manifest, cloud, numeric
       stop("No finite surface coverage in the overlapping core.")
     }
     if (any(shared)) {
-      detail <- benchmark_compare_values(actual[shared], expected[shared])
+      detail <- benchmark_compare_values(actual[shared], expected[shared], relative = relative)
     } else {
       waived <- c(waived, "No shared occupied cells; numerical values could not be compared.")
       detail <- list(valid_values = 0L, max_absolute_error = NA_real_)
     }
   } else {
-    detail <- benchmark_compare_values(actual, expected)
+    detail <- benchmark_compare_values(actual, expected, relative = relative)
   }
   c(detail, list(accepted_exceptions = waived, extent_delta = extent_delta,
-                 mask_difference = mask_difference))
+                 mask_difference = mask_difference,
+                 boundary_convention = boundary_convention,
+                 boundary_difference_points = boundary_difference_points,
+                 reference_method = if (terrain_float32)
+                   "unextrapolated GEOS ground TIN; barycentric values; four Float32 epsilons"
+                   else "workload-specific reference"))
 }
 
 benchmark_validate_points <- function(file, cloud, tile, manifest, numerical) {
@@ -1924,8 +2080,8 @@ benchmark_validate_vector <- function(file, cloud, tile, manifest, numerical) {
     expected <- cbind(expected, Z = reference$Z)
   }
   expected <- expected[, c("X", "Y", "Z"), drop = FALSE]
-  expected <- expected[expected[, 1] >= tile$Min.X & expected[, 1] < tile$Max.X &
-                         expected[, 2] >= tile$Min.Y & expected[, 2] < tile$Max.Y, , drop = FALSE]
+  expected <- expected[expected[, 1] >= tile$Min.X & expected[, 1] <= tile$Max.X &
+                         expected[, 2] >= tile$Min.Y & expected[, 2] <= tile$Max.Y, , drop = FALSE]
   sorted <- function(x) {
     x <- x[order(x[, 1], x[, 2], x[, 3]), , drop = FALSE]
     dimnames(x) <- NULL
@@ -1936,6 +2092,9 @@ benchmark_validate_vector <- function(file, cloud, tile, manifest, numerical) {
 }
 
 benchmark_validate_artifacts <- function(path, manifest, task_id, tool, execution = NULL) {
+  previous_threads <- lidR::get_lidr_threads()
+  on.exit(lidR::set_lidr_threads(previous_threads), add = TRUE)
+  lidR::set_lidr_threads(1L)
   contract <- benchmark_workload_contract(task_id, tool, isTRUE(manifest$diagnostic_lasR))
   specs <- contract$validation
   tiles <- manifest$tiles
@@ -1974,13 +2133,14 @@ benchmark_validate_artifacts <- function(path, manifest, task_id, tool, executio
     tile <- tiles[i, , drop = FALSE]
     warnings <- character()
     tile_result <- tryCatch(withCallingHandlers({
-      cloud <- benchmark_validation_points(manifest, tile)
+      cloud <- benchmark_validation_points(manifest, tile, task_id, tool)
       lapply(specs, function(spec) {
         file <- file.path(path, paste0(tile$id, spec$suffix))
         detail <- tryCatch({
           if (!file.exists(file) || file.info(file)$size == 0) stop("Missing/empty artifact.")
           switch(spec$kind,
-            raster = benchmark_validate_raster(file, spec, tile, manifest, cloud, numerical, tool),
+            raster = benchmark_validate_raster(file, spec, tile, manifest, cloud, numerical,
+                                                tool, task_id),
             points = benchmark_validate_points(file, cloud, tile, manifest, numerical),
             vector = benchmark_validate_vector(file, cloud, tile, manifest, numerical))
         }, error = function(e) list(error = conditionMessage(e)))

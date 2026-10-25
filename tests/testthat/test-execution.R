@@ -45,6 +45,38 @@ test_that("native workloads use real subprocess exit statuses", {
   expect_match(process_failed$diagnostic, "status 7", fixed = TRUE)
 })
 
+test_that("native zero statuses cannot hide child errors or warning diagnostics", {
+  fixture <- benchmark_fixture()
+  env <- fixture$env
+  context <- list2env(list(lastools_path = R.home("bin"), f = character(),
+                           dir_out = fixture$test_dir, cores = 2L))
+  call <- list(executable = "Rscript", args = character())
+  process <- list(status = 0L, stdout = "", stderr = "")
+  env$benchmark_process <- function(...) process
+  for (stream in c("stdout", "stderr")) {
+    for (error in c("ERROR: directory not found.", "  FATAL error in child process.")) {
+      process <- list(status = 0L, stdout = "", stderr = "")
+      process[[stream]] <- paste("Starting 2 processes", error, "Sucessfully started 2 jobs", sep = "\n")
+      result <- env$benchmark_execute_call(call, "lastools", context)
+      expect_identical(result$success, 0L)
+      expect_identical(result$execution_status, "failed")
+      expect_identical(result$exit_status, 0L)
+      expect_identical(result[[stream]], process[[stream]])
+      expect_match(result$diagnostic, "despite exit status 0")
+      expect_match(result$diagnostic, error, fixed = TRUE)
+    }
+    process <- list(status = 0L, stdout = "", stderr = "")
+    process[[stream]] <- "WARNING: all values are above the height_cutoff."
+    warned <- env$benchmark_execute_call(call, "lastools", context)
+    expect_identical(warned$execution_status, "succeeded")
+    expect_identical(warned$diagnostic, process[[stream]])
+  }
+  process <- list(status = 0L, stdout = "Input file ERROR_tile.laz\nNo errors found.", stderr = "")
+  ok <- env$benchmark_execute_call(call, "lastools", context)
+  expect_identical(ok$execution_status, "succeeded")
+  expect_true(is.na(ok$diagnostic))
+})
+
 test_that("empty workloads are skipped without timing or output measurements", {
   benchmark_execute_call <- benchmark_fixture()$env$benchmark_execute_call
   for (tool in c("lidR", "lasR", "lastools")) {

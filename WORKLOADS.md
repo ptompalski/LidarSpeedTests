@@ -95,26 +95,27 @@ the candidate definition is retained separately in `task_candidate_lasR`.
 | `pixel_metrics_2` | matched | matched | tool-specific | R: one nine-band GeoTIFF; LAStools: nine single-band metric GeoTIFFs |
 | `generate_DEM` | tool-specific | tool-specific | tool-specific | one single-band original-elevation terrain GeoTIFF |
 | `generate_DSM1` | matched | matched | tool-specific | one single-band original-elevation maximum GeoTIFF |
-| `generate_DSM2` | matched | matched | unsupported | one single-band first-return TIN original-elevation GeoTIFF |
+| `generate_DSM2` | matched | **blocked** | unsupported | one single-band first-return TIN original-elevation GeoTIFF |
 | `tree_detection` | tool-specific | tool-specific | unsupported | persisted GeoPackage point layer with XYZ treetop locations |
 | `complex_task1` | unsupported | **blocked** | unsupported | candidate: normalized LAZ, `*_dtm.tif`, `*_chm.tif` |
 | `complex_task2` | unsupported | **blocked** | unsupported | candidate: task 1 products plus `*_metrics.tif` (nine bands), `*_trees.gpkg` |
 
-There are 18 runnable, six unsupported and three blocked combinations.
+There are 17 runnable, six unsupported and four blocked combinations.
 That is the **default strict matrix**. With the user-authorized
-`diagnostic_lasR = TRUE`, the three blocked lasR calls become runnable
-`diagnostic_only` combinations, for 21 runnable and six unsupported pairs.
+`diagnostic_lasR = TRUE`, normalization and both complex lasR calls become runnable
+`diagnostic_only` combinations, for 20 runnable, six unsupported and one blocked pair.
+The lasR first-return TIN DSM remains blocked even in diagnostic mode.
 They retain the NA/corrupt-elevation warning; no algorithm, point dropping,
 NA filling or runtime upgrade is introduced. Their validation remains failed
 when errors are found, or unverified if diagnostic inspection finds none;
 they cannot become passed numerical comparisons or eligible report timings.
 Artifact patterns are requirements, not the old maximum-observed-file-count
 heuristic. Artifact validation checks explicit per-tile primary artifacts. In particular, LAStools
-percentile suffix spelling must be confirmed against the installed distribution;
-the descriptive contract uses `*_p*.tif`; validation conservatively requires
-`_p5`, `_p25`, `_p50`, `_p75`, `_p95` until native spelling is verified. A different
-spelling fails with explicit missing/unexpected names, never substitutes a
-duplicate percentile or certifies the distribution.
+percentile suffixes were observed in the installed 260914 distribution during
+the prepared-data pilot. Validation requires `_p05`, `_p25`, `_p50`, `_p75`,
+`_p95`; the descriptive contract uses `*_p*.tif`. A different spelling fails
+with explicit missing/unexpected names, never substitutes a duplicate percentile
+or certifies the distribution's numerical conventions.
 Optional VRT mosaics, spatial indexes and GDAL sidecars are not substitutes for
 primary artifacts. GeoPackages are written inside the run-owned output directory
 by both R tools (lidR's documented sf catalog driver is explicitly GPKG, not its
@@ -172,7 +173,7 @@ Inputs/outputs colliding with a tool's sentinel cannot be declared comparable.
 | Normalization | R terrain from classification 2 **and 9**, linear Delaunay TIN; replace retained Z with Z minus interpolated terrain, preserving owned XY/other attributes. lidR `tin()` can use its pinned default k=3 IDW extrapolation outside the hull (power 1, rmax 50). LAStools `lasheight64 -replace_z` uses its native ground/triangulation rules, not a proven class-2/9 equivalent. No clamping of negative heights. Outputs use the tool's LAS writer/quantization, not a newly imposed point-format conversion. |
 | DEM | R classes 2 and 9 explicitly; linear TIN, no maximum edge trim in lasR, lidR convex terrain mask and its TIN extrapolation behavior. `blast2dem64` now explicitly keeps classes 2/9 and requests `-elevation`; native `-kill 100` retains its 100 m maximum-edge behavior. These interpolation/support differences are non-comparable. |
 | DSM1 | All classes/returns, highest original Z per 1 m cell; no interpolation, subcircle spreading or NA filling. lasR uses supported `dsm(tin = FALSE)`, not deprecated `chm()`. |
-| DSM2 | All **first returns**, linear TIN at 1 m, no maximum-edge trim; lidR explicitly uses `dsmtin(highest = FALSE, max_edge = 0)` to remove its default highest-per-cell preselection, matching lasR `dsm(tin = TRUE)`. Degenerate triangles/boundaries still require validation. |
+| DSM2 | All **first returns**, linear TIN at 1 m, no maximum-edge trim; lidR explicitly uses `dsmtin(highest = FALSE, max_edge = 0)`. The corresponding lasR `dsm(tin = TRUE)` candidate is blocked: repeated identical runs choose different elevations near duplicate XY with differing Z. No implicit deduplication is introduced. |
 | Treetops | All points, original Z, 5 m local-maximum window and minimum Z=2 explicitly. lidR window is circular. lasR window shape, equal-height ties, exact threshold and boundary behavior are not certified equivalent. This basic task does not normalize and is not comparable to normalized pipeline treetops. |
 
 ### Complex candidates and the pinned-lasR blocker
@@ -203,6 +204,12 @@ The user subsequently authorized **diagnostic execution without that fix** throu
 the explicit flag above, including both complex candidates. Default calls remain
 disabled unless opted in; the known defect is not resolved or waived.
 
+The lasR first-return TIN DSM has a separate repeatability blocker, reproduced
+on the prepared pilot pair near duplicate XY with differing elevations.
+Its candidate remains available for inspection, but its runnable call is always
+empty, independently of `diagnostic_lasR`. Re-enabling requires a verified
+software fix or a separately approved deterministic population policy.
+
 Basic DSMs are **not CHMs**: they use original elevations. Only the disabled
 complex candidates normalize before computing canopy height.
 
@@ -224,10 +231,31 @@ outside timing. It checks their payload counts and finite XYZ, builds untimed
 references, and verifies input byte identity again afterwards. This may be
 expensive on full inputs; no header-count-only correctness shortcut is used.
 Reference metrics are independent R group reductions on cell populations;
-maximum DSM is an independent per-cell maximum. Terrain/first-return TIN and
+maximum DSM is an independent per-cell maximum. lidR terrain/first-return TIN and
 lidR normalization/trees use public lidR algorithms on an explicit buffered
 in-memory cloud, without catalog chunking/output drivers. Those checks establish
 catalog/persistence consistency, not an independent proof of the algorithms.
+lasR terrain instead uses public GEOS Delaunay triangulation through sf and
+independent barycentric interpolation in R on class-2/9 points. It neither
+extrapolates outside the ground hull nor quantizes interpolated elevations to
+the source LAS scale. Identical duplicate XYZ records do not alter that surface;
+duplicate XY with different Z and degenerate terrain fail explicitly rather than
+silently selecting an elevation. Alternate triangulations that change the surface
+remain numerical failures.
+
+lidR terrain, first-return TIN and treetop references replay the catalog's
+primary-file-first indexed read and half-open buffered reader filter after the
+full payload checks. This preserves point order for duplicate-XY triangulation
+and equal-height ties. The indexed read must retain exactly the same point
+population as a half-open subset of the fully read payload; an incomplete or
+stale index cannot make missing points pass. Terrain reads only classes 2/9
+before constructing its convex support hull, matching the timed catalog method. Reference algorithms
+run with one lidR thread, matching the timed workers; the caller's thread setting
+is restored afterwards. This avoids multithreaded treetop tie instability without
+changing the workloads or loosening numerical/population tolerances.
+Treetop references retain points on both minimum and maximum core boundaries,
+matching lidR's `sf::st_crop()` catalog driver. This differs from normalized
+point-cloud ownership, which remains half-open.
 
 Raster geometry must exactly match the contract's outward-snapped header extent,
 zero-origin resolution and CRS, with the required number/order of named metric
@@ -235,14 +263,27 @@ bands. There is no automatic cropping, alignment repair, resampling or filling.
 NoData masks must match the reference **exactly**, including singleton SD and
 unoccupied cells. Decoded NaN/NA is NoData; infinite values fail. Legitimate values
 colliding with either configured R NoData sentinel fail rather than disappearing.
-Maximum-DSM target ownership uses half-open XY cells; metric ownership uses
-the pinned R raster cell lookup (rightward X, downward Y on exact cell edges).
+Metrics and maximum DSM use the pinned raster cell lookup (rightward X,
+downward Y on exact internal cell edges), with tool-specific outer-edge rules.
+The lidR reference follows its buffered layout (rounding
+half-cell ties away from zero):
+only the outermost raster edges are clamped. A core edge inside the buffered
+layout is not clamped, and the core's maximum Y belongs to the row below it.
+The lasR reference excludes minimum-Y and maximum-X edge points, without
+clamping. Each output must match its own complete reference, including strict
+interior values and support; no boundary cells are arbitrarily ignored.
+Artifact reports record the convention and `boundary_difference_points`;
+the attempt CSV sums this count across tiles. Any differing point assignment
+excludes the attempt from `n_comparable`, even when its values happen to agree.
+Such passed attempts remain valid descriptive timings, not cross-tool equivalence.
+These rules do not change timed calls, input populations or metric/DSM tolerances.
 Both operate on original Z, including buffered contributions only to owned cells.
 TIN support is explicitly compared, not just the range of finite elevations.
 
 | Product | Numerical tolerance / required agreement |
 |---|---|
-| Means, nine metrics, terrain, maximum/first-return TIN DSM | For each finite value: absolute error <= `2e-6 + 2e-7 * abs(reference)`; exact support mask, band order and grid |
+| Means, nine metrics, lidR terrain, maximum/first-return TIN DSM | For each finite value: absolute error <= `2e-6 + 2e-7 * abs(reference)`; exact support mask, band order and grid |
+| lasR terrain | Absolute error <= `2e-6 + (4 * 2^-23) * abs(reference)`, an explicit four-Float32-epsilon budget for unrounded TIN evaluation/output; exact unextrapolated support and grid; still non-comparable across tools |
 | lidR normalized LAZ | Exact owned count, original non-Z attributes and XY after attribute-based sorting; normalized Z error <= half the output LAS Z scale + `1e-6`; no relative tolerance |
 | lidR treetops | Exact point population after XYZ sorting; XYZ error <= `1e-6`; original-Z minimum 2 and core bounds; no duplicate/nonfinite points |
 | Native LAStools / lasR treetops | Structural checks only; **unverified**, never passed numerical validation |
@@ -265,17 +306,25 @@ per-artifact error/support summaries and timestamps after scratch cleanup.
 The compiler preserves execution flags separately and adds `validated_success`;
 old records remain unverified and no maximum-observed-count heuristic remains.
 
+The pinned native multi-core launcher can return status 0 even when a child
+exits nonzero. Confirmed examples include `lascanopy` children exiting 1 on the
+cutoff warning and a `blast2dem` child exiting 3 after constructing an invalid
+`blast2dem64/serf/blast` helper path and omitting its tile. Processing output
+lines beginning `ERROR:`/`FATAL` therefore fail execution even with a zero
+parent status; `WARNING:` lines remain explicit execution diagnostics and
+prevent validation acceptance. Raw parent status and stdout/stderr are retained.
+No child failure is normalized to success, and no installed binary, licensing,
+cutoff, point population or requested core budget is changed.
+
 ### Boundary acceptance and remaining blockers
 
 Tiny neighboring-tile fixtures pass persisted R means/nine-band metrics, sparse
-cells, lidR normalization/attributes and distinct lidR treetops. They also expose
-real surface differences: on the integer-bounded fixture lidR maximum DSM has
-a different occupied-cell mask, while lasR terrain/DSMs extend beyond the
-outward-snapped contract maximum. Fractional header maxima can also make lidR
-surface extents round inward instead of outward. These are **rejected**, not
-declared equivalent or silently repaired. The contract and timed calls are not
-changed to hide them. Extent/support ownership needs a separately authorized
-workload correction before accepting those surface combinations on such inputs.
+cells, lidR normalization/attributes and distinct lidR treetops. The apparent
+lidR maximum-DSM mask failure was an incorrect floor-XY reference, now replaced
+by the tool-specific right/down lookup above. lasR terrain/DSMs can extend beyond
+the outward-snapped contract maximum; acceptance requires the explicit outward
+extent policy below. Fractional header maxima can also make lidR surface extents
+round inward instead of outward; these remain **rejected**, never silently repaired.
 
 LAStools numerical/filename/ownership conventions and entitlement, lasR treetop
 ties/ownership, exact shared-edge/degenerate TIN behavior and real-input metadata
@@ -296,7 +345,7 @@ normalized point clouds, vectors, LAStools or complex diagnostic products.
   to match. Larger extent differences fail.
 - R terrain/DSM NoData/occupied-cell differences are accepted and counted.
   Both products must have finite coverage in their aligned overlapping core.
-  Values on shared occupied cells must still satisfy the original numerical
+  Values on shared occupied cells must still satisfy the workload-specific numerical
   tolerances; infinity, corrupt/missing products and execution/reference warnings
   still fail. If the occupied populations are entirely disjoint, the report
   explicitly records that no numerical value comparison was possible.
@@ -309,6 +358,77 @@ descriptive timing/utilization summaries when execution and timing are otherwise
 eligible; `n_accepted_exception` identifies them. `validated_success` remains
 false and `n_comparable` excludes them. These are user-accepted differences,
 not a claim that formerly failing surfaces are numerically equivalent.
+
+### User-accepted outward raster extent conventions
+
+`accept_known_extent_discrepancies = TRUE` is a separate, frozen opt-in for
+basic metrics, terrain and DSM rasters from all three tools. It permits
+**outward extension by at most one cell per edge**, with the full expected core
+still present. It does not permit inward truncation, a shifted core, different
+CRS/resolution/alignment, or missing/extra primary products. Strict validation
+remains the default. The prepared-data pilot configuration enables this policy;
+the older surface extent/support policy remains disabled there.
+
+Validation compares an aligned in-memory view of the expected core; saved
+products and timed processing are unchanged. R core values, band names/order
+and NoData masks must still match the numerical reference exactly within the
+existing tolerances. Unlike the older surface policy, this flag does not waive
+any support-mask differences. Extra-cell values are not a numerical claim about
+the intended core; infinite values anywhere in the raster still fail.
+
+R attempts that satisfy these checks are `accepted_exception`, not `passed`,
+and enter only the existing descriptive timing summaries. Extent deltas and
+exception reasons are retained per artifact. LAStools attempts remain
+`unverified` even when the boundary convention is accepted structurally:
+native numerical/ownership conventions are not thereby certified, and such
+timings remain excluded. Empty core coverage, processing errors and missing
+tiles still fail. A new campaign ID is required after enabling this policy;
+historical reports are never rewritten.
+
+### Prepared-data investigation (2026-10-25)
+
+Targeted checks on the unchanged approved density-1 pair distinguished
+contract differences from execution defects and motivated the user-approved
+reference and blocking policies above. Timed calls and input bytes are unchanged:
+
+- Six points exactly on the southern tile's minimum Y boundary affect four
+  20 m metric cells. lasR excludes these points from the bottom row; the previous
+  common reference followed lidR's outer-edge clamping. Excluding just those points in
+  a diagnostic reference removes every metric tolerance failure. This is a
+  population convention, not a floating-point error or an authorized point filter.
+- Both maximum DSMs use rightward-X/downward-Y lookup on exact cell boundaries,
+  rather than the reference's floor-XY membership. Accounting for that lookup,
+  with lidR's outer-bottom clamping and lasR's non-clamping, removes every
+  observed maximum-DSM value and mask discrepancy on both tiles. Changing the
+  references was explicitly authorized; arbitrary mask differences have not
+  been waived.
+- lasR terrain support matches an unextrapolated ground TIN. The lidR terrain
+  reference expands support through its hull/extrapolation rules and quantizes
+  elevations to 0.001 m. Direct unquantized TIN comparisons have identical masks
+  on both tiles and maximum shared-cell errors below 0.000078 m, with five
+  values still beyond the former common tolerance. The explicit lasR-only
+  precision budget and independent unextrapolated reference are documented above;
+  DEM remains non-comparable across tools.
+- The first-return TIN inputs contain 11 and five duplicate-XY sites with
+  different elevations in the respective buffered populations. Two otherwise
+  identical single-core lasR runs changed 52 and 16 occupied cell values,
+  with maximum differences about 16.88 and 20.96 m near those duplicates.
+  Most other TIN differences are millimetre rounding, but these large,
+  non-repeatable differences are not an extent or precision exception.
+  No duplicate removal, highest/lowest-point choice or runtime upgrade is
+  performed without a separately approved policy.
+
+Native serial and parallel metric raster values were identical in these checks,
+but process tracing showed both parallel children exiting 1 while the parent
+exited 0. A traced parallel DEM run likewise lost a tile after a child exited 3
+while the parent exited 0. The processing-log safeguards above prevent those
+parent statuses from hiding errors or warnings in new attempts.
+
+Post-implementation checks ran both metric workloads, maximum DSM and DEM for
+both R tools at one and two cores on this pair (32 primary rasters). Every
+core value/support check succeeded: lidR attempts passed and lasR attempts
+retained explicit outward-extent exceptions. This is not full-dataset or
+native acceptance.
 
 ## Checks and remaining acceptance work
 

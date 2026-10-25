@@ -65,6 +65,7 @@ test_that("confirmed input metadata is validated and applied without changing so
   expect_identical(manifest$input_metadata, f$metadata)
   expect_true(manifest$diagnostic_lasR)
   expect_true(manifest$accept_known_surface_discrepancies)
+  expect_false(manifest$accept_known_extent_discrepancies)
   expect_identical(env$benchmark_checksums(f$files), f$bytes)
   expect_true(is.na(sf::st_crs(lidR::readLASheader(f$files[1L]))))
   bad <- f$metadata
@@ -88,9 +89,10 @@ test_that("known surface exceptions are opt-in and preserve numerical and struct
   for (tool in c("lidR", "lasR")) {
     run <- policy_run(f, "generate_DSM1", tool)
     expect_identical(run$result$execution_status, "succeeded")
-    expect_identical(run$result$validation_status, "accepted_exception",
+    expected <- if (tool == "lidR") "passed" else "accepted_exception"
+    expect_identical(run$result$validation_status, expected,
                      info = run$result$validation_diagnostic)
-    expect_true(length(run$report$accepted_exceptions) > 0L)
+    expect_equal(length(run$report$accepted_exceptions) > 0L, tool == "lasR")
     expect_identical(run$report$input_manifest$input_metadata, f$metadata)
   }
   expect_identical(f$env$benchmark_checksums(f$files), f$bytes)
@@ -98,8 +100,7 @@ test_that("known surface exceptions are opt-in and preserve numerical and struct
   expect_length(list.files(f$scratch), 0L)
   f$config$accept_known_surface_discrepancies <- FALSE
   strict <- policy_run(f, "generate_DSM1", "lidR")
-  expect_identical(strict$result$validation_status, "failed")
-  expect_match(strict$result$validation_diagnostic, "mask mismatch")
+  expect_identical(strict$result$validation_status, "passed")
   tile <- data.frame(Min.X = 0, Max.X = 4, Min.Y = 0, Max.Y = 4)
   cloud <- lidR::LAS(data.frame(X = c(.5, 1.5), Y = c(.5, 1.5), Z = c(2, 3)))
   sf::st_crs(cloud) <- 2959
@@ -134,18 +135,124 @@ test_that("input declarations and diagnostic acceptance policies are frozen in c
                      scratch_root = f$scratch, cores = 1L)
   campaign <- fixture_campaign(f$env, tasks, runs, f$config, "policies")
   expect_identical(campaign$manifest$identity$config$input_metadata, f$metadata)
-  for (field in c("diagnostic_lasR", "accept_known_surface_discrepancies", "input_metadata")) {
+  for (field in c("diagnostic_lasR", "accept_known_surface_discrepancies",
+                  "accept_known_extent_discrepancies", "input_metadata")) {
     changed <- f$config
     if (field == "input_metadata") {
       changed$input_metadata$confirmation <- "A different custodian declaration."
-    } else changed[[field]] <- FALSE
+    } else changed[[field]] <- !changed[[field]]
     expect_error(f$env$benchmark_campaign_check(campaign, tasks, runs, changed),
                  "incompatible|changed|match", ignore.case = TRUE)
   }
 })
 
+test_that("extent-only acceptance retains the full core and exact metric values and masks", {
+  f <- policy_fixture()
+  env <- f$env
+  tile <- data.frame(Min.X = 0, Max.X = 40, Min.Y = 0, Max.Y = 40)
+  cloud <- lidR::LAS(data.frame(X = c(10, 30, 10, 30),
+                                Y = c(10, 10, 30, 30), Z = c(10, 20, 30, 40)))
+  sf::st_crs(cloud) <- 2959
+  manifest <- list(crs = sf::st_crs(cloud), accept_known_extent_discrepancies = TRUE)
+  spec <- env$benchmark_artifact_specs("pixel_metrics_1a", "lasR")[[1L]]
+  grid <- env$benchmark_validation_grid(tile, 20, manifest$crs)
+  reference <- env$benchmark_reference_raster(cloud, grid, "pixel_metrics_1a")
+  file <- file.path(f$reports, "extended-metrics.tif")
+  extended <- terra::extend(reference, terra::ext(-20, 60, -20, 60), fill = 99)
+  write <- function(raster) terra::writeRaster(raster, file, overwrite = TRUE)
+  check <- function(numerical = TRUE, tool = "lasR") env$benchmark_validate_raster(
+    file, spec, tile, manifest, cloud, numerical, tool)
+  write(extended)
+  detail <- check()
+  expect_equal(detail$max_absolute_error, 0)
+  expect_equal(detail$valid_values, 4L)
+  expect_equal(detail$mask_difference, 0L)
+  expect_equal(unname(detail$extent_delta), c(-20, 20, -20, 20))
+  expect_match(detail$accepted_exceptions, "full core retained")
+  native <- check(FALSE, "lastools")
+  expect_equal(native$valid_values, 4L)
+  expect_match(native$accepted_exceptions, "boundary convention")
+  manifest$accept_known_extent_discrepancies <- FALSE
+  expect_error(check(), "extent mismatch")
+  manifest$accept_known_extent_discrepancies <- TRUE
+  wrong <- extended
+  values <- terra::values(wrong)
+  core <- terra::cellFromXY(wrong, matrix(c(10, 10), ncol = 2))
+  values[core] <- values[core] + 1
+  terra::values(wrong) <- values
+  write(wrong)
+  expect_error(check(), "Numerical tolerance")
+  values[core] <- NA_real_
+  terra::values(wrong) <- values
+  write(wrong)
+  expect_error(check(), "Coverage/NoData")
+  write(terra::crop(reference, terra::ext(20, 40, 0, 40)))
+  expect_error(check(), "extent mismatch")
+  write(terra::shift(reference, dx = 20))
+  expect_error(check(), "extent mismatch")
+  write(terra::extend(reference, terra::ext(0, 80, 0, 40)))
+  expect_error(check(), "extent mismatch")
+  write(terra::shift(extended, dx = 10))
+  expect_error(check(), "origin mismatch")
+  wrong <- extended
+  terra::crs(wrong) <- "EPSG:32618"
+  write(wrong)
+  expect_error(check(), "CRS/extent/resolution/origin")
+  wrong <- extended
+  values <- terra::values(wrong)
+  core <- terra::cellFromXY(wrong, as.matrix(cloud@data[, c("X", "Y"), with = FALSE]))
+  values[core] <- NA_real_
+  terra::values(wrong) <- values
+  write(wrong)
+  expect_error(check(FALSE, "lastools"), "no finite coverage")
+})
+
+test_that("accepted extent conventions are recorded without certifying native numerics", {
+  f <- policy_fixture()
+  env <- f$env
+  output <- file.path(f$reports, "extent-products")
+  dir.create(output)
+  catalog <- env$benchmark_apply_input_metadata(lidR::readLAScatalog(f$input), f$metadata)
+  config <- f$config
+  config$accept_known_surface_discrepancies <- FALSE
+  config$accept_known_extent_discrepancies <- TRUE
+  manifest <- env$benchmark_validation_manifest(catalog, config)
+  for (i in seq_len(nrow(manifest$tiles))) {
+    tile <- manifest$tiles[i, ]
+    cloud <- env$benchmark_validation_points(manifest, tile)
+    grid <- env$benchmark_validation_grid(tile, 20, manifest$crs)
+    reference <- env$benchmark_reference_raster(cloud, grid, "pixel_metrics_1a")
+    extent <- as.vector(terra::ext(reference))
+    extent[2] <- extent[2] + 20
+    terra::writeRaster(terra::extend(reference, terra::ext(extent)),
+                       file.path(output, paste0(tile$id, ".tif")))
+  }
+  report <- env$benchmark_validate_artifacts(output, manifest, "pixel_metrics_1a", "lasR")
+  expect_identical(report$status, "accepted_exception", info = report$diagnostic)
+  expect_length(report$accepted_exceptions, 1L)
+  for (id in manifest$tiles$id) {
+    expect_true(file.rename(file.path(output, paste0(id, ".tif")),
+                            file.path(output, paste0(id, "_avg.tif"))))
+  }
+  native <- env$benchmark_validate_artifacts(output, manifest, "pixel_metrics_1a", "lastools")
+  expect_identical(native$status, "unverified")
+  expect_match(native$diagnostic, "native numerical/ownership")
+  expect_length(native$accepted_exceptions, 1L)
+  failed <- list(execution_status = "failed", diagnostic = "Native process exited with status 1.")
+  rejected <- env$benchmark_validate_artifacts(
+    output, manifest, "pixel_metrics_1a", "lastools", failed)
+  expect_identical(rejected$status, "failed")
+  unlink(file.path(output, paste0(manifest$tiles$id[1], "_avg.tif")))
+  rejected <- env$benchmark_validate_artifacts(output, manifest, "pixel_metrics_1a", "lastools")
+  expect_identical(rejected$status, "failed")
+  expect_match(rejected$diagnostic, "inventory mismatch")
+})
+
 test_that("normalization and both complex calls execute diagnostically without hiding failures", {
   f <- policy_fixture()
+  tin <- f$env$benchmark_tasks[f$env$benchmark_tasks$task_id == "generate_DSM2", ]
+  expect_identical(tin$task_call_lasR, "")
+  expect_true(nzchar(tin$task_candidate_lasR))
   for (task in c("normalization", "complex_task1", "complex_task2")) {
     contract <- f$env$benchmark_workload_contract(task, "lasR", TRUE)
     expect_true(contract$supported)

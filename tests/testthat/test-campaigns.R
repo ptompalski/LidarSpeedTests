@@ -104,6 +104,31 @@ test_that("runtime thread environment and native versions/checksums reject resum
   expect_false(dir.exists(file.path(f$reports, "campaigns/query-failure")))
 })
 
+test_that("software version identity excludes variable LAStools licensing notices but not build changes", {
+  f <- campaign_fixture()
+  env <- f$env
+  f$config$tools <- "lastools"
+  f$tasks$task_call_lastools <- list(list(executable = "probe", args = character()))
+  license <- "non-profit"
+  build <- "260914"
+  original_process <- env$benchmark_process
+  env$benchmark_process <- function(executable, args = character()) {
+    if (identical(args, "-version")) {
+      notice <- if (license == "unlicensed") "Please clarify licensing terms.\n" else ""
+      return(list(status = 0L, stdout = "", stderr = paste0(notice,
+        "LAStools probe (by info@rapidlasso.de) version ", build, " (", license, ")\n")))
+    }
+    original_process(executable, args)
+  }
+  campaign <- fixture_campaign(env, f$tasks, f$runs, f$config)
+  expect_identical(campaign$manifest$identity$environment$native$probe$version,
+                   "LAStools probe (by info@rapidlasso.de) version 260914")
+  license <- "unlicensed"
+  expect_no_error(env$benchmark_campaign_check(campaign, f$tasks, f$runs, f$config))
+  build <- "260915"
+  expect_error(env$benchmark_campaign_check(campaign, f$tasks, f$runs, f$config), "environment")
+})
+
 test_that("resume and repetitions preserve skipped, failed and successful retries", {
   f <- campaign_fixture()
   env <- f$env
