@@ -1,5 +1,5 @@
 test_that("campaign identity is stable and records the required provenance", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   campaign <- fixture_campaign(env, f$tasks, f$runs, f$config)
   identity <- campaign$manifest$identity
@@ -21,7 +21,7 @@ test_that("campaign identity is stable and records the required provenance", {
 })
 
 test_that("changed data, indexes, configuration and task definitions reject resume", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   campaign <- fixture_campaign(env, f$tasks, f$runs, f$config)
   writeLines("changed input", f$files[1])
@@ -49,7 +49,7 @@ test_that("changed data, indexes, configuration and task definitions reject resu
 })
 
 test_that("code and lockfile byte changes reject a dirty checkout's resume", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   checkout <- file.path(f$test_dir, "checkout")
   dir.create(checkout)
@@ -75,7 +75,7 @@ test_that("code and lockfile byte changes reject a dirty checkout's resume", {
 })
 
 test_that("runtime thread environment and native versions/checksums reject resume", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   campaign <- fixture_campaign(env, f$tasks, f$runs, f$config)
   withr::with_envvar(c(OMP_NUM_THREADS = "999"), {
@@ -105,7 +105,7 @@ test_that("runtime thread environment and native versions/checksums reject resum
 })
 
 test_that("resume and repetitions preserve skipped, failed and successful retries", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   campaign <- fixture_campaign(env, f$tasks, f$runs, f$config)
   run <- function(...) env$benchmark_run(
@@ -161,7 +161,7 @@ test_that("resume and repetitions preserve skipped, failed and successful retrie
 })
 
 test_that("compilation cannot mix campaigns, legacy records or incomplete attempts", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   for (id in c("one", "two")) {
     campaign <- fixture_campaign(env, f$tasks, f$runs, f$config, id)
@@ -200,7 +200,7 @@ test_that("compilation cannot mix campaigns, legacy records or incomplete attemp
 })
 
 test_that("metadata failures are retained before scratch or workload execution", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   f$tasks$task_call_lidR <- "42"
   campaign <- fixture_campaign(env, f$tasks, f$runs, f$config)

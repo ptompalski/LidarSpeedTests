@@ -1,5 +1,5 @@
 test_that("configuration loading and path validation fail explicitly for unsafe settings", {
-  with_chat2_fixture({
+  with_execution_fixture({
     expect_identical(env$benchmark_load_config(config_file), config)
     Sys.unsetenv("LIDAR_BENCHMARK_CONFIG")
     expect_null(env$benchmark_load_config(file.path(test_dir, "missing.R"), FALSE))
@@ -43,7 +43,7 @@ test_that("configuration loading and path validation fail explicitly for unsafe 
 
 test_that("directory validation rejects inaccessible directories", {
   skip_on_os("windows")
-  with_chat2_fixture({
+  with_execution_fixture({
     restricted <- file.path(test_dir, "restricted directory")
     dir.create(restricted)
     withr::defer(Sys.chmod(restricted, "0700"))
@@ -61,7 +61,7 @@ test_that("directory validation rejects inaccessible directories", {
 })
 
 test_that("scratch cleanup checks ownership and filesystem identity", {
-  with_chat2_fixture({
+  with_execution_fixture({
     owner1 <- env$benchmark_scratch_create(scratch, c(input, reports))
     owner2 <- env$benchmark_scratch_create(scratch, c(input, reports))
     expect_false(identical(owner1$path, owner2$path))
@@ -98,7 +98,7 @@ test_that("scratch cleanup checks ownership and filesystem identity", {
 
 test_that("scratch cleanup rejects symbolic links and protects their targets", {
   skip_on_os("windows")
-  with_chat2_fixture({
+  with_execution_fixture({
     owner <- env$benchmark_scratch_create(scratch, c(input, reports))
     link <- file.path(owner$path, "input-link")
     expect_true(file.symlink(input, link))
@@ -114,7 +114,7 @@ test_that("scratch cleanup rejects symbolic links and protects their targets", {
 })
 
 test_that("native processes preserve literal arguments, streams, and failure diagnostics", {
-  with_chat2_fixture({
+  with_execution_fixture({
     special <- c("space in argument", "literal;not-a-command", "$literal",
                  "double\"quote", "single'quote", "back`tick", "")
     process <- env$benchmark_process(probe, c("--vanilla", script, "0", observed, special))
@@ -142,7 +142,7 @@ test_that("native processes preserve literal arguments, streams, and failure dia
 
 test_that("native version queries read stderr and reject failed queries", {
   skip_on_os("windows")
-  with_chat2_fixture({
+  with_execution_fixture({
     version_tool <- file.path(bin, "las2las")
     writeLines(c("#!/bin/sh", "printf 'LAStools version 240101\\n' >&2"), version_tool)
     Sys.chmod(version_tool, "0755")
@@ -154,7 +154,7 @@ test_that("native version queries read stderr and reject failed queries", {
 })
 
 test_that("setup definitions retain the workload matrix and validate selected inputs", {
-  with_chat2_fixture({
+  with_execution_fixture({
     setup <- new.env()
     setup$source <- function(file) sys.source(file.path(repo, file), setup)
     setup$library <- function(...) invisible(NULL)
@@ -188,7 +188,7 @@ test_that("setup definitions retain the workload matrix and validate selected in
 
 test_that("monitor startup and stop manage real process lifecycles", {
   skip_if_not(identical(unname(Sys.info()[["sysname"]]), "Linux"))
-  with_chat2_fixture({
+  with_execution_fixture({
     monitor_output <- file.path(test_dir, "monitor logs")
     dir.create(monitor_output)
     monitor_config <- config
@@ -212,7 +212,7 @@ test_that("monitor startup and stop manage real process lifecycles", {
 
 test_that("worker, monitor, and strategy cleanup retain failures and restore state", {
   skip_if_not(identical(unname(Sys.info()[["sysname"]]), "Linux"))
-  with_chat2_fixture({
+  with_execution_fixture({
     old_plan <- future::plan()
     withr::defer(future::plan(old_plan))
     monitor <- NULL
@@ -291,10 +291,10 @@ test_that("worker, monitor, and strategy cleanup retain failures and restore sta
 })
 
 test_that("dispatch records outputs and diagnostics while protecting inputs and scratch", {
-  with_chat2_fixture({
+  with_execution_fixture({
     # Replace only geospatial catalog creation and metadata with tiny stand-ins.
     catalog_class <- methods::setClass(
-      "Chat2Catalog", slots = c(data = "data.frame"), where = env
+      "ExecutionTestCatalog", slots = c(data = "data.frame"), where = env
     )
     env$catalog <- function(...) catalog_class(data = data.frame(filename = files))
     env$prepare_input <- function(...) env$catalog()

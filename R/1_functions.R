@@ -56,8 +56,8 @@ benchmark_workload_contract <- function(task_id, tool, diagnostic_lasR = FALSE) 
       "Local maxima window/tie/boundary semantics are not established as equivalent." else
       "Same target definition; tiny fixtures do not establish neighboring-tile correctness."
   list(
-    workload_contract = "chat5-v1", comparison_status = status,
-    comparison_group = if (matched) paste0("chat5-v1/", task_id) else NA_character_,
+    workload_contract = "workloads-v1", comparison_status = status,
+    comparison_group = if (matched) paste0("workloads-v1/", task_id) else NA_character_,
     comparison_note = note, supported = supported,
     z = if (startsWith(task_id, "complex_")) "original Z for terrain; normalized Z thereafter" else "original Z",
     population = switch(task_id,
@@ -856,7 +856,7 @@ benchmark_monitor_finish <- function(monitor, result, label) {
   start <- as.numeric(result$start_time)
   finish <- as.numeric(result$finish_time)
   summary <- benchmark_monitor_summary(samples, start, finish, label)
-  report <- list(schema = "chat9-v1", attempt_id = label,
+  report <- list(schema = "monitoring-v1", attempt_id = label,
                  timed_start_epoch = start, timed_finish_epoch = finish,
                  samples_md5 = benchmark_checksums(samples_path)$md5, summary = summary)
   report_path <- file.path(path, "monitor-report.rds")
@@ -1075,7 +1075,7 @@ benchmark_run_tool <- function(tool, task_call, context, config, label) {
     )
     report <- attr(counts, "validation_report")
     if (is.null(report)) {
-      report <- list(schema = "chat7-v1", status = counts$validation_status,
+      report <- list(schema = "validation-v1", status = counts$validation_status,
                      diagnostic = counts$validation_diagnostic)
     }
     if (!is.null(context$validation_report)) {
@@ -1580,7 +1580,7 @@ benchmark_read_attempt <- function(attempt, manifest) {
       stop("Monitoring report checksum does not match its attempt: ", attempt)
     }
     report <- readRDS(report_path)
-    if (!identical(report$schema, "chat9-v1") ||
+    if (!identical(report$schema, "monitoring-v1") ||
         !identical(report$attempt_id, record$attempt_id) ||
         !isTRUE(all.equal(c(report$timed_start_epoch, report$timed_finish_epoch),
                          c(record$monitoring_timed_start_epoch,
@@ -1653,7 +1653,7 @@ benchmark_validation_manifest <- function(ctg, config = NULL) {
       any(!is.finite(tiles$count) | tiles$count < 0)) {
     stop("Validation requires unique tile stems, finite nondegenerate bounds and counts.")
   }
-  list(schema = "chat7-v1", tiles = tiles, crs = sf::st_crs(ctg),
+  list(schema = "validation-v1", tiles = tiles, crs = sf::st_crs(ctg),
        inputs = benchmark_checksums(tiles$filename), buffer = 20,
        input_metadata = config$input_metadata,
        accept_known_surface_discrepancies = isTRUE(config$accept_known_surface_discrepancies),
@@ -1943,7 +1943,7 @@ benchmark_validate_artifacts <- function(path, manifest, task_id, tool, executio
     vapply(specs, function(spec) paste0(id, spec$suffix), character(1))
   }), use.names = FALSE)
   report <- list(
-    schema = "chat7-v1", task_id = task_id, tool = tool,
+    schema = "validation-v1", task_id = task_id, tool = tool,
     started_at = Sys.time(),
     workload_contract = contract$workload_contract, input_manifest = manifest,
     expected_files = expected, expected_file_count = length(expected),

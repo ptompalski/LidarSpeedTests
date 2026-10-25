@@ -70,9 +70,20 @@ fresh_map <- function(jobs, cores = 8L, logdir, execute = "fresh_dispatch") {
   if (!length(jobs)) return(invisible(list()))
   fresh_limit_threads()
   result <- vector("list", length(jobs))
+  completed <- 0L
+  phase <- jobs[[1L]]$phase
+  label <- if (identical(phase, "repair")) "Repair/check tiles" else "Prepare tiles"
+  progress <- cli::cli_progress_bar(name = label, total = length(jobs),
+    auto_terminate = FALSE)
+  on.exit(cli::cli_progress_done(id = progress,
+    result = if (completed == length(jobs)) "done" else "failed"), add = TRUE)
   if (cores == 1L) {
     fun <- if (is.character(execute)) get(execute, mode = "function") else execute
-    for (i in seq_along(jobs)) result[[i]] <- fun(jobs[[i]])
+    for (i in seq_along(jobs)) {
+      result[i] <- list(fun(jobs[[i]]))
+      completed <- completed + 1L
+      cli::cli_progress_update(id = progress, set = completed)
+    }
     return(invisible(result))
   }
   active <- list()
@@ -112,6 +123,8 @@ fresh_map <- function(jobs, cores = 8L, logdir, execute = "fresh_dispatch") {
       })
       result[as.integer(id)] <- list(value)
       active[[id]] <- NULL
+      completed <- completed + 1L
+      cli::cli_progress_update(id = progress, set = completed)
     }
     if (length(active)) Sys.sleep(.05)
   }
@@ -169,7 +182,7 @@ fresh_upgrade_failed_pilot <- function(root, previous, identity) {
   if (!file.rename(pilot, archived)) stop("Cannot archive failed pilot: ", pilot)
   petawawa_save(previous, file.path(archived, "root-identity-v1.rds"))
   petawawa_save(identity, file.path(root, "fresh-root.rds"))
-  message("Archived failed pilot at ", archived, "; downloaded archive unchanged.")
+  cli::cli_inform("Archived failed pilot at {.path {archived}}; downloaded archive unchanged.")
 }
 
 fresh_negative_z_policy <- function(previous, current) {
@@ -705,7 +718,7 @@ fresh_restart_failed_preparation <- function(folder, previous, identity, tiles) 
   ), reuse)
   identity$reused_repairs <- petawawa_checksum(reuse)
   petawawa_save(identity, file.path(folder, "stage-identity.rds"))
-  message("Archived prior preparation at ", archived, "; repaired tiles and download unchanged.")
+  cli::cli_inform("Archived prior preparation at {.path {archived}}; repaired tiles and download unchanged.")
   identity
 }
 
@@ -760,7 +773,6 @@ fresh_repair_tile <- function(job) {
   tile <- job$tile
   path <- file.path(job$folder, "repaired", paste0(tile, ".laz"))
   receipt <- paste0(path, ".rds")
-  message("Repair/check ", tile)
   if (file.exists(receipt)) {
     record <- readRDS(receipt)
     fresh_check_repair_policy(record, path)
@@ -918,7 +930,7 @@ fresh_prepare <- function(config, full = FALSE, retry_failed_preparation = FALSE
   on.exit(petawawa_save(list(status = if (completed) "completed" else "failed_or_interrupted",
                             ended = Sys.time()), file.path(execution_dir, "finished.rds")), add = TRUE)
   if (resume_parallel) fresh_archive_interrupted(folder, tiles, execution_dir)
-  message("Preparation: up to ", execution$workers, " tile workers; one native thread each.")
+  cli::cli_inform("Preparation: up to {execution$workers} tile workers; one native thread each.")
   repair_logs <- fresh_subdir(execution_dir, "repair")
   repair_jobs <- lapply(seq_along(tiles), function(i) list(phase = "repair",
     config = config, archive = archive, member = members[i], tile = tiles[i],
@@ -977,7 +989,8 @@ fresh_prepare <- function(config, full = FALSE, retry_failed_preparation = FALSE
     archive_md5 = plan$fresh$archive_md5,
     preparation_md5 = petawawa_checksum(file.path(output, "preparation.rds"))),
     file.path(folder, "ready.rds"))
-  message("Data QC passed: ", output, ". Benchmark acceptance still requires a new pilot.")
+  cli::cli_alert_success("Data QC passed: {.path {output}}.")
+  cli::cli_inform("Benchmark acceptance still requires a new pilot.")
   completed <- TRUE
   invisible(plan)
 }

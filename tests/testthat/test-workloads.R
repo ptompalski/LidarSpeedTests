@@ -1,4 +1,4 @@
-chat5_setup <- function(envir = parent.frame()) {
+workload_setup <- function(envir = parent.frame()) {
   withr::local_dir(repo, .local_envir = envir)
   withr::local_envvar(c(LIDAR_BENCHMARK_CONFIG = NA_character_), .local_envir = envir)
   env <- new.env(parent = globalenv())
@@ -13,8 +13,8 @@ chat5_setup <- function(envir = parent.frame()) {
   env
 }
 
-chat5_cloud <- function(data, envir = parent.frame()) {
-  directory <- tempfile("chat5-")
+workload_cloud <- function(data, envir = parent.frame()) {
+  directory <- tempfile("workload-")
   dir.create(directory)
   withr::defer(unlink(directory, recursive = TRUE), envir = envir)
   input <- file.path(directory, "input")
@@ -26,7 +26,7 @@ chat5_cloud <- function(data, envir = parent.frame()) {
   list(directory = directory, input = input, file = file)
 }
 
-chat5_call <- function(env, fixture, task, tool) {
+workload_call <- function(env, fixture, task, tool) {
   output <- file.path(fixture$directory, paste(task, tool, sep = "-"))
   dir.create(output)
   context <- new.env(parent = env)
@@ -43,7 +43,7 @@ chat5_call <- function(env, fixture, task, tool) {
 }
 
 test_that("metric definitions cover strict thresholds, type-7 quantiles and sparse cells", {
-  env <- chat5_setup()
+  env <- workload_setup()
   z <- c(-1, 0, 2, 2, 3, 4, 10)
   expect_equal(unlist(env$metrics_multiple(z)),
                c(z_max = 10, z_mean = 20/7, z_sd = sqrt(269/21),
@@ -60,7 +60,7 @@ test_that("metric definitions cover strict thresholds, type-7 quantiles and spar
 })
 
 test_that("every task/tool has a supported-artifact and comparability contract", {
-  env <- chat5_setup()
+  env <- workload_setup()
   contracts <- env$benchmark_contracts
   expect_equal(nrow(contracts), 27L)
   expect_equal(sum(contracts$supported), 18L)
@@ -87,10 +87,10 @@ test_that("every task/tool has a supported-artifact and comparability contract",
 })
 
 test_that("actual R metric calls persist matching known-value bands and geometry", {
-  env <- chat5_setup()
+  env <- workload_setup()
   withr::local_options(list(lidR.progress = FALSE))
   z <- c(-1, 0, 2, 2, 3, 4, 10)
-  fixture <- chat5_cloud(data.frame(
+  fixture <- workload_cloud(data.frame(
     X = as.numeric(1:7), Y = as.numeric(1:7), Z = z,
     ReturnNumber = c(1L, 2L, 1L, 2L, 1L, 2L, 1L),
     NumberOfReturns = rep(2L, 7), Classification = c(2L, 9L, 1L, 1L, 1L, 1L, 1L)
@@ -99,7 +99,7 @@ test_that("actual R metric calls persist matching known-value bands and geometry
   lasR::set_exec_options(ncores = lasR::sequential())
   for (task in c("pixel_metrics_1a", "pixel_metrics_2")) {
     rasters <- lapply(c("lidR", "lasR"), function(tool) {
-      run <- chat5_call(env, fixture, task, tool)
+      run <- workload_call(env, fixture, task, tool)
       files <- list.files(run$output, "\\.tif$", full.names = TRUE)
       expect_length(files, 1L)
       terra::rast(files)
@@ -118,7 +118,7 @@ test_that("actual R metric calls persist matching known-value bands and geometry
 })
 
 test_that("native lasR sparse metrics use NoData SD and an above-2 fraction", {
-  env <- chat5_setup()
+  env <- workload_setup()
   withr::defer(lasR::unset_exec_option())
   x <- data.frame(X = c(1, 21), Y = c(1, 21), Z = c(2, 3))
   bands <- names(env$metrics_multiple(numeric()))
@@ -134,8 +134,8 @@ test_that("native lasR sparse metrics use NoData SD and an above-2 fraction", {
 })
 
 test_that("LAStools metrics explicitly include all Z and use density not first-return cover", {
-  env <- chat5_setup()
-  fixture <- chat5_cloud(data.frame(X = c(1, 2), Y = c(1, 2), Z = c(-10, 2)))
+  env <- workload_setup()
+  fixture <- workload_cloud(data.frame(X = c(1, 2), Y = c(1, 2), Z = c(-10, 2)))
   ctg <- env$prepare_input(fixture$input, fixture$directory)
   expect_equal(lidR::opt_chunk_buffer(ctg), 20)
   expect_equal(lidR::opt_chunk_size(ctg), 0)
@@ -160,7 +160,7 @@ test_that("LAStools metrics explicitly include all Z and use density not first-r
 })
 
 test_that("surface and tree calls persist explicit raster and vector products", {
-  env <- chat5_setup()
+  env <- workload_setup()
   xy <- expand.grid(X = c(1, 19, 21, 39), Y = c(1, 19, 21, 39))
   data <- data.frame(xy, Z = 10, Classification = 2L,
                      ReturnNumber = 1L, NumberOfReturns = 1L)
@@ -168,12 +168,12 @@ test_that("surface and tree calls persist explicit raster and vector products", 
   data <- rbind(data, data.frame(X = c(10, 30, 10), Y = c(10, 30, 10),
                                  Z = c(15, 18, 30), Classification = 1L,
                                  ReturnNumber = c(1L, 1L, 2L), NumberOfReturns = 2L))
-  fixture <- chat5_cloud(data)
+  fixture <- workload_cloud(data)
   withr::defer(lasR::unset_exec_option())
   lasR::set_exec_options(ncores = lasR::sequential())
   for (task in c("generate_DSM1", "generate_DSM2")) {
     for (tool in c("lidR", "lasR")) {
-      run <- chat5_call(env, fixture, task, tool)
+      run <- workload_call(env, fixture, task, tool)
       files <- list.files(run$output, "\\.tif$", full.names = TRUE)
       expect_length(files, 1L)
       raster <- terra::rast(files)
@@ -185,14 +185,14 @@ test_that("surface and tree calls persist explicit raster and vector products", 
     }
   }
   for (tool in c("lidR", "lasR")) {
-    run <- chat5_call(env, fixture, "generate_DEM", tool)
+    run <- workload_call(env, fixture, "generate_DEM", tool)
     files <- list.files(run$output, "\\.tif$", full.names = TRUE)
     expect_length(files, 1L)
     values <- terra::values(terra::rast(files))
     expect_gt(sum(is.finite(values)), 0L)
     expect_true(all(abs(values[is.finite(values)] - 10) < 1e-5))
   }
-  normalized <- chat5_call(env, fixture, "normalization", "lidR")
+  normalized <- workload_call(env, fixture, "normalization", "lidR")
   files <- list.files(normalized$output, "\\.laz$", full.names = TRUE)
   expect_length(files, 1L)
   points <- lidR::readLAS(files)
@@ -202,7 +202,7 @@ test_that("surface and tree calls persist explicit raster and vector products", 
   expect_equal(sort(points$X), sort(data$X[owned]))
   expect_equal(sort(points$Y), sort(data$Y[owned]))
   for (tool in c("lidR", "lasR")) {
-    run <- chat5_call(env, fixture, "tree_detection", tool)
+    run <- workload_call(env, fixture, "tree_detection", tool)
     trees <- list.files(run$output, "\\.gpkg$", full.names = TRUE)
     expect_length(trees, 1L)
     expect_gt(nrow(sf::st_read(trees, quiet = TRUE)), 0L)
@@ -211,7 +211,7 @@ test_that("surface and tree calls persist explicit raster and vector products", 
 })
 
 test_that("the all-Z cutoff placeholder expands without invoking native LAStools", {
-  with_chat2_fixture({
+  with_execution_fixture({
     call_env$height_cutoff <- "-11"
     task_call$args <- c(task_call$args, "-height_cutoff", "{height_cutoff}")
     command <- env$benchmark_lastools_command(task_call, call_env)
@@ -225,7 +225,7 @@ test_that("the all-Z cutoff placeholder expands without invoking native LAStools
 })
 
 test_that("blocked runner attempts retain the contract and native blocker diagnostic", {
-  with_chat2_fixture({
+  with_execution_fixture({
     setup <- new.env()
     setup$source <- function(file) sys.source(file.path(repo, file), setup)
     setup$library <- function(...) invisible(NULL)
@@ -250,7 +250,7 @@ test_that("blocked runner attempts retain the contract and native blocker diagno
     result <- read.csv(files)
     expect_identical(result$execution_status, "skipped")
     expect_equal(result$success, 0)
-    expect_identical(result$workload_contract, "chat5-v1")
+    expect_identical(result$workload_contract, "workloads-v1")
     expect_identical(result$comparison_status, "blocked")
     expect_true(is.na(result$comparison_group))
     expect_match(result$diagnostic, "ground hull boundaries")
@@ -259,7 +259,7 @@ test_that("blocked runner attempts retain the contract and native blocker diagno
 })
 
 test_that("the pinned normalization defect is characterized and affected calls cannot run", {
-  env <- chat5_setup()
+  env <- workload_setup()
   xy <- expand.grid(X = c(1, 19, 21, 39), Y = c(1, 19, 21, 39))
   data <- data.frame(xy, Z = 10, Classification = 2L)
   result <- lasR::exec(

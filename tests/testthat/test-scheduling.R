@@ -95,7 +95,7 @@ test_that("schedule dispatch is serial, phase-specific and exactly follows the f
 })
 
 test_that("warmups have immutable records, cannot satisfy measurements and repeat on resume", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   f$config$scheduling <- env$benchmark_scheduling_config(
     list(repetitions = 2L, warmups = 1L, cooldown_seconds = 0)
@@ -140,7 +140,7 @@ test_that("warmups have immutable records, cannot satisfy measurements and repea
 })
 
 test_that("cooldown is untimed, runs on failures, skips resumed work and releases the lock", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   f$tasks$task_call_lidR <- "42"
   f$config$scheduling$cooldown_seconds <- 7
@@ -187,7 +187,7 @@ test_that("cooldown is untimed, runs on failures, skips resumed work and release
 })
 
 test_that("pre-scheduling immutable records remain readable without invented schedule slots", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   campaign <- fixture_campaign(env, f$tasks, f$runs, f$config)
   attempt <- env$benchmark_attempt_start(campaign, f$tasks$task_id, f$runs$ID, "lidR", 1L)
@@ -206,7 +206,7 @@ test_that("pre-scheduling immutable records remain readable without invented sch
 })
 
 test_that("native thread controls apply to actual workers and restore on workload failure", {
-  f <- chat2_fixture()
+  f <- execution_fixture()
   env <- f$env
   old_threads <- lidR::get_lidr_threads()
   old_dt <- data.table::getDTthreads()

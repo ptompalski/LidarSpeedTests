@@ -1,4 +1,4 @@
-chat7_fixture <- function(envir = parent.frame(), sparse = FALSE, fractional = FALSE) {
+validation_fixture <- function(envir = parent.frame(), sparse = FALSE, fractional = FALSE) {
   fixture <- benchmark_fixture(envir)
   env <- fixture$env
   input <- file.path(fixture$test_dir, "input")
@@ -40,7 +40,7 @@ chat7_fixture <- function(envir = parent.frame(), sparse = FALSE, fractional = F
   list(env = env, root = fixture$test_dir, input = input)
 }
 
-chat7_run <- function(fixture, task, tool) {
+validation_run <- function(fixture, task, tool) {
   env <- fixture$env
   output <- tempfile(paste0(task, "-", tool, "-"), tmpdir = fixture$root)
   dir.create(output)
@@ -60,10 +60,10 @@ chat7_run <- function(fixture, task, tool) {
 }
 
 test_that("input-derived artifacts and numerical references validate neighboring R tiles", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   for (task in c("pixel_metrics_1a", "pixel_metrics_2")) {
     for (tool in c("lidR", "lasR")) {
-      run <- chat7_run(fixture, task, tool)
+      run <- validation_run(fixture, task, tool)
       expect_identical(run$checked$validation_status, "passed",
                        info = paste(task, tool, run$checked$validation_diagnostic))
       expect_equal(run$checked$expected_output_file_count, 2L)
@@ -73,10 +73,10 @@ test_that("input-derived artifacts and numerical references validate neighboring
 })
 
 test_that("surface boundary discrepancies are rejected rather than cropped or filled", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   for (task in c("generate_DSM1", "generate_DSM2", "generate_DEM")) {
     for (tool in c("lidR", "lasR")) {
-      run <- chat7_run(fixture, task, tool)
+      run <- validation_run(fixture, task, tool)
       if (task == "generate_DSM1" || tool == "lasR") {
         expect_identical(run$checked$validation_status, "failed")
         expect_match(run$checked$validation_diagnostic, "mask mismatch|extent")
@@ -89,16 +89,16 @@ test_that("surface boundary discrepancies are rejected rather than cropped or fi
 })
 
 test_that("fractional header maxima cannot silently round surface extents inward", {
-  fixture <- chat7_fixture(fractional = TRUE)
+  fixture <- validation_fixture(fractional = TRUE)
   for (task in c("generate_DSM1", "generate_DSM2")) {
-    run <- chat7_run(fixture, task, "lidR")
+    run <- validation_run(fixture, task, "lidR")
     expect_identical(run$checked$validation_status, "failed")
     expect_match(run$checked$validation_diagnostic, "extent")
   }
 })
 
 test_that("neighboring metric references cover unequal values on exact cell edges", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   for (file in list.files(fixture$input, full.names = TRUE)) {
     cloud <- lidR::readLAS(file)
     cloud$Z <- seq_len(lidR::npoints(cloud)) / 10 - 1
@@ -106,7 +106,7 @@ test_that("neighboring metric references cover unequal values on exact cell edge
   }
   for (tool in c("lidR", "lasR")) {
     for (task in c("pixel_metrics_1a", "pixel_metrics_2")) {
-      run <- chat7_run(fixture, task, tool)
+      run <- validation_run(fixture, task, tool)
       expect_identical(run$checked$validation_status, "passed",
                        info = paste(task, tool, run$checked$validation_diagnostic))
     }
@@ -114,9 +114,9 @@ test_that("neighboring metric references cover unequal values on exact cell edge
 })
 
 test_that("sparse cells retain exact NoData masks and singleton SD", {
-  fixture <- chat7_fixture(sparse = TRUE)
+  fixture <- validation_fixture(sparse = TRUE)
   for (tool in c("lidR", "lasR")) {
-    run <- chat7_run(fixture, "pixel_metrics_2", tool)
+    run <- validation_run(fixture, "pixel_metrics_2", tool)
     expect_identical(run$checked$validation_status, "passed",
                      info = paste(tool, run$checked$validation_diagnostic))
     raster <- terra::rast(file.path(run$output, "tile1.tif"))
@@ -126,9 +126,9 @@ test_that("sparse cells retain exact NoData masks and singleton SD", {
 })
 
 test_that("missing corrupt partial shifted and wrong-band outputs are rejected independently", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   env <- fixture$env
-  run <- chat7_run(fixture, "pixel_metrics_2", "lidR")
+  run <- validation_run(fixture, "pixel_metrics_2", "lidR")
   file <- file.path(run$output, "tile1.tif")
   original <- terra::rast(file)
   snapshot <- terra::rast(original)
@@ -173,9 +173,9 @@ test_that("missing corrupt partial shifted and wrong-band outputs are rejected i
 })
 
 test_that("normalization validates owned point attributes and rejects partial populations", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   env <- fixture$env
-  run <- chat7_run(fixture, "normalization", "lidR")
+  run <- validation_run(fixture, "normalization", "lidR")
   expect_identical(run$checked$validation_status, "passed",
                    info = run$checked$validation_diagnostic)
   file <- file.path(run$output, "tile1.laz")
@@ -196,9 +196,9 @@ test_that("normalization validates owned point attributes and rejects partial po
 })
 
 test_that("required vectors and disabled complex products cannot be replaced by sidecars", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   env <- fixture$env
-  run <- chat7_run(fixture, "tree_detection", "lidR")
+  run <- validation_run(fixture, "tree_detection", "lidR")
   expect_identical(run$checked$validation_status, "passed",
                    info = run$checked$validation_diagnostic)
   tree_file <- file.path(run$output, "tile1.gpkg")
@@ -224,9 +224,9 @@ test_that("required vectors and disabled complex products cannot be replaced by 
 })
 
 test_that("execution diagnostics false returns and input mutation cannot pass validation", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   env <- fixture$env
-  run <- chat7_run(fixture, "generate_DSM1", "lasR")
+  run <- validation_run(fixture, "generate_DSM1", "lasR")
   warned <- run$execution
   warned$diagnostic <- "Chunk 2 failed but engine continued"
   checked <- env$check_results(
@@ -289,9 +289,9 @@ test_that("known maximum grids and empty vector populations pass without filling
 })
 
 test_that("native structural success never certifies unverified numerical conventions", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   env <- fixture$env
-  run <- chat7_run(fixture, "pixel_metrics_1a", "lidR")
+  run <- validation_run(fixture, "pixel_metrics_1a", "lidR")
   for (id in run$manifest$tiles$id) {
     expect_true(file.rename(file.path(run$output, paste0(id, ".tif")),
                             file.path(run$output, paste0(id, "_avg.tif"))))
@@ -304,7 +304,7 @@ test_that("native structural success never certifies unverified numerical conven
 })
 
 test_that("validation persists outside timing, protects report bytes and controls resume", {
-  fixture <- chat7_fixture()
+  fixture <- validation_fixture()
   env <- fixture$env
   reports <- file.path(fixture$root, "reports")
   scratch <- file.path(fixture$root, "scratch")
@@ -312,7 +312,7 @@ test_that("validation persists outside timing, protects report bytes and control
   dir.create(scratch)
   config <- list(input_roots = c(SSD = fixture$input),
                  scratch_roots = c(SSD = scratch), reports_path = reports,
-                 tools = "lidR", cores = 1L, workstation_id = "chat7-fixture",
+                 tools = "lidR", cores = 1L, workstation_id = "validation-fixture",
                  resource_monitoring = FALSE)
   tasks <- env$benchmark_tasks[env$benchmark_tasks$task_id == "pixel_metrics_1a", ]
   runs <- data.frame(ID = "ALS_1000_1_1_SSD_SSD", cores = 1L,

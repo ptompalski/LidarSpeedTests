@@ -37,7 +37,7 @@ benchmark_settings <- list(
 )
 
 
-# Chat 5 contracts and remaining equivalence limitations: WORKLOADS.md.
+# Workload contracts and remaining equivalence limitations: WORKLOADS.md.
 
 benchmark_tasks <- 
   tribble(
@@ -165,7 +165,7 @@ benchmark_tasks <-
     
   )
 
-benchmark_tasks$workload_contract <- "chat5-v1"
+benchmark_tasks$workload_contract <- "workloads-v1"
 blocked_lasR <- benchmark_tasks$task_id %in%
   c("normalization", "complex_task1", "complex_task2")
 benchmark_tasks$task_candidate_lasR <- ifelse(

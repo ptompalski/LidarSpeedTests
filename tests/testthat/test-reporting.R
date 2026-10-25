@@ -1,5 +1,5 @@
-chat10_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE) {
-  f <- chat6_fixture(envir)
+reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE) {
+  f <- campaign_fixture(envir)
   env <- f$env
   f$config$accept_known_surface_discrepancies <- accept_exceptions
   sys.source(file.path(repo, "R/reporting.R"), env)
@@ -26,9 +26,9 @@ chat10_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE) {
       validation_status = validation, validation_diagnostic = "synthetic fixture receipt",
       validation_report_md5 = unname(tools::md5sum(validation_path)),
       monitoring_status = monitor, monitoring_scope = "whole-machine", monitoring_platform = "Linux",
-      comparison_status = comparison, comparison_group = paste0("chat5-v1/", task),
+      comparison_status = comparison, comparison_group = paste0("workloads-v1/", task),
       comparison_note = "synthetic reporting fixture, not benchmark evidence",
-      workload_contract = "chat5-v1", cores = 1L
+      workload_contract = "workloads-v1", cores = 1L
     )
     if (monitor %in% c("available", "partial")) {
       epoch <- as.numeric(start)
@@ -60,7 +60,7 @@ chat10_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE) {
 }
 
 test_that("reporting retains retries and exclusions with deterministic sample statistics", {
-  f <- chat10_fixture()
+  f <- reporting_fixture()
   f$append(phase = "warmup", seconds = 100)
   f$append(seconds = 1, status = "failed", validation = "not_run")
   f$append(seconds = 2)
@@ -96,7 +96,7 @@ test_that("reporting retains retries and exclusions with deterministic sample st
 })
 
 test_that("accepted surface exceptions are descriptive measurements, not validated comparisons", {
-  f <- chat10_fixture(accept_exceptions = TRUE)
+  f <- reporting_fixture(accept_exceptions = TRUE)
   f$append(validation = "accepted_exception", seconds = 2)
   report <- f$read()
   row <- subset(report$summary, task_id == "pixel_metrics_1a" & run_id == f$runs$ID[1L])
@@ -110,7 +110,7 @@ test_that("accepted surface exceptions are descriptive measurements, not validat
 })
 
 test_that("short, invalid, unvalidated, partial and non-comparable results stay explicit", {
-  f <- chat10_fixture()
+  f <- reporting_fixture()
   f$append(seconds = .05)
   f$append(repetition = 2L, validation = "failed", monitor = "disabled")
   f$append(repetition = 3L, validation = "unverified", monitor = "disabled")
@@ -142,7 +142,7 @@ test_that("short, invalid, unvalidated, partial and non-comparable results stay 
 })
 
 test_that("missing dimensions and monitoring never become invented comparisons or zeros", {
-  f <- chat10_fixture()
+  f <- reporting_fixture()
   f$append(monitor = "disabled")
   r <- f$env$benchmark_read_campaign(f$reports, "report-fixture")
   r$run_id <- "custom"
@@ -167,7 +167,7 @@ test_that("missing dimensions and monitoring never become invented comparisons o
 })
 
 test_that("raw immutable campaign fixtures regenerate all intermediates figures tables and site", {
-  f <- chat10_fixture()
+  f <- reporting_fixture()
   f$append()
   f$append(repetition = 2L, seconds = 4)
   f$append(run = f$runs$ID[2L], seconds = 3)
@@ -223,7 +223,7 @@ test_that("raw immutable campaign fixtures regenerate all intermediates figures 
 })
 
 test_that("report generation blocks missing corrupt incomplete and empty campaign records", {
-  f <- chat10_fixture()
+  f <- reporting_fixture()
   env <- f$env
   expect_error(env$benchmark_build_report(f$reports, "report-fixture", repo, render = FALSE),
                "no completed attempts")
@@ -246,7 +246,7 @@ test_that("report generation blocks missing corrupt incomplete and empty campaig
 })
 
 test_that("complex summaries contain measured calls rather than sums of basic timings", {
-  f <- chat10_fixture()
+  f <- reporting_fixture()
   f$append(seconds = 2)
   f$append(task = "complex_task1", seconds = 7, comparison = "non_comparable")
   report <- f$read()
@@ -256,7 +256,7 @@ test_that("complex summaries contain measured calls rather than sums of basic ti
 })
 
 test_that("report snapshots reject concurrent execution and records added during generation", {
-  f <- chat10_fixture()
+  f <- reporting_fixture()
   f$append()
   lock <- file.path(f$reports, ".benchmark-execution-lock")
   dir.create(lock)
@@ -280,7 +280,7 @@ test_that("report snapshots reject concurrent execution and records added during
 })
 
 test_that("the compiler reads selected campaigns without benchmark or plotting setup", {
-  f <- chat10_fixture()
+  f <- reporting_fixture()
   f$append()
   env <- new.env(parent = globalenv())
   env$source <- function(file) {

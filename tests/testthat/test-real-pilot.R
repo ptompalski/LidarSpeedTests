@@ -1,6 +1,6 @@
 test_that("the opt-in real pilot retains its complete scoped schedule, retry, monitoring and report", {
-  root <- Sys.getenv("LIDAR_CHAT11_PILOT_ROOT")
-  if (!nzchar(root)) skip("Set LIDAR_CHAT11_PILOT_ROOT to review the completed real pilot.")
+  root <- Sys.getenv("LIDAR_PILOT_REVIEW_ROOT")
+  if (!nzchar(root)) skip("Set LIDAR_PILOT_REVIEW_ROOT to review the completed real pilot.")
   f <- benchmark_fixture()
   env <- f$env
   manifest <- readRDS(file.path(root, "manifest.rds"))

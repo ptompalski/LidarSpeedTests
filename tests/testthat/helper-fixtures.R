@@ -19,7 +19,7 @@ benchmark_fixture <- function(envir = parent.frame()) {
   list(env = env, test_dir = test_dir)
 }
 
-chat2_fixture <- function(envir = parent.frame()) {
+execution_fixture <- function(envir = parent.frame()) {
   fixture <- benchmark_fixture(envir)
   env <- fixture$env
   test_dir <- fixture$test_dir
@@ -88,15 +88,15 @@ chat2_fixture <- function(envir = parent.frame()) {
   )
 }
 
-with_chat2_fixture <- function(code) {
+with_execution_fixture <- function(code) {
   # Use a function frame so withr cleanup runs immediately on exit.
   envir <- environment()
-  list2env(chat2_fixture(envir), envir = envir)
+  list2env(execution_fixture(envir), envir = envir)
   eval(substitute(code), envir)
 }
 
-chat6_fixture <- function(envir = parent.frame()) {
-  fixture <- chat2_fixture(envir)
+campaign_fixture <- function(envir = parent.frame()) {
+  fixture <- execution_fixture(envir)
   fixture$config$tools <- "lidR"
   fixture$tasks <- data.frame(
     task_id = "unsupported", data_type = "datasets_org", output_format = "",

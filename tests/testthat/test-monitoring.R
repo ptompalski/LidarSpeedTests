@@ -1,5 +1,5 @@
 test_that("monitoring policy is explicit, validated and reserved for whole-machine Linux", {
-  f <- chat6_fixture()
+  f <- campaign_fixture()
   env <- f$env
   expect_identical(f$config$monitoring, list(scope = "whole-machine", interval_seconds = 1))
   expect_error(env$benchmark_monitoring_config(list(scope = "process-tree")), "not implemented")
@@ -81,12 +81,12 @@ test_that("summaries deterministically clip intervals and retain units and incom
 
 test_that("controlled native success and failure retain attributable immutable samples with no live monitor", {
   skip_if_not(identical(unname(Sys.info()[["sysname"]]), "Linux"))
-  f <- chat2_fixture()
+  f <- execution_fixture()
   env <- f$env
   f$config$tools <- "lastools"
   f$config$resource_monitoring <- TRUE
   f$config$monitoring$interval_seconds <- 0.05
-  catalog_class <- methods::setClass("Chat9Catalog", slots = c(data = "data.frame"), where = env)
+  catalog_class <- methods::setClass("MonitoringTestCatalog", slots = c(data = "data.frame"), where = env)
   env$catalog <- function(...) catalog_class(data = data.frame(filename = f$files))
   env$prepare_input <- function(...) env$catalog()
   env$benchmark_ALS_info <- function(...) list()
@@ -154,7 +154,7 @@ test_that("controlled native success and failure retain attributable immutable s
 
 test_that("monitor death and unresponsive shutdown fail explicitly and reap their processes", {
   skip_if_not(identical(unname(Sys.info()[["sysname"]]), "Linux"))
-  f <- chat2_fixture()
+  f <- execution_fixture()
   env <- f$env
   f$config$resource_monitoring <- TRUE
   f$config$monitoring$interval_seconds <- .05

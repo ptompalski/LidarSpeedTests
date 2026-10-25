@@ -1,4 +1,4 @@
-# Workload contracts: chat5-v1
+# Workload contracts: workloads-v1
 
 These definitions apply to **new attempts only**, with lidR 4.3.3 and lasR
 0.21.2 from `renv.lock`. They do not reinterpret historical results.
@@ -9,6 +9,11 @@ population, target geometry, bands and required artifact patterns. New runner
 CSVs carry `workload_contract`, `comparison_status`, `comparison_group` and
 `comparison_note`. Execution success is **not** numerical validation.
 
+Saved-data identifiers now describe their purpose: `workloads-v1`,
+`validation-v1`, `monitoring-v1` and `reporting-v1`. Records using the previous
+development-stage identifiers are not migrated or reinterpreted; regenerate
+campaigns and reports for use with the current code.
+
 ## Populations, units and statistics
 
 Inputs are the original, unnormalized point clouds (`datasets_org`), not the
@@ -16,10 +21,10 @@ unused normalized directory. XYZ must be finite. Horizontal and vertical units
 must be metres for the stated 1/20 m grids, 20 m buffers, 5 m windows and
 2 m thresholds to have that meaning. Original Z means the supplied elevation,
 including its original datum; no CRS, datum or unit conversion is performed.
-The recovered Chat 4 inputs have **unknown CRS**. These contracts do not resolve
+The recovered historical inputs have **unknown CRS**. These contracts do not resolve
 that provenance/units blocker or assign a guessed CRS.
 
-**Chat 11 confirmed declaration (2026-10-22):** the custodian confirmed the
+**Custodian-confirmed declaration (2026-10-22):** the custodian confirmed the
 backup inherited EPSG:2959 (NAD83(CSRS) / UTM zone 18N), EPSG:5713 (CGVD28
 height), and metre XYZ units unchanged from the identified original source.
 The headers themselves remain empty. Optional `input_metadata` configuration
@@ -76,8 +81,8 @@ with an entitled native processing run. Both LAStools metric tasks remain
 
 ## Supported matrix and required outputs
 
-`matched` below retains the Chat 5 matched-target label, not a validated result;
-Chat 7 validation is per attempt and has the boundary limitations below.
+`matched` below denotes a matched target definition, not a validated result;
+artifact validation is per attempt and has the boundary limitations below.
 `tool-specific` means runnable but **non-comparable**.
 `blocked` means deliberately empty runnable call and recorded skipped attempt;
 the candidate definition is retained separately in `task_candidate_lasR`.
@@ -104,7 +109,7 @@ NA filling or runtime upgrade is introduced. Their validation remains failed
 when errors are found, or unverified if diagnostic inspection finds none;
 they cannot become passed numerical comparisons or eligible report timings.
 Artifact patterns are requirements, not the old maximum-observed-file-count
-heuristic. Chat 7 validates explicit per-tile primary artifacts. In particular, LAStools
+heuristic. Artifact validation checks explicit per-tile primary artifacts. In particular, LAStools
 percentile suffix spelling must be confirmed against the installed distribution;
 the descriptive contract uses `*_p*.tif`; validation conservatively requires
 `_p5`, `_p25`, `_p50`, `_p75`, `_p95` until native spelling is verified. A different
@@ -148,7 +153,7 @@ remain unverified. Nominal per-file extents are unbuffered header XY bounds
 snapped outward to the grid. Sparse/partial-coverage tiles are **not** assumed to
 cover a complete 1 km square. Interpolation/masking and edge ownership may
 change the actual extent/valid support; no automatic crop, resample, hole filling
-or alignment repair hides these differences. The Chat 7 validator checks geometry,
+or alignment repair hides these differences. The artifact validator checks geometry,
 neighboring boundaries and actual coverage before an attempt is accepted.
 
 All raster artifacts are numeric GeoTIFFs, never hillshade/RGB previews.
@@ -194,14 +199,14 @@ records the native defect as the skip diagnostic. Candidate artifacts remain
 specified but **no complex workload is currently runnable**. The regression
 characterizes NA before writing corrupt output and verifies all three skips.
 An authorized runtime fix plus boundary/LAZ checks is required to re-enable them.
-Chat 11 subsequently authorized **diagnostic execution without that fix** through
+The user subsequently authorized **diagnostic execution without that fix** through
 the explicit flag above, including both complex candidates. Default calls remain
 disabled unless opted in; the known defect is not resolved or waived.
 
 Basic DSMs are **not CHMs**: they use original elevations. Only the disabled
 complex candidates normalize before computing canopy height.
 
-## Artifact validation: chat7-v1
+## Artifact validation: validation-v1
 
 Expectations are the product of unique input tile stems and workload artifacts,
 not successful peer runs. Input manifests record unbuffered header bounds/counts,
@@ -278,7 +283,7 @@ remain uncertified. The known pinned-lasR normalization defect and both complex
 blocks remain unchanged. A passed synthetic fixture is not all-input/all-tool
 equivalence, nor permission for a benchmark campaign.
 
-### User-accepted surface discrepancies (Chat 11)
+### User-accepted surface discrepancies
 
 The user explicitly authorized changing acceptance rules to defer known surface
 extent/support discrepancies. `accept_known_surface_discrepancies = TRUE` is
@@ -307,17 +312,18 @@ not a claim that formerly failing surfaces are numerically equivalent.
 
 ## Checks and remaining acceptance work
 
-Run `Rscript --vanilla tests/testthat.R`; focused checks use `filter = "chat5"`
-as described in README.md. Tests use tiny temporary synthetic clouds, real
+Run `Rscript --vanilla tests/testthat.R`; focused workload checks use
+`testthat::test_dir("tests/testthat", filter = "workloads")` after activating
+the project environment. Tests use tiny temporary synthetic clouds, real
 pinned R tools and persisted GeoTIFF/GPKG files. No licensed native processing,
 historical point-cloud processing, preparation or benchmark campaign is launched.
 The native-cutoff placeholder is tested with process stand-ins.
 
 The matched-definition groups must not be published as universally validated
 comparisons. Native LAStools conventions/entitlement, recovered-data units/
-provenance and the boundary limitations above remain blockers. Campaign identity
-(Chat 6) and artifact validation (Chat 7) are implemented; publication enforcement
-of comparison status remains Chat 10. The legacy compiler/site must not mix these changed
+provenance and the boundary limitations above remain blockers. Campaign identity,
+artifact validation and report comparison-status policies are implemented.
+The legacy compiler/site must not mix these changed
 workloads with historical timings or claim cross-tool equivalence.
 
 Sources: pinned package help for `lasR::metric_engine`, `rasterize`, `dsm`,

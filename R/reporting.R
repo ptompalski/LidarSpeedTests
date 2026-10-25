@@ -147,7 +147,7 @@ benchmark_report_prepare <- function(records, manifest) {
         "Measured; descriptive only, check contracts and matched inputs before comparisons"
     data.frame(section = section, n_samples = n, n_configurations = variants, status = reason)
   }))
-  list(schema = "chat10-v1", manifest = manifest, attempts = r, summary = summary,
+  list(schema = "reporting-v1", manifest = manifest, attempts = r, summary = summary,
        sections = sections, availability = availability)
 }
 
@@ -245,7 +245,7 @@ benchmark_build_report <- function(reports_path, campaign_id, repo_root = getwd(
   }
   source_files <- file.path(repo_root, c(inputs, "R/1_functions.R", "R/5_report.R", "renv.lock"))
   receipt <- list(
-    schema = "chat10-v1", campaign_id = campaign_id, identity_id = manifest$identity_id,
+    schema = "reporting-v1", campaign_id = campaign_id, identity_id = manifest$identity_id,
     created_at = Sys.time(), sources = rbind(raw_checksums, benchmark_checksums(source_files)),
     selection_policy = "latest started.rds timestamp per phase/tool/task/run/repetition; lexical attempt ID breaks ties",
     acceptance_policy = "passed validation or frozen-policy accepted surface exceptions; exceptions are descriptive, never comparable",
@@ -279,7 +279,7 @@ benchmark_build_report <- function(reports_path, campaign_id, repo_root = getwd(
 benchmark_report_read <- function(path = "report.rds") {
   if (!file.exists(path)) stop("Missing campaign report.rds. Run R/5_report.R; see README.md.")
   report <- readRDS(path)
-  if (!identical(report$schema, "chat10-v1")) stop("Unsupported campaign report schema.")
+  if (!identical(report$schema, "reporting-v1")) stop("Unsupported campaign report schema.")
   report
 }
 

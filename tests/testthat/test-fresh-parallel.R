@@ -6,6 +6,47 @@ fresh_parallel_fixture <- function(envir = parent.frame()) {
   list(env = env, directory = directory)
 }
 
+test_that("tile progress is parent-owned and counts only successful jobs", {
+  f <- fresh_parallel_fixture()
+  events <- list()
+  record <- function(...) events[[length(events) + 1L]] <<- list(...)
+  testthat::local_mocked_bindings(
+    cli_progress_bar = function(name, total, auto_terminate) {
+      record("start", name, total, auto_terminate, Sys.getpid())
+      "test-progress"
+    },
+    cli_progress_update = function(id, set) record("update", id, set, Sys.getpid()),
+    cli_progress_done = function(id, result) record("end", id, result, Sys.getpid()),
+    .package = "cli"
+  )
+  for (cores in c(1L, 2L)) {
+    for (phase in c("repair", "prepare")) {
+      events <- list()
+      jobs <- lapply(1:2, function(id) list(id = id, phase = phase))
+      result <- f$env$fresh_map(jobs, cores, f$directory, function(job) job$id)
+      expect_identical(result, list(1L, 2L))
+      expect_identical(events[[1L]], list("start",
+        if (phase == "repair") "Repair/check tiles" else "Prepare tiles",
+        2L, FALSE, Sys.getpid()))
+      expect_identical(events[2:3], list(
+        list("update", "test-progress", 1L, Sys.getpid()),
+        list("update", "test-progress", 2L, Sys.getpid())))
+      expect_identical(events[[4L]], list("end", "test-progress", "done", Sys.getpid()))
+    }
+    events <- list()
+    expect_error(f$env$fresh_map(jobs, cores, f$directory, function(job) {
+      stop("intentional progress failure")
+    }), "intentional progress failure")
+    expect_length(events, 2L)
+    expect_identical(events[[2L]], list("end", "test-progress", "failed", Sys.getpid()))
+  }
+  events <- list()
+  expect_identical(f$env$fresh_map(list(), 1L, f$directory), list())
+  expect_length(events, 0L)
+  expect_identical(f$env$fresh_map(list(list(phase = "repair"), list(phase = "repair")),
+    1L, f$directory, function(job) NULL), list(NULL, NULL))
+})
+
 test_that("preparation defaults to eight bounded workers with explicit thread limits and stable seeds", {
   f <- fresh_parallel_fixture()
   e <- f$env

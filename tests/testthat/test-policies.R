@@ -1,4 +1,4 @@
-chat11_fixture <- function(envir = parent.frame()) {
+policy_fixture <- function(envir = parent.frame()) {
   f <- benchmark_fixture(envir)
   env <- f$env
   f$input <- file.path(f$test_dir, "input")
@@ -41,7 +41,7 @@ chat11_fixture <- function(envir = parent.frame()) {
   f
 }
 
-chat11_run <- function(f, task, tool) {
+policy_run <- function(f, task, tool) {
   row <- f$env$benchmark_tasks[f$env$benchmark_tasks$task_id == task, ]
   report <- tempfile(tmpdir = f$reports, fileext = ".rds")
   context <- list2env(list(
@@ -55,7 +55,7 @@ chat11_run <- function(f, task, tool) {
 }
 
 test_that("confirmed input metadata is validated and applied without changing source bytes", {
-  f <- chat11_fixture()
+  f <- policy_fixture()
   env <- f$env
   ctg <- lidR::readLAScatalog(f$input)
   expect_true(is.na(sf::st_crs(ctg)))
@@ -84,9 +84,9 @@ test_that("confirmed input metadata is validated and applied without changing so
 })
 
 test_that("known surface exceptions are opt-in and preserve numerical and structural checks", {
-  f <- chat11_fixture()
+  f <- policy_fixture()
   for (tool in c("lidR", "lasR")) {
-    run <- chat11_run(f, "generate_DSM1", tool)
+    run <- policy_run(f, "generate_DSM1", tool)
     expect_identical(run$result$execution_status, "succeeded")
     expect_identical(run$result$validation_status, "accepted_exception",
                      info = run$result$validation_diagnostic)
@@ -97,7 +97,7 @@ test_that("known surface exceptions are opt-in and preserve numerical and struct
   expect_setequal(list.files(f$input, full.names = TRUE), f$files)
   expect_length(list.files(f$scratch), 0L)
   f$config$accept_known_surface_discrepancies <- FALSE
-  strict <- chat11_run(f, "generate_DSM1", "lidR")
+  strict <- policy_run(f, "generate_DSM1", "lidR")
   expect_identical(strict$result$validation_status, "failed")
   expect_match(strict$result$validation_diagnostic, "mask mismatch")
   tile <- data.frame(Min.X = 0, Max.X = 4, Min.Y = 0, Max.Y = 4)
@@ -127,7 +127,7 @@ test_that("known surface exceptions are opt-in and preserve numerical and struct
 })
 
 test_that("input declarations and diagnostic acceptance policies are frozen in campaign identity", {
-  f <- chat11_fixture()
+  f <- policy_fixture()
   tasks <- data.frame(task_id = "unsupported", data_type = "datasets_org",
                       output_format = "", task_call_lidR = "", task_call_lasR = "")
   runs <- data.frame(ID = "pilot", dir_in_org = f$input,
@@ -145,14 +145,14 @@ test_that("input declarations and diagnostic acceptance policies are frozen in c
 })
 
 test_that("normalization and both complex calls execute diagnostically without hiding failures", {
-  f <- chat11_fixture()
+  f <- policy_fixture()
   for (task in c("normalization", "complex_task1", "complex_task2")) {
     contract <- f$env$benchmark_workload_contract(task, "lasR", TRUE)
     expect_true(contract$supported)
     expect_identical(contract$comparison_status, "diagnostic_only")
     row <- f$env$benchmark_tasks[f$env$benchmark_tasks$task_id == task, ]
     expect_true(nzchar(row$task_call_lasR))
-    run <- chat11_run(f, task, "lasR")
+    run <- policy_run(f, task, "lasR")
     expect_false(run$result$execution_status == "skipped")
     expect_false(run$result$validation_status %in% c("passed", "accepted_exception"),
                  info = run$result$validation_diagnostic)
@@ -164,8 +164,8 @@ test_that("normalization and both complex calls execute diagnostically without h
 })
 
 test_that("declared CRS reaches persisted lasR metrics and input bytes remain unchanged", {
-  f <- chat11_fixture()
-  run <- chat11_run(f, "pixel_metrics_1a", "lasR")
+  f <- policy_fixture()
+  run <- policy_run(f, "pixel_metrics_1a", "lasR")
   expect_identical(run$result$execution_status, "succeeded")
   expect_identical(run$result$validation_status, "passed",
                    info = run$result$validation_diagnostic)
@@ -173,7 +173,7 @@ test_that("declared CRS reaches persisted lasR metrics and input bytes remain un
   expect_setequal(list.files(f$input, full.names = TRUE), f$files)
   index <- sub("\\.las$", ".lax", f$files[1L])
   unlink(index)
-  run <- chat11_run(f, "pixel_metrics_1a", "lasR")
+  run <- policy_run(f, "pixel_metrics_1a", "lasR")
   expect_identical(run$result$execution_status, "failed")
   expect_match(run$result$diagnostic, "existing nonempty LAX")
   expect_false(file.exists(index))
@@ -214,7 +214,7 @@ test_that("pilot staging copies only the frozen neighboring pair and refuses cha
 })
 
 test_that("declared native metadata assigns the CRS without transforming coordinates or permitting demo fallback", {
-  with_chat2_fixture({
+  with_execution_fixture({
     task_call$executable <- "lascanopy64"
     call_env$input_metadata <- list(horizontal_epsg = 2959L)
     command <- env$benchmark_lastools_command(task_call, call_env)
@@ -240,7 +240,7 @@ test_that("large sparse surface references preserve cell ownership without named
 })
 
 test_that("buffered validation preserves sub-millimetre input coordinates instead of requantizing", {
-  f <- chat11_fixture()
+  f <- policy_fixture()
   for (file in list.files(f$input, "\\.las$", full.names = TRUE)) {
     cloud <- lidR::readLAS(file)
     data <- as.data.frame(cloud@data)
