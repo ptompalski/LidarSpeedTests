@@ -186,7 +186,7 @@ benchmark_validate_config <- function(config) {
   config$scheduling <- benchmark_scheduling_config(config$scheduling)
   config$input_metadata <- benchmark_input_metadata(config$input_metadata)
   for (field in c("accept_known_surface_discrepancies", "accept_known_extent_discrepancies",
-                  "diagnostic_lasR")) {
+                  "accept_known_lastools_cutoff_warning", "diagnostic_lasR")) {
     if (is.null(config[[field]])) config[[field]] <- FALSE
     if (!is.logical(config[[field]]) || length(config[[field]]) != 1L ||
         is.na(config[[field]])) stop(field, " must be TRUE or FALSE.")
@@ -640,6 +640,43 @@ benchmark_lastools_command <- function(task_call, envir) {
   )
 }
 
+benchmark_lastools_cutoff_warnings <- function(lines, command, envir) {
+  if (!isTRUE(get0("accept_known_lastools_cutoff_warning", envir, inherits = FALSE)) ||
+      !isTRUE(get0("task_id", envir, inherits = FALSE) %in%
+                c("pixel_metrics_1a", "pixel_metrics_2")) ||
+      !sub("\\.exe$", "", basename(command$executable)) %in% c("lascanopy", "lascanopy64")) {
+    return(integer())
+  }
+  position <- which(command$args == "-height_cutoff")
+  cutoff <- get0("height_cutoff", envir, inherits = FALSE)
+  number <- "[-+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][-+]?[0-9]+)?"
+  if (length(position) != 1L || position == length(command$args) ||
+      !identical(command$args[position + 1L], cutoff) ||
+      !grepl(paste0("^", number, "$"), cutoff, perl = TRUE)) return(integer())
+  cutoff <- as.numeric(cutoff)
+  if (!is.finite(cutoff)) return(integer())
+  header <- paste0("^WARNING: z coordinates range from (", number, ") to (", number,
+                    ") for '(.*)'$")
+  continuation <- paste0("^all values are above the height_cutoff (", number, ")\\.$")
+  known <- integer()
+  for (i in grep("^[[:space:]]*WARNING:", lines, ignore.case = TRUE)) {
+    if (i + 2L > length(lines)) next
+    range <- regmatches(trimws(lines[i]), regexec(header, trimws(lines[i]), perl = TRUE))[[1L]]
+    threshold <- regmatches(trimws(lines[i + 1L]),
+      regexec(continuation, trimws(lines[i + 1L]), perl = TRUE))[[1L]]
+    if (length(range) != 4L || length(threshold) != 2L ||
+        !range[4L] %in% get0("f", envir, inherits = FALSE) ||
+        trimws(lines[i + 2L]) !=
+          "maybe run 'lasheight -i raw.las -replace_z -o normalized.laz'.") next
+    values <- as.numeric(c(range[2:3], threshold[2L]))
+    if (all(is.finite(values)) && values[1L] <= values[2L] && values[1L] > cutoff &&
+        abs(values[3L] - cutoff) <= 1e-12 * max(1, abs(cutoff))) {
+      known <- c(known, i)
+    }
+  }
+  known
+}
+
 benchmark_execute_call <- function(task_call, tool, envir = parent.frame()) {
   result <- list(
     tool = tool,
@@ -649,6 +686,8 @@ benchmark_execute_call <- function(task_call, tool, envir = parent.frame()) {
     exit_status = NA_integer_,
     stdout = NA_character_,
     stderr = NA_character_,
+    execution_warning_exception = NA_character_,
+    accepted_execution_warnings = NA_character_,
     start_time = as.POSIXct(NA),
     finish_time = as.POSIXct(NA),
     validation_status = "not_run",
@@ -673,19 +712,30 @@ benchmark_execute_call <- function(task_call, tool, envir = parent.frame()) {
         result$exit_status <- as.integer(process$status)
         result$stdout <- process$stdout
         result$stderr <- process$stderr
-        if (process$status != 0L) {
-          stop(paste0("LAStools exited with status ", process$status, ".\n",
-                      process$stdout, process$stderr))
-        }
         lines <- strsplit(paste(process$stdout, process$stderr, sep = "\n"), "\n")[[1L]]
         errors <- grep("^[[:space:]]*(ERROR|FATAL)(:|[[:space:]])", lines,
                         value = TRUE, ignore.case = TRUE)
+        warnings <- grep("^[[:space:]]*WARNING:", lines, ignore.case = TRUE)
+        known <- benchmark_lastools_cutoff_warnings(lines, command, envir)
+        known_status <- process$status == 1L && !length(errors) &&
+          length(warnings) > 0L && all(warnings %in% known)
+        if (process$status != 0L && !known_status) {
+          stop(paste0("LAStools exited with status ", process$status, ".\n",
+                      process$stdout, process$stderr))
+        }
         if (length(errors)) {
           stop("LAStools reported an error despite exit status 0:\n",
                paste(errors, collapse = "\n"))
         }
-        diagnostics <- c(diagnostics, grep("^[[:space:]]*WARNING:", lines,
-                                           value = TRUE, ignore.case = TRUE))
+        if (length(known)) {
+          result$execution_warning_exception <- "lascanopy_all_values_above_height_cutoff"
+          result$accepted_execution_warnings <- paste(unlist(lapply(known, function(i) {
+            lines[i + 0:2]
+          })), collapse = "\n")
+          message("Accepted known lascanopy cutoff warning (raw exit status ",
+                  process$status, "); native numerical validation remains unverified.")
+        }
+        diagnostics <- c(diagnostics, lines[setdiff(warnings, known)])
       } else {
         value <- eval(parse(text = task_call), envir = envir)
         if (identical(value, FALSE)) stop("Processing returned FALSE (chunk/pipeline failure).")
@@ -1071,6 +1121,8 @@ benchmark_run_tool <- function(tool, task_call, context, config, label) {
     context$dir_out <- scratch$path
     context$ctg <- prepare_input(context$dir_in, context$dir_out)
     context$input_metadata <- config$input_metadata
+    context$accept_known_lastools_cutoff_warning <-
+      isTRUE(config$accept_known_lastools_cutoff_warning)
     context$ctg <- benchmark_apply_input_metadata(context$ctg, config$input_metadata)
     context$f <- context$ctg@data$filename
     if (!length(context$f) || anyNA(context$f) || any(!file.exists(context$f)) ||
@@ -1612,6 +1664,12 @@ benchmark_read_attempt <- function(attempt, manifest) {
       !isTRUE(manifest$identity$config$accept_known_extent_discrepancies)) {
     stop("Accepted exception requires the frozen opt-in policy: ", attempt)
   }
+  if ("execution_warning_exception" %in% names(record) &&
+      !is.na(record$execution_warning_exception) &&
+      nzchar(record$execution_warning_exception) &&
+      !isTRUE(manifest$identity$config$accept_known_lastools_cutoff_warning)) {
+    stop("Accepted native cutoff warning requires the frozen opt-in policy: ", attempt)
+  }
   if ("monitoring_report_md5" %in% names(record) && !is.na(record$monitoring_report_md5)) {
     report_path <- file.path(attempt, "monitor-report.rds")
     samples_path <- file.path(attempt, "monitor-samples.csv")
@@ -1698,6 +1756,7 @@ benchmark_validation_manifest <- function(ctg, config = NULL) {
        input_metadata = config$input_metadata,
        accept_known_surface_discrepancies = isTRUE(config$accept_known_surface_discrepancies),
        accept_known_extent_discrepancies = isTRUE(config$accept_known_extent_discrepancies),
+       accept_known_lastools_cutoff_warning = isTRUE(config$accept_known_lastools_cutoff_warning),
        diagnostic_lasR = isTRUE(config$diagnostic_lasR))
 }
 
@@ -2106,11 +2165,22 @@ benchmark_validate_artifacts <- function(path, manifest, task_id, tool, executio
     started_at = Sys.time(),
     workload_contract = contract$workload_contract, input_manifest = manifest,
     expected_files = expected, expected_file_count = length(expected),
+    execution_warning_exception = execution$execution_warning_exception,
+    accepted_execution_warnings = execution$accepted_execution_warnings,
+    exit_status = execution$exit_status,
     artifacts = list(), status = "passed", diagnostic = NA_character_
   )
   reasons <- character()
   if (!contract$supported) reasons <- c(reasons, contract$comparison_note)
   if (!is.null(execution)) {
+    exception <- execution$execution_warning_exception
+    if (!is.null(exception) && !is.na(exception) && nzchar(exception) &&
+        (!isTRUE(manifest$accept_known_lastools_cutoff_warning) ||
+         tool != "lastools" || !task_id %in% c("pixel_metrics_1a", "pixel_metrics_2") ||
+         exception != "lascanopy_all_values_above_height_cutoff" ||
+         !isTRUE(execution$exit_status %in% c(0L, 1L)))) {
+      reasons <- c(reasons, "Native cutoff-warning exception is not authorized for this attempt.")
+    }
     if (execution$execution_status != "succeeded") reasons <- c(reasons, "Execution did not succeed.")
     if (!is.null(execution$diagnostic) && !is.na(execution$diagnostic) &&
         nzchar(execution$diagnostic)) {

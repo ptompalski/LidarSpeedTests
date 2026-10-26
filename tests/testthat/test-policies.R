@@ -66,6 +66,7 @@ test_that("confirmed input metadata is validated and applied without changing so
   expect_true(manifest$diagnostic_lasR)
   expect_true(manifest$accept_known_surface_discrepancies)
   expect_false(manifest$accept_known_extent_discrepancies)
+  expect_false(manifest$accept_known_lastools_cutoff_warning)
   expect_identical(env$benchmark_checksums(f$files), f$bytes)
   expect_true(is.na(sf::st_crs(lidR::readLASheader(f$files[1L]))))
   bad <- f$metadata
@@ -136,7 +137,8 @@ test_that("input declarations and diagnostic acceptance policies are frozen in c
   campaign <- fixture_campaign(f$env, tasks, runs, f$config, "policies")
   expect_identical(campaign$manifest$identity$config$input_metadata, f$metadata)
   for (field in c("diagnostic_lasR", "accept_known_surface_discrepancies",
-                  "accept_known_extent_discrepancies", "input_metadata")) {
+                  "accept_known_extent_discrepancies", "accept_known_lastools_cutoff_warning",
+                  "input_metadata")) {
     changed <- f$config
     if (field == "input_metadata") {
       changed$input_metadata$confirmation <- "A different custodian declaration."

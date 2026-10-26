@@ -442,6 +442,30 @@ test_that("native structural success never certifies unverified numerical conven
     run$output, run$manifest, "pixel_metrics_1a", "lastools", warned)
   expect_identical(checked$validation_status, "failed")
   expect_match(checked$validation_diagnostic, "child process")
+  accepted <- run$execution
+  accepted$exit_status <- 1L
+  accepted$execution_warning_exception <- "lascanopy_all_values_above_height_cutoff"
+  accepted$accepted_execution_warnings <- "Recorded exact cutoff warning block."
+  checked <- env$check_results(
+    run$output, run$manifest, "pixel_metrics_1a", "lastools", accepted)
+  expect_identical(checked$validation_status, "failed")
+  expect_match(checked$validation_diagnostic, "not authorized")
+  manifest <- run$manifest
+  manifest$accept_known_lastools_cutoff_warning <- TRUE
+  checked <- env$check_results(run$output, manifest, "pixel_metrics_1a", "lastools", accepted)
+  expect_identical(checked$validation_status, "unverified")
+  report <- attr(checked, "validation_report")
+  expect_identical(report$exit_status, 1L)
+  expect_identical(report$accepted_execution_warnings, accepted$accepted_execution_warnings)
+  expect_identical(report$execution_warning_exception, accepted$execution_warning_exception)
+  accepted$exit_status <- 3L
+  expect_identical(env$check_results(
+    run$output, manifest, "pixel_metrics_1a", "lastools", accepted)$validation_status, "failed")
+  accepted$exit_status <- 1L
+  unlink(file.path(run$output, paste0(manifest$tiles$id[1L], "_avg.tif")))
+  missing <- env$check_results(run$output, manifest, "pixel_metrics_1a", "lastools", accepted)
+  expect_identical(missing$validation_status, "failed")
+  expect_match(missing$validation_diagnostic, "inventory mismatch")
 })
 
 test_that("native percentile inventory uses the observed zero-padded fifth percentile", {

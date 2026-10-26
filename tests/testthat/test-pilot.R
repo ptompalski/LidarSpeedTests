@@ -131,6 +131,7 @@ test_that("pilot initialization creates configuration without staging inputs or 
   expect_identical(config$input_metadata$confirmation, "Synthetic fixture metadata")
   expect_false(config$accept_known_surface_discrepancies)
   expect_false(config$accept_known_extent_discrepancies)
+  expect_false(config$accept_known_lastools_cutoff_warning)
   expect_false(config$diagnostic_lasR)
   expect_true(dir.exists(config$reports_path))
   expect_true(dir.exists(unname(config$scratch_roots)))

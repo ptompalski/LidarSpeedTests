@@ -129,6 +129,36 @@ test_that("software version identity excludes variable LAStools licensing notice
   expect_error(env$benchmark_campaign_check(campaign, f$tasks, f$runs, f$config), "environment")
 })
 
+test_that("accepted native warning receipts require their frozen opt-in", {
+  f <- campaign_fixture()
+  env <- f$env
+  f$config$tools <- "lastools"
+  f$tasks$task_id <- "pixel_metrics_1a"
+  f$tasks$task_call_lastools <- list(list(executable = "probe", args = character()))
+  for (allowed in c(FALSE, TRUE)) {
+    f$config$accept_known_lastools_cutoff_warning <- allowed
+    campaign <- fixture_campaign(env, f$tasks, f$runs, f$config,
+                                  paste0("native-warning-", allowed))
+    attempt <- env$benchmark_attempt_start(
+      campaign, f$tasks$task_id, f$runs$ID, "lastools", 1L)
+    env$benchmark_attempt_finish(attempt, list(
+      execution_status = "succeeded", success = 1L, exit_status = 1L,
+      validation_status = "unverified", diagnostic = NA_character_,
+      execution_warning_exception = "lascanopy_all_values_above_height_cutoff",
+      accepted_execution_warnings = "Recorded warning block."
+    ))
+    if (allowed) {
+      record <- env$benchmark_read_attempt(attempt$path, campaign$manifest)
+      expect_identical(record$exit_status, 1L)
+      expect_identical(record$validation_status, "unverified")
+      expect_identical(record$accepted_execution_warnings, "Recorded warning block.")
+    } else {
+      expect_error(env$benchmark_read_attempt(attempt$path, campaign$manifest),
+                   "requires the frozen opt-in policy")
+    }
+  }
+})
+
 test_that("resume and repetitions preserve skipped, failed and successful retries", {
   f <- campaign_fixture()
   env <- f$env

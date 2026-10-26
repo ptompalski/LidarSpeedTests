@@ -77,6 +77,84 @@ test_that("native zero statuses cannot hide child errors or warning diagnostics"
   expect_true(is.na(ok$diagnostic))
 })
 
+test_that("only the opted-in complete lascanopy cutoff warning can explain status one", {
+  fixture <- benchmark_fixture()
+  env <- fixture$env
+  files <- file.path(fixture$test_dir, c("tile one.laz", "tile;literal.laz"))
+  context <- list2env(list(f = files, task_id = "pixel_metrics_1a",
+    height_cutoff = "164.24", accept_known_lastools_cutoff_warning = TRUE))
+  command <- list(executable = "/fixture/lascanopy64",
+                  args = c("-i", files, "-height_cutoff", "164.24", "-avg"))
+  env$benchmark_lastools_command <- function(...) command
+  process <- list(status = 0L, stdout = "", stderr = "")
+  env$benchmark_process <- function(...) process
+  block <- function(file) paste0(
+    "WARNING: z coordinates range from 165.24 to 283.82 for '", file, "'\n",
+    "         all values are above the height_cutoff 164.24.\n",
+    "         maybe run 'lasheight -i raw.las -replace_z -o normalized.laz'.")
+  warning <- paste(vapply(files, block, character(1)), collapse = "\n")
+  execute <- function() env$benchmark_execute_call(
+    list(executable = "lascanopy64", args = character()), "lastools", context)
+  for (status in 0:1) {
+    for (stream in c("stdout", "stderr")) {
+      for (task in c("pixel_metrics_1a", "pixel_metrics_2")) {
+        context$task_id <- task
+        process <- list(status = status, stdout = "", stderr = "")
+        process[[stream]] <- paste("LASreaderBuffered: adding 21537 buffer points.", warning, sep = "\n")
+        result <- execute()
+        expect_identical(result$execution_status, "succeeded")
+        expect_identical(result$success, 1L)
+        expect_identical(result$exit_status, status)
+        expect_identical(result[[stream]], process[[stream]])
+        expect_true(is.na(result$diagnostic))
+        expect_identical(result$execution_warning_exception, "lascanopy_all_values_above_height_cutoff")
+        expect_identical(result$accepted_execution_warnings, warning)
+      }
+    }
+  }
+  process <- list(status = 1L, stdout = "", stderr = warning)
+  context$accept_known_lastools_cutoff_warning <- FALSE
+  expect_identical(execute()$execution_status, "failed")
+  process$status <- 0L
+  expect_match(execute()$diagnostic, "WARNING: z coordinates range")
+  context$accept_known_lastools_cutoff_warning <- TRUE
+  for (status in c(2L, 3L, 7L)) {
+    process$status <- status
+    expect_identical(execute()$execution_status, "failed")
+  }
+  process$status <- 1L
+  for (task in c("normalization", "generate_DEM", "complex_task1")) {
+    context$task_id <- task
+    expect_identical(execute()$execution_status, "failed")
+  }
+  context$task_id <- "pixel_metrics_1a"
+  command$executable <- "/fixture/blast2dem64"
+  expect_identical(execute()$execution_status, "failed")
+  command$executable <- "/fixture/lascanopy64"
+  command$args[match("-height_cutoff", command$args) + 1L] <- "200"
+  expect_identical(execute()$execution_status, "failed")
+  command$args[match("-height_cutoff", command$args) + 1L] <- "164.24"
+  for (bad in c(
+    sub("165.24", "160.24", warning, fixed = TRUE),
+    sub("283.82", "160.24", warning, fixed = TRUE),
+    sub("height_cutoff 164.24", "height_cutoff 164.25", warning, fixed = TRUE),
+    sub(files[1L], "unrecognized.laz", warning, fixed = TRUE),
+    sub("maybe run", "do not run", warning, fixed = TRUE),
+    paste(warning, "WARNING: license restriction.", sep = "\n"),
+    paste(warning, "ERROR: child processing failed.", sep = "\n"),
+    paste(warning, "FATAL error in child.", sep = "\n"),
+    strsplit(warning, "\n")[[1L]][1L], "")) {
+    process$stderr <- bad
+    expect_identical(execute()$execution_status, "failed", info = bad)
+    process$status <- 0L
+    if (nzchar(bad)) {
+      result <- execute()
+      expect_true(result$execution_status == "failed" || !is.na(result$diagnostic), info = bad)
+    }
+    process$status <- 1L
+  }
+})
+
 test_that("empty workloads are skipped without timing or output measurements", {
   benchmark_execute_call <- benchmark_fixture()$env$benchmark_execute_call
   for (tool in c("lidR", "lasR", "lastools")) {

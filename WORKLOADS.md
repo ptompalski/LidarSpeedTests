@@ -311,10 +311,36 @@ exits nonzero. Confirmed examples include `lascanopy` children exiting 1 on the
 cutoff warning and a `blast2dem` child exiting 3 after constructing an invalid
 `blast2dem64/serf/blast` helper path and omitting its tile. Processing output
 lines beginning `ERROR:`/`FATAL` therefore fail execution even with a zero
-parent status; `WARNING:` lines remain explicit execution diagnostics and
+parent status. Unrecognized `WARNING:` lines remain execution diagnostics and
 prevent validation acceptance. Raw parent status and stdout/stderr are retained.
-No child failure is normalized to success, and no installed binary, licensing,
-cutoff, point population or requested core budget is changed.
+The explicitly authorized cutoff exception below is the only status-1 exception;
+other child failures remain failures. No installed binary, licensing, cutoff,
+point population or requested core budget is changed.
+
+### User-accepted lascanopy cutoff warning
+
+`accept_known_lastools_cutoff_warning = TRUE` is a separate opt-in frozen in
+campaign identity; it defaults to FALSE. The prepared-data pilot enables it.
+It applies only to basic mean/nine-metric `lascanopy`/`lascanopy64` calls whose
+explicit `-height_cutoff` matches the harness's all-point cutoff.
+
+The entire observed three-line warning must match: a finite ordered Z range
+for a supplied input, the statement that all values exceed the actual cutoff,
+and the exact suggestion to run lasheight. The cutoff must be below that range.
+A generic `WARNING: z coordinates range` prefix alone is not sufficient.
+Raw status 1 is accepted as warning-only only when every warning is recognized
+and no `ERROR`/`FATAL` line occurs. Recognized warnings with status 0 are also
+nonfatal; any other warning still blocks validation. Other nonzero statuses,
+incomplete warning blocks, different tools/tasks and unexplained status 1 fail.
+
+The result records `execution_warning_exception`,
+`accepted_execution_warnings`, unchanged raw `exit_status` and stdout/stderr.
+Validation reports retain that exception and require the frozen opt-in.
+All expected products must still exist and pass structural checks; errors,
+missing tiles and invalid geometry are not waived. Native results remain
+numerically **unverified**, not passed or eligible timing/comparison evidence.
+Historical attempts are never rewritten. Changing this flag requires a new
+campaign; commit source changes before starting it to keep code identity stable.
 
 ### Boundary acceptance and remaining blockers
 

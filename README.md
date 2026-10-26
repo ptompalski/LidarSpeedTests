@@ -80,12 +80,19 @@ This does not enable the broader surface-support exception policy.
 
 Native software identity records executable checksums and LAStools software
 builds, not the licensing banner, which can vary between identical `-version`
-queries. Licensing notices are still shown; this does not establish entitlement
-or relax processing exit-status checks. In particular, the pinned `lascanopy`
+queries. Licensing notices are still shown; this does not establish entitlement.
+By default, nonzero processing statuses fail. In particular, pinned `lascanopy`
 can exit with status 1 when an all-point elevation metric deliberately sets its
-cutoff below every input point. Such attempts remain failed, not accepted
-benchmarks; do not normalize the elevations or raise the cutoff merely to hide
-that warning.
+cutoff below every input point. The explicit, frozen opt-in
+`accept_known_lastools_cutoff_warning = TRUE` accepts only its complete
+all-values-above-cutoff warning block for basic lascanopy metrics, with raw status
+0 or 1. The warning must name a supplied input and the actual below-range cutoff;
+other warnings, errors and nonzero statuses remain rejected. Raw status/logs and
+the named execution exception are retained. Complete valid outputs are still
+required, and native numerical validation remains `unverified`, excluded from
+timing/comparison summaries. The current pilot configuration enables this opt-in;
+the example/default configuration does not. Do not normalize elevations or
+raise the cutoff to hide the warning.
 
 Historical pilots remain supported by selecting `historical_input_root` instead
 of `prepared_stage_root`; do not configure both sources. The original
@@ -98,7 +105,8 @@ attempts are descriptive only, excluded from cross-tool comparison counts.
 lasR DEM uses an independent unextrapolated ground TIN and an explicit
 Float32 precision budget; DEM remains non-comparable. Non-repeatable lasR
 first-return TIN DSM is always skipped, including diagnostic mode. Native
-warnings, errors and missing tiles remain rejected. Use a new campaign ID
+warnings outside the explicit cutoff exception, errors and missing tiles remain
+rejected. Use a new campaign ID
 after these validator changes; historical results are not rewritten.
 
 Tests are named by responsibility (for example, workloads, validation, monitoring

@@ -24,6 +24,8 @@ list(
   accept_known_surface_discrepancies = FALSE,
   # Retain the full core; allow one aligned extra cell per edge, not mask/value changes.
   accept_known_extent_discrepancies = FALSE,
+  # Exact lascanopy all-values-above-cutoff warning only; raw status 0/1 is retained.
+  accept_known_lastools_cutoff_warning = FALSE,
   diagnostic_lasR = FALSE,
   lastools_path = "/path/to/LAStools/bin",
   workstation_id = unname(Sys.info()[["nodename"]]),
