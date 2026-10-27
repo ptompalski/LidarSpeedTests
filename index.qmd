@@ -9,6 +9,12 @@ engine: knitr
 source("R/reporting.R")
 report <- benchmark_report_read()
 cat("Campaign: **", report$manifest$campaign_id, "**\n\n", sep = "")
+cat("Report mode: **", if (is.null(report$mode)) "validated" else report$mode, "**\n\n", sep = "")
+if (identical(report$mode, "performance-only")) {
+  cat("**Performance only: outputs may differ numerically or algorithmically. ",
+      "Unverified timings require recorded structural success, not numerical equivalence. ",
+      "No cross-tool speedup claims are established.**\n\n", sep = "")
+}
 cat("Frozen execution identity: `", report$manifest$identity_id, "`\n\n", sep = "")
 cat("Execution revision: `", report$manifest$identity$code$revision, "`; dirty: ",
     report$manifest$identity$code$dirty, "\n\n", sep = "")
@@ -32,10 +38,14 @@ For each tool/task/run/phase/repetition, the latest attempt by the precise
 A failed final retry does not fall back to an earlier success. Warm-ups and
 superseded attempts cannot contribute samples. Eligible timings require recorded
 execution success, passed artifact validation or an explicitly accepted surface
-exception, and finite elapsed time of at
+exception (or receipt-backed structural success in performance-only mode), and finite elapsed time of at
 least 0.1 seconds. Short timings are flagged without changing execution status.
 Accepted exceptions retain their diagnostics, contribute to descriptive timings
 and `n_accepted_exception`, and never count as passed numerical comparisons.
+Performance-only mode additionally includes structurally checked `unverified`
+outputs in `n_unverified`, preserving their validation status. Failed or missing
+validation remains excluded. All performance-only timings are descriptive;
+`n_comparable` is zero in this mode.
 Means, medians, ranges and sample standard deviations use one selected eligible
 attempt per repetition; a single sample has **NA**, not zero, SD.
 

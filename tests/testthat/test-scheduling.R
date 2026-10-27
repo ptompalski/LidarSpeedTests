@@ -139,6 +139,40 @@ test_that("warmups have immutable records, cannot satisfy measurements and repea
   expect_identical(outcomes$measurement_eligible, c(FALSE, TRUE))
 })
 
+test_that("overall cli progress counts schedule entries and marks interrupted dispatch failed", {
+  f <- benchmark_fixture()
+  e <- f$env
+  e$benchmark_campaign_check <- function(...) invisible(NULL)
+  schedule <- e$benchmark_schedule(data.frame(task_id = "task", run_id = "run"),
+    "lidR", list(warmups = 1L, repetitions = 2L))
+  campaign <- list(manifest = list(identity = list(schedule = schedule)))
+  events <- list()
+  testthat::local_mocked_bindings(
+    cli_progress_bar = function(name, total, format, auto_terminate) {
+      events[[length(events) + 1L]] <<- list("start", total)
+      "schedule-progress"
+    },
+    cli_progress_update = function(id, set) {
+      events[[length(events) + 1L]] <<- list("update", set)
+    },
+    cli_progress_done = function(id, result) {
+      events[[length(events) + 1L]] <<- list("end", result)
+    },
+    .package = "cli"
+  )
+  e$benchmark_run <- function(...) invisible(NULL)
+  text <- testthat::capture_messages(e$benchmark_execute_schedule(campaign, NULL, NULL, NULL, NULL))
+  expect_match(paste(text, collapse = "\n"), "Task 1 of 3")
+  expect_match(paste(text, collapse = "\n"), "Task 3 of 3")
+  expect_identical(events, list(list("start", 3L), list("update", 1L),
+    list("update", 2L), list("update", 3L), list("end", "done")))
+  events <- list()
+  e$benchmark_run <- function(...) stop("interrupted dispatch")
+  expect_error(e$benchmark_execute_schedule(campaign, NULL, NULL, NULL, NULL),
+               "interrupted dispatch")
+  expect_identical(events, list(list("start", 3L), list("end", "failed")))
+})
+
 test_that("cooldown is untimed, runs on failures, skips resumed work and releases the lock", {
   f <- campaign_fixture()
   env <- f$env

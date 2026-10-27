@@ -13,7 +13,8 @@ reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE)
   f$append <- function(task = "pixel_metrics_1a", run = f$runs$ID[1L],
                        repetition = 1L, seconds = 2, status = "succeeded",
                        validation = "passed", phase = "measurement", monitor = "available",
-                       comparison = "matched_definition_pending_validation", boundary_points = 0L) {
+                       comparison = "matched_definition_pending_validation", boundary_points = 0L,
+                       validation_diagnostic = "synthetic fixture receipt") {
     attempt <- env$benchmark_attempt_start(f$campaign, task, run, "lidR", repetition, phase)
     # Synthetic receipts exercise reporting/ingestion, not numerical acceptance.
     validation_path <- file.path(attempt$path, "validation.rds")
@@ -23,7 +24,7 @@ reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE)
       success = as.integer(status == "succeeded"), execution_status = status,
       diagnostic = if (status == "succeeded") NA_character_ else "synthetic failure/skip",
       start_time = start, finish_time = start + seconds,
-      validation_status = validation, validation_diagnostic = "synthetic fixture receipt",
+      validation_status = validation, validation_diagnostic = validation_diagnostic,
       validation_report_md5 = unname(tools::md5sum(validation_path)),
       monitoring_status = monitor, monitoring_scope = "whole-machine", monitoring_platform = "Linux",
       comparison_status = comparison, comparison_group = paste0("workloads-v1/", task),
@@ -50,12 +51,12 @@ reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE)
     env$benchmark_attempt_finish(attempt, result)
     invisible(attempt)
   }
-  f$read <- function() {
+  f$read <- function(mode = "validated") {
     r <- env$benchmark_read_campaign(f$reports, "report-fixture")
     r$report_recorded_at <- vapply(r$attempt_id, function(id) {
       as.numeric(readRDS(file.path(f$campaign$path, "attempts", id, "started.rds"))$recorded_at)
     }, numeric(1))
-    env$benchmark_report_prepare(r, f$campaign$manifest)
+    env$benchmark_report_prepare(r, f$campaign$manifest, mode)
   }
   f
 }
@@ -121,6 +122,52 @@ test_that("tool-owned boundary differences allow descriptive but not comparable 
   expect_true(all(report$attempts$validated_success))
   expect_equal(report$attempts$boundary_difference_points, c(6L, 0L))
   expect_equal(report$attempts$comparison_eligible, c(FALSE, TRUE))
+})
+
+test_that("performance-only reports include structural successes without claiming equivalence", {
+  f <- reporting_fixture()
+  f$append(validation = "unverified", seconds = 2,
+    validation_diagnostic = "Structural checks passed; native numerical/ownership conventions are unverified.")
+  f$append(repetition = 2L, seconds = 4)
+  expect_equal(sum(f$read()$summary$n_included), 1)
+  report <- f$read("performance-only")
+  row <- subset(report$summary, task_id == "pixel_metrics_1a" & run_id == f$runs$ID[1L])
+  expect_identical(report$mode, "performance-only")
+  expect_equal(row$n_included, 2)
+  expect_equal(row$n_unverified, 1)
+  expect_equal(row$mean_seconds, 3)
+  expect_equal(row$n_comparable, 0)
+  expect_identical(report$attempts$validation_status, c("unverified", "passed"))
+  expect_identical(report$attempts$validated_success, c(FALSE, TRUE))
+  expect_identical(report$attempts$measurement_eligible, c(FALSE, TRUE))
+  expect_true(all(report$attempts$report_included))
+  expect_false(any(report$attempts$comparison_eligible))
+  expect_error(f$read("typo"), "arg")
+})
+
+test_that("performance-only reports retain safety, retry and timing exclusions", {
+  f <- reporting_fixture()
+  structural <- "Structural checks passed; native numerical/ownership conventions are unverified."
+  f$append(validation = "unverified", validation_diagnostic = structural, seconds = 2)
+  f$append(status = "failed", validation = "unverified", validation_diagnostic = structural)
+  f$append(repetition = 2L, validation = "failed", validation_diagnostic = structural)
+  f$append(repetition = 3L, validation = "unverified")
+  f$append(task = "normalization", validation = "unverified",
+           validation_diagnostic = structural, seconds = .05)
+  f$append(task = "normalization", repetition = 2L, validation = "not_run")
+  f$append(task = "normalization", phase = "warmup", validation = "unverified",
+           validation_diagnostic = structural)
+  f$append(task = "complex_task1", status = "skipped", validation = "not_run")
+  report <- f$read("performance-only")
+  expect_equal(sum(report$summary$n_included), 0)
+  expect_setequal(report$attempts$exclusion, c(
+    "superseded retry", "execution: failed", "validation: failed", "validation: unverified",
+    "invalid or sub-0.1-second timing", "validation: not_run", "warmup", "execution: skipped"
+  ))
+  records <- report$attempts[report$attempts$exclusion == "superseded retry", ]
+  records$validation_report_md5 <- NA_character_
+  missing <- f$env$benchmark_report_prepare(records, f$campaign$manifest, "performance-only")
+  expect_false(any(missing$attempts$report_included))
 })
 
 test_that("short, invalid, unvalidated, partial and non-comparable results stay explicit", {
@@ -234,6 +281,36 @@ test_that("raw immutable campaign fixtures regenerate all intermediates figures 
   expect_identical(tools::md5sum(raw), before)
   expect_equal(readRDS(file.path(path, "report.rds"))$availability$n_configurations[
     readRDS(file.path(path, "report.rds"))$availability$section == "storage"], 2)
+})
+
+test_that("performance-only CLI reports retain mode labels, receipts and immutable records", {
+  f <- reporting_fixture()
+  f$append(validation = "unverified",
+    validation_diagnostic = "Structural checks passed; native numerical/ownership conventions are unverified.")
+  raw <- list.files(f$campaign$path, recursive = TRUE, full.names = TRUE)
+  before <- tools::md5sum(raw)
+  cli <- processx::run(f$rscript, c("--vanilla", "R/5_report.R"), wd = repo,
+    env = c("current", LIDAR_REPORTS_PATH = f$reports,
+            LIDAR_CAMPAIGN_ID = "report-fixture", LIDAR_RESULTS_MODE = "",
+            LIDAR_REPORT_MODE = "performance-only"), error_on_status = FALSE)
+  expect_identical(cli$status, 0L, info = paste(cli$stdout, cli$stderr))
+  output <- grep("^Campaign report: ", strsplit(cli$stdout, "\n", fixed = TRUE)[[1L]],
+                 value = TRUE)
+  expect_length(output, 1L)
+  path <- sub("/_site/index.html$", "", sub("^Campaign report: ", "", output))
+  report <- readRDS(file.path(path, "report.rds"))
+  expect_identical(report$mode, "performance-only")
+  expect_equal(sum(report$summary$n_unverified), 1)
+  expect_equal(sum(report$summary$n_comparable), 0)
+  receipt <- readRDS(file.path(path, "build.rds"))
+  expect_identical(receipt$mode, "performance-only")
+  expect_match(receipt$acceptance_policy, "numerically unverified")
+  for (page in c("index.html", "results_basic.html")) {
+    html <- paste(readLines(file.path(path, "_site", page), warn = FALSE), collapse = "\n")
+    expect_match(html, "performance-only", fixed = TRUE)
+    expect_match(html, "outputs may differ numerically or algorithmically", fixed = TRUE)
+  }
+  expect_identical(tools::md5sum(raw), before)
 })
 
 test_that("report generation blocks missing corrupt incomplete and empty campaign records", {

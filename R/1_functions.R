@@ -184,6 +184,18 @@ benchmark_validate_config <- function(config) {
     stop("cores must contain positive integers.")
   }
   config$scheduling <- benchmark_scheduling_config(config$scheduling)
+  if (!is.null(config$datasets_org)) {
+    datasets <- config$datasets_org
+    if (!is.character(datasets) || !length(datasets) || anyNA(datasets) ||
+        any(!nzchar(datasets)) || is.null(names(datasets)) ||
+        anyNA(names(datasets)) || any(!nzchar(names(datasets))) ||
+        anyDuplicated(names(datasets)) || anyDuplicated(datasets)) {
+      stop("datasets_org must contain unique dataset names and relative directory paths.")
+    }
+    if (any(grepl("^(/|[A-Za-z]:|\\\\)|(^|[/\\\\])\\.\\.([/\\\\]|$)", datasets))) {
+      stop("datasets_org paths must be relative and cannot contain parent traversal.")
+    }
+  }
   config$input_metadata <- benchmark_input_metadata(config$input_metadata)
   for (field in c("accept_known_surface_discrepancies", "accept_known_extent_discrepancies",
                   "accept_known_lastools_cutoff_warning", "diagnostic_lasR")) {
@@ -326,10 +338,19 @@ benchmark_schedule <- function(selection, tools, policy) {
 }
 
 benchmark_execute_schedule <- function(campaign, tasks, runs, config, sysinfo) {
+  cli::cli_inform("Checking frozen campaign identity before dispatch.")
   benchmark_campaign_check(campaign, tasks, runs, config)
   schedule <- campaign$manifest$identity$schedule
+  total <- nrow(schedule)
+  completed <- 0L
+  progress <- cli::cli_progress_bar(name = "Benchmark schedule", total = total,
+    format = "{cli::pb_name} {cli::pb_bar} {cli::pb_current}/{cli::pb_total} {cli::pb_percent}",
+    auto_terminate = FALSE)
+  on.exit(cli::cli_progress_done(id = progress,
+    result = if (completed == total) "done" else "failed"), add = TRUE)
   for (i in seq_len(nrow(schedule))) {
     row <- schedule[i, ]
+    cli::cli_inform("Task {i} of {total}: {row$task_id} / {row$tool} / {row$run_id} / {row$phase} {row$repetition_id}")
     # Warm-ups are repeated on resume; old process/cache state is not reusable.
     flags <- stats::setNames(as.list(c("lidR", "lasR", "lastools") == row$tool),
                              c("run_lidR", "run_lasR", "run_lastools"))
@@ -341,7 +362,10 @@ benchmark_execute_schedule <- function(campaign, tasks, runs, config, sysinfo) {
       repetition_id = row$repetition_id, phase = row$phase,
       schedule_index = row$schedule_index
     ), flags, force))
+    completed <- i
+    cli::cli_progress_update(id = progress, set = completed)
   }
+  cli::cli_alert_success("Schedule finished: {completed} of {total} entries accounted for. Review recorded failures, skips and validation status.")
   invisible(NULL)
 }
 

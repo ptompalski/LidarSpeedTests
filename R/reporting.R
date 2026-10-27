@@ -1,5 +1,6 @@
 # Reporting is deliberately independent of benchmark setup and machine config.
-benchmark_report_prepare <- function(records, manifest) {
+benchmark_report_prepare <- function(records, manifest, mode = c("validated", "performance-only")) {
+  mode <- match.arg(mode)
   if (!nrow(records)) stop("Selected campaign has no completed attempts.")
   r <- compile_execution_outcomes(records)
   defaults <- list(
@@ -10,7 +11,8 @@ benchmark_report_prepare <- function(records, manifest) {
     cpu_mean_percent = NA_real_, cpu_peak_percent = NA_real_,
     ram_mean_used_bytes = NA_real_, ram_peak_used_bytes = NA_real_,
     monitoring_coverage_fraction = NA_real_, monitoring_sample_count = NA_integer_,
-    monitoring_timed_start_epoch = NA_real_, monitoring_timed_finish_epoch = NA_real_
+    monitoring_timed_start_epoch = NA_real_, monitoring_timed_finish_epoch = NA_real_,
+    validation_report_md5 = NA_character_
   )
   for (field in setdiff(names(defaults), names(r))) r[[field]] <- defaults[[field]]
   r$elapsed_seconds <- as.numeric(r$processing_time)
@@ -30,19 +32,26 @@ benchmark_report_prepare <- function(records, manifest) {
   r <- dplyr::group_by(r, dplyr::across(dplyr::all_of(keys)))
   r <- dplyr::mutate(r, selected_attempt = dplyr::row_number() == dplyr::n())
   r <- dplyr::ungroup(r)
+  r$structural_checks_passed <- dplyr::coalesce(
+    r$validation_status == "unverified" &
+      !is.na(r$validation_report_md5) & nzchar(r$validation_report_md5) &
+      r$validation_diagnostic ==
+        "Structural checks passed; native numerical/ownership conventions are unverified.", FALSE)
+  validation_eligible <- r$validation_status %in% c("passed", "accepted_exception") |
+    (mode == "performance-only" & r$structural_checks_passed)
   r$exclusion <- dplyr::case_when(
     r$phase != "measurement" ~ "warmup",
     !r$selected_attempt ~ "superseded retry",
     r$execution_status != "succeeded" | is.na(r$success) | r$success != 1 ~
       paste0("execution: ", r$execution_status),
-    !r$validation_status %in% c("passed", "accepted_exception") ~
+    !validation_eligible ~
       paste0("validation: ", r$validation_status),
     !is.finite(r$elapsed_seconds) | r$elapsed_seconds < 0.1 ~
       "invalid or sub-0.1-second timing",
     TRUE ~ "included"
   )
   r$report_included <- r$exclusion == "included"
-  r$comparison_eligible <- dplyr::coalesce(r$report_included &
+  r$comparison_eligible <- dplyr::coalesce(mode == "validated" & r$report_included &
     r$validation_status == "passed" &
     r$boundary_difference_points == 0 &
     r$comparison_status == "matched_definition_pending_validation" &
@@ -87,6 +96,7 @@ benchmark_report_prepare <- function(records, manifest) {
       n_skipped = sum(measured$execution_status == "skipped"),
       n_validation_failed = sum(measured$validation_status == "failed"),
       n_accepted_exception = sum(good$validation_status == "accepted_exception"),
+      n_unverified = sum(good$validation_status == "unverified"),
       n_short = sum(measured$short_duration, na.rm = TRUE),
       mean_seconds = stat(good$elapsed_seconds, mean),
       sd_seconds = if (nrow(good) > 1L) stats::sd(good$elapsed_seconds) else NA_real_,
@@ -149,7 +159,7 @@ benchmark_report_prepare <- function(records, manifest) {
         "Measured; descriptive only, check contracts and matched inputs before comparisons"
     data.frame(section = section, n_samples = n, n_configurations = variants, status = reason)
   }))
-  list(schema = "reporting-v1", manifest = manifest, attempts = r, summary = summary,
+  list(schema = "reporting-v1", mode = mode, manifest = manifest, attempts = r, summary = summary,
        sections = sections, availability = availability)
 }
 
@@ -197,7 +207,9 @@ benchmark_report_plot <- function(data, section, path) {
 }
 
 benchmark_build_report <- function(reports_path, campaign_id, repo_root = getwd(),
-                                   render = TRUE, quarto = Sys.getenv("QUARTO", "quarto")) {
+                                   render = TRUE, quarto = Sys.getenv("QUARTO", "quarto"),
+                                   mode = c("validated", "performance-only")) {
+  mode <- match.arg(mode)
   benchmark_file_component(campaign_id, "campaign_id")
   campaign <- file.path(reports_path, "campaigns", campaign_id)
   if (!file.exists(file.path(campaign, "manifest.rds"))) {
@@ -217,7 +229,7 @@ benchmark_build_report <- function(reports_path, campaign_id, repo_root = getwd(
   if (nrow(records)) records$report_recorded_at <- vapply(records$attempt_id, function(id) {
     as.numeric(readRDS(file.path(campaign, "attempts", id, "started.rds"))$recorded_at)
   }, numeric(1))
-  report <- benchmark_report_prepare(records, manifest)
+  report <- benchmark_report_prepare(records, manifest, mode)
   # Fresh, reserved build directories cannot reuse stale figures/frozen pages.
   path <- tempfile("report-", tmpdir = campaign)
   if (!dir.create(path)) stop("Cannot reserve report directory: ", path)
@@ -250,7 +262,11 @@ benchmark_build_report <- function(reports_path, campaign_id, repo_root = getwd(
     schema = "reporting-v1", campaign_id = campaign_id, identity_id = manifest$identity_id,
     created_at = Sys.time(), sources = rbind(raw_checksums, benchmark_checksums(source_files)),
     selection_policy = "latest started.rds timestamp per phase/tool/task/run/repetition; lexical attempt ID breaks ties",
-    acceptance_policy = "passed validation or frozen-policy accepted surface exceptions; exceptions are descriptive, never comparable",
+    mode = mode,
+    acceptance_policy = if (mode == "performance-only")
+      paste("passed validation, frozen-policy accepted exceptions, or receipt-backed structural success;",
+            "numerically unverified timings are descriptive; no equivalence comparisons") else
+      "passed validation or frozen-policy accepted surface exceptions; exceptions are descriptive, never comparable",
     timing_policy = "monitor-bound subsecond epochs where available; otherwise second-resolution CSV timestamps",
     R = R.version.string, session = sessionInfo(), rendered = render, Quarto = NA_character_
   )
@@ -288,6 +304,12 @@ benchmark_report_read <- function(path = "report.rds") {
 benchmark_report_page <- function(section, figures = TRUE) {
   report <- benchmark_report_read()
   cat("Campaign: **", report$manifest$campaign_id, "**\n\n", sep = "")
+  cat("Report mode: **", if (is.null(report$mode)) "validated" else report$mode, "**\n\n", sep = "")
+  if (identical(report$mode, "performance-only")) {
+    cat("**Performance only: outputs may differ numerically or algorithmically. ",
+        "Unverified timings require recorded structural success; validation labels are unchanged. ",
+        "These timings do not establish equivalent results or cross-tool speedups.**\n\n", sep = "")
+  }
   status <- report$availability$status[report$availability$section == section]
   cat(status, "\n\n")
   cat("Times are actual workload calls, never sums of independent tasks. ",
@@ -298,15 +320,15 @@ benchmark_report_page <- function(section, figures = TRUE) {
   if (nrow(data)) {
     columns <- c("task_id", "run_id", "tool", "cores", "n_planned", "n_attempts",
                  "n_missing", "n_included", "n_excluded", "n_failed", "n_skipped",
-                 "n_validation_failed", "n_accepted_exception", "n_short", "mean_seconds", "sd_seconds",
+                 "n_validation_failed", "n_accepted_exception", "n_unverified", "n_short", "mean_seconds", "sd_seconds",
                  "median_seconds", "min_seconds", "max_seconds", "n_comparable",
                  "comparison_status", "availability")
     if (section == "utilization") columns <- c(
-      "task_id", "run_id", "tool", "n_included", "n_accepted_exception", "n_monitored", "n_partial_monitoring",
+      "task_id", "run_id", "tool", "n_included", "n_accepted_exception", "n_unverified", "n_monitored", "n_partial_monitoring",
       "cpu_mean_percent", "cpu_sd_percent", "cpu_peak_percent", "ram_mean_used_bytes",
       "ram_sd_used_bytes", "ram_peak_used_bytes", "availability"
     )
-    print(knitr::kable(data[columns], digits = 3, format = "pipe"))
+    print(knitr::kable(data[intersect(columns, names(data))], digits = 3, format = "pipe"))
     cat("\n\n")
   }
   cat("[Download full summary](tables/", section, ".csv)\n\n", sep = "")

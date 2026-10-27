@@ -29,6 +29,16 @@ test_that("configuration loading and path validation fail explicitly for unsafe 
     invalid <- config
     invalid$cores <- c(0, NA_real_)
     expect_error(env$benchmark_validate_config(invalid), "positive integers")
+    for (datasets in list("unnamed", c(a = "../escape"), c(a = "/absolute"),
+                          c(a = "C:\\absolute"), c(a = "one", a = "two"),
+                          c(a = "one", b = "one"))) {
+      invalid <- config
+      invalid$datasets_org <- datasets
+      expect_error(env$benchmark_validate_config(invalid), "datasets_org")
+    }
+    valid <- config
+    valid$datasets_org <- c(ALS_1000_1 = "tile_1000_density_1")
+    expect_identical(env$benchmark_validate_config(valid)$datasets_org, valid$datasets_org)
     invalid <- config
     invalid$resource_monitoring <- TRUE
     if (identical(unname(Sys.info()[["sysname"]]), "Linux")) {

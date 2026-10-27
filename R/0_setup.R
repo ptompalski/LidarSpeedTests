@@ -36,6 +36,9 @@ benchmark_settings <- list(
   )
 )
 
+if (!is.null(benchmark_config$datasets_org)) {
+  benchmark_settings$datasets_org <- benchmark_config$datasets_org
+}
 
 # Workload contracts and remaining equivalence limitations: WORKLOADS.md.
 

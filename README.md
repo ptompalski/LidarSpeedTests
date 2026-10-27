@@ -113,3 +113,101 @@ Tests are named by responsibility (for example, workloads, validation, monitorin
 and reporting). See [WORKLOADS.md](WORKLOADS.md) for current saved-data identifiers
 and compatibility requirements. The optional completed-pilot review test uses
 `LIDAR_PILOT_REVIEW_ROOT` to select its campaign directory.
+
+## Performance-only reports
+
+To summarize recorded timings without requiring numerical equivalence:
+
+```sh
+LIDAR_REPORTS_PATH=/data/nvme2/LidarSpeedTestWorkingDir/fresh-benchmark-pilot/reports \
+LIDAR_CAMPAIGN_ID=fresh-pilot-006 \
+LIDAR_REPORT_MODE=performance-only \
+Rscript --vanilla R/5_report.R
+```
+
+This creates a new report directory within the selected campaign; no benchmark
+rerun or changes to its execution records are needed. The default report mode
+remains `validated`.
+
+Performance-only mode includes successful attempts whose immutable validation
+receipt records structural success, even when numerical validation is
+`unverified`. It retains existing validated/accepted-exception timings too.
+Validation labels are unchanged; `n_unverified` counts included unverified
+measurements, and `n_comparable` is always zero. Times describe each tool's own
+output, not equivalent-result speedups. Failed/skipped execution, failed/missing
+validation, warmups, superseded retries and invalid/sub-0.1-second timings remain
+excluded. Existing error/warning and artifact checks are not relaxed.
+
+## Full benchmark on prepared data
+
+The full runner uses all nine task definitions, recording explicit skips for
+unsupported/blocked combinations. It no longer selects only `pixel_metrics_2`.
+Initialize a separate workspace; inputs are read directly, never copied or
+regenerated:
+
+```sh
+Rscript --vanilla R/3_runBenchmarks.R --init /path/to/fresh-data/full /path/to/new-full-workspace /path/to/LAStools/bin
+```
+
+Review `<workspace>/benchmark.R` before preflight. It selects the 100 prepared
+tiles at densities 1, 2, 5, 10, 20 and 50; cores 1, 2, 4, 8, 16 and 32; all three
+tools; one warmup and three measured repetitions. Explicit `datasets_org` paths
+replace the historical dataset layout. The optional native-bin argument permits
+a newer LAStools install than the preparation's pinned build. As with pilot
+initialization, exception policies default to `FALSE`; enable the known extent
+and cutoff policies explicitly if required. CPU/RAM monitoring defaults to
+`FALSE`, as in the pilot; enable `resource_monitoring` before starting if needed.
+
+Preflight checks readiness, all 600 tile/index completion-receipt checksums,
+dataset inventories, configuration and executable availability. It does not
+process workloads, create a campaign or establish numerical acceptance:
+
+```sh
+Rscript --vanilla R/3_runBenchmarks.R --preflight /path/to/full-workspace
+# Only after preflight succeeds:
+Rscript --vanilla R/3_runBenchmarks.R --run /path/to/full-workspace fresh-full-001
+```
+
+By default all task definitions are selected. Add `--task <task-id>` to preflight
+or run only one task, without editing the runner:
+
+```sh
+Rscript --vanilla R/3_runBenchmarks.R --preflight /path/to/full-workspace --task simple_metrics_1a
+Rscript --vanilla R/3_runBenchmarks.R --run /path/to/full-workspace simple-metrics-001 --task simple_metrics_1a
+```
+
+`simple_metrics_1a` is an alias for the saved task ID `pixel_metrics_1a`;
+other tasks use their existing IDs (e.g. `pixel_metrics_2`, `generate_DEM`).
+Unknown IDs are rejected with the available task list. The filter retains all
+configured datasets, cores, tools and repetitions: simple metrics alone has
+432 scheduled entries with the default matrix. Use a separate campaign ID from
+the all-task run and repeat the same `--task` when resuming. `--task` also works
+with the environment-variable invocation; it does not apply to `--init`.
+
+The current configured workspace is
+`/data/nvme2/LidarSpeedTestWorkingDir/fresh-benchmark-full`, with LAStools 261023
+and the same enabled extent/cutoff exception policies as the successful pilot.
+No benchmark is launched by initialization or preflight.
+
+`cli` reports overall `Task X of 3888` progress, with the workload, tool,
+dataset/core/storage run, phase and repetition. Each entry is one scheduled
+tool call, not one tile; warmups, skips and already-complete entries count toward
+schedule traversal. The progress bar follows `cli`'s terminal defaults, while
+the numbered messages also appear in redirected logs. Completion of the
+schedule does not imply every workload succeeded; inspect the recorded outcomes.
+Tools remain sequential and workload timing excludes progress/status messages.
+Campaign identity/input hashing before dispatch can take several minutes.
+
+Report the completed campaign without requiring equivalent numerical outputs:
+
+```sh
+LIDAR_REPORTS_PATH=/data/nvme2/LidarSpeedTestWorkingDir/fresh-benchmark-full/reports \
+LIDAR_CAMPAIGN_ID=fresh-full-001 \
+LIDAR_REPORT_MODE=performance-only \
+Rscript --vanilla R/5_report.R
+```
+
+Performance-only reporting does not disable execution-time validation or unblock
+known-broken workloads. Use a new campaign ID after changing source code,
+configuration or inputs. Invoking the runner without arguments still supports
+`LIDAR_BENCHMARK_CONFIG`/`LIDAR_CAMPAIGN_ID`, now selecting all task/run combinations.

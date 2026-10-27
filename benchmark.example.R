@@ -3,6 +3,8 @@ list(
   input_roots = c(SSD = "/path/to/input-storage"),
   scratch_roots = c(SSD = "/path/to/benchmark-scratch"),
   reports_path = "results",
+  # Optional named relative paths, overriding R/0_setup.R's historical layout.
+  # datasets_org = c(ALS_1000_1 = "tile_1000_density_1"),
   cores = c(1, 2, 4, 8, 16, 32),
   scheduling = list(
     repetitions = 3L, warmups = 1L, seed = 20261020L,

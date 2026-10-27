@@ -407,9 +407,15 @@ and enter only the existing descriptive timing summaries. Extent deltas and
 exception reasons are retained per artifact. LAStools attempts remain
 `unverified` even when the boundary convention is accepted structurally:
 native numerical/ownership conventions are not thereby certified, and such
-timings remain excluded. Empty core coverage, processing errors and missing
-tiles still fail. A new campaign ID is required after enabling this policy;
-historical reports are never rewritten.
+timings remain excluded from default validated reports. The explicit
+`LIDAR_REPORT_MODE=performance-only` reporting mode includes successful attempts
+with receipt-backed structural success as descriptive measurements, preserving
+`unverified` labels and counting them in `n_unverified`. It does not rerun
+workloads or change campaign records; `n_comparable` is zero throughout that
+mode. See README.md for the reporting command. Empty core coverage, processing
+errors and missing tiles still fail. Enabling the extent-exception policy for
+execution requires a new campaign ID; changing only the report mode does not.
+Historical reports are never rewritten.
 
 ### Prepared-data investigation (2026-10-25)
 
