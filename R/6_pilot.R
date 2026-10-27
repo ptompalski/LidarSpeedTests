@@ -129,7 +129,7 @@ benchmark_stage_prepared_pilot_inputs <- function(stage_root, output_root) {
   staged
 }
 
-benchmark_pilot_init <- function(stage_root, workspace) {
+benchmark_pilot_init <- function(stage_root, workspace, lastools_path = NULL) {
   stage_root <- benchmark_directory(stage_root, "Prepared stage")
   plan <- benchmark_prepared_pilot_plan(stage_root)
   if (!is.character(workspace) || length(workspace) != 1L ||
@@ -143,13 +143,16 @@ benchmark_pilot_init <- function(stage_root, workspace) {
     stop("Pilot workspace already exists; use --preflight with that workspace or choose a new path.")
   }
   confirmed <- plan$fresh$config
+  # Benchmarks may use a newer LAStools than the one frozen with the preparation.
+  lastools_path <- benchmark_directory(
+    if (is.null(lastools_path)) confirmed$lastools_path else lastools_path, "LAStools")
   config <- dget("benchmark.example.R")
   config$prepared_stage_root <- stage_root
   config$input_roots <- c(SSD = file.path(workspace, "pilot-inputs"))
   config$scratch_roots <- c(SSD = file.path(workspace, "scratch"))
   config$reports_path <- file.path(workspace, "reports")
   config$cores <- c(1L, 2L)
-  config$lastools_path <- benchmark_directory(confirmed$lastools_path, "LAStools")
+  config$lastools_path <- lastools_path
   config$input_metadata <- benchmark_input_metadata(list(
     horizontal_epsg = confirmed$crs, vertical_epsg = confirmed$vertical_epsg,
     xyz_units = "metre", confirmation = confirmed$metadata_confirmation
@@ -198,15 +201,15 @@ benchmark_pilot_setup <- function() {
 
 benchmark_pilot_main <- function(args) {
   if (!length(args) || !args[1] %in% c("--init", "--preflight", "--run") ||
-      (args[1] == "--init" && length(args) != 3L) ||
+      (args[1] == "--init" && !length(args) %in% c(3L, 4L)) ||
       (args[1] == "--preflight" && !length(args) %in% c(1L, 2L)) ||
       (args[1] == "--run" && !length(args) %in% c(1L, 3L))) {
-    stop("Use Rscript --vanilla R/6_pilot.R --init <prepared-stage> <new-workspace>, ",
+    stop("Use Rscript --vanilla R/6_pilot.R --init <prepared-stage> <new-workspace> [lastools-bin], ",
          "--preflight <workspace>, or --run <workspace> <campaign-id>; see README.md.")
   }
   source("renv/activate.R")
   source("R/1_functions.R")
-  if (args[1] == "--init") return(benchmark_pilot_init(args[2], args[3]))
+  if (args[1] == "--init") return(benchmark_pilot_init(args[2], args[3], if (length(args) == 4L) args[4]))
   if (length(args) > 1L) {
     workspace <- benchmark_directory(args[2], "Pilot workspace")
     variables <- c(LIDAR_BENCHMARK_CONFIG = file.path(workspace, "benchmark.R"))

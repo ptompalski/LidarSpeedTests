@@ -7,7 +7,7 @@ list(
   crs = NA_integer_, # Confirm projected EPSG code in metres from source documentation.
   repaired = TRUE,
   repair_provenance = NA_character_, # Who repaired it, method/script identity, original checksums.
-  lastools_path = "/home/ptompals/opt/lastools/bin",
+  lastools_path = "/home/ptompals/opt/lastools-261023/bin",
   executables = c(sort = "lassort64", index = "lasindex64"),
   tool_license = NA_character_, # Confirm entitlement for the exact selected tools.
   tiles = c("298000_5093000", "298000_5094000"),

@@ -46,7 +46,7 @@ From the repository root, initialize a **new** pilot workspace, check it, then
 explicitly start the benchmark:
 
 ```sh
-Rscript --vanilla R/6_pilot.R --init /path/to/fresh-data/full /path/to/new-pilot-workspace
+Rscript --vanilla R/6_pilot.R --init /path/to/fresh-data/full /path/to/new-pilot-workspace [/path/to/LAStools/bin]
 Rscript --vanilla R/6_pilot.R --preflight /path/to/new-pilot-workspace
 # Run only after the preflight succeeds:
 Rscript --vanilla R/6_pilot.R --run /path/to/new-pilot-workspace fresh-pilot-001
@@ -54,7 +54,8 @@ Rscript --vanilla R/6_pilot.R --run /path/to/new-pilot-workspace fresh-pilot-001
 
 Initialization creates `benchmark.R`, `scratch/` and `reports/` in the workspace.
 It inherits confirmed CRS/datum metadata and the LAStools directory from the
-preparation, uses the repository's benchmark defaults with the 1-/2-core matrix,
+preparation (or uses the optional LAStools `bin` argument, e.g. a newer
+versioned install), uses the repository's benchmark defaults with the 1-/2-core matrix,
 and refuses to overwrite an existing workspace. It does not stage inputs or run
 workloads. Review/edit `benchmark.R` before preflight if needed.
 

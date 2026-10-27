@@ -141,6 +141,13 @@ test_that("pilot initialization creates configuration without staging inputs or 
   expect_error(e$benchmark_pilot_init(f$stage, workspace), "already exists")
   expect_identical(e$benchmark_checksums(file.path(workspace, "benchmark.R")), before)
   expect_error(e$benchmark_pilot_init(f$stage, file.path(f$stage, "pilot")), "disjoint")
+  newer <- file.path(dirname(f$output), "newer-lastools-bin")
+  dir.create(newer)
+  other <- e$benchmark_pilot_init(f$stage, file.path(dirname(f$output), "override"), newer)
+  expect_identical(other$lastools_path, normalizePath(newer, winslash = "/"))
+  expect_error(e$benchmark_pilot_init(f$stage, file.path(dirname(f$output), "missing-bin"),
+                                      file.path(newer, "absent")), "LAStools must be an existing")
+  expect_false(dir.exists(file.path(dirname(f$output), "missing-bin")))
 })
 
 test_that("workspace CLI preflight and run route correctly without leaking environment overrides", {

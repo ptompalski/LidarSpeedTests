@@ -14,7 +14,7 @@ list(
   # Record source/custodian confirmation of EPSG:2959, EPSG:5713 and metre XYZ.
   metadata_confirmation = "Piotr Tompalski",
   seed = 20261022L,
-  lastools_path = "/home/ptompals/opt/lastools/bin",
+  lastools_path = "/home/ptompals/opt/lastools-261023/bin",
   executables = c(sort = "lassort64", index = "lasindex64"),
   tool_license = "Piotr Tompalski" # Confirm entitlement for both preparation tools.
 )
