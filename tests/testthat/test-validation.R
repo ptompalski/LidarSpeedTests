@@ -468,6 +468,104 @@ test_that("native structural success never certifies unverified numerical conven
   expect_match(missing$validation_diagnostic, "inventory mismatch")
 })
 
+test_that("performance-only checks skip input decoding and numerical references for every product kind", {
+  f <- validation_fixture()
+  e <- f$env
+  runs <- lapply(c("pixel_metrics_1a", "normalization", "tree_detection"), function(task) {
+    run <- validation_run(f, task, "lidR")
+    list(task = task, run = run)
+  })
+  e$benchmark_validation_points <- function(...) stop("Input decoding must not run")
+  e$benchmark_reference_raster <- function(...) stop("Numerical references must not run")
+  for (case in runs) {
+    manifest <- case$run$manifest
+    manifest$validation_mode <- "performance-only"
+    checked <- e$check_results(case$run$output, manifest, case$task, "lidR", case$run$execution)
+    expect_identical(checked$validation_status, "unverified")
+    expect_true(checked$structural_validation_passed)
+    report <- attr(checked, "validation_report")
+    expect_identical(report$validation_mode, "performance-only")
+    expect_true(report$structural_checks_passed)
+    expect_match(report$diagnostic, "numerical equivalence was not evaluated")
+    expect_false(any(vapply(report$artifacts, function(x) {
+      !is.null(x$detail$max_absolute_error)
+    }, logical(1))))
+  }
+  run <- runs[[1L]]$run
+  expect_match(e$check_results(run$output, run$manifest, "pixel_metrics_1a", "lidR",
+                              run$execution)$validation_diagnostic, "Input decoding must not run")
+})
+
+test_that("performance-only accepts different raster values but retains structural and execution safeguards", {
+  f <- validation_fixture()
+  e <- f$env
+  run <- validation_run(f, "pixel_metrics_1a", "lidR")
+  manifest <- run$manifest
+  manifest$validation_mode <- "performance-only"
+  file <- file.path(run$output, paste0(manifest$tiles$id[1L], ".tif"))
+  original <- terra::rast(file)
+  values <- terra::values(original)
+  values[is.finite(values)] <- values[is.finite(values)] + 100
+  changed <- terra::setValues(terra::rast(original), values)
+  terra::writeRaster(changed, file, overwrite = TRUE)
+  check <- function(execution = run$execution) {
+    e$check_results(run$output, manifest, "pixel_metrics_1a", "lidR", execution)
+  }
+  expect_true(check()$structural_validation_passed)
+  expect_identical(e$check_results(run$output, run$manifest, "pixel_metrics_1a", "lidR",
+                                   run$execution)$validation_status, "failed")
+  warned <- run$execution
+  warned$diagnostic <- "Unexpected processing warning"
+  expect_identical(check(warned)$validation_status, "failed")
+  wrong <- terra::rast(changed)
+  terra::crs(wrong) <- "EPSG:2959"
+  terra::values(wrong) <- values
+  terra::writeRaster(wrong, file, overwrite = TRUE)
+  expect_match(check()$validation_diagnostic, "CRS")
+  names(changed) <- "wrong_band"
+  terra::writeRaster(changed, file, overwrite = TRUE)
+  expect_match(check()$validation_diagnostic, "band names/order")
+  names(changed) <- "z_mean"
+  terra::writeRaster(changed, file, overwrite = TRUE)
+  writeLines("changed input bytes", manifest$inputs$path[1L])
+  expect_match(check()$validation_diagnostic, "Input bytes changed")
+  unlink(file)
+  expect_match(check()$validation_diagnostic, "inventory mismatch")
+  expect_false(check()$structural_validation_passed)
+})
+
+test_that("a missing performance-only validation receipt cannot retain structural success", {
+  f <- validation_fixture()
+  e <- f$env
+  scratch <- file.path(f$root, "scratch")
+  reports <- file.path(f$root, "reports")
+  dir.create(scratch)
+  dir.create(reports)
+  config <- e$benchmark_validate_config(list(
+    input_roots = c(SSD = f$input), scratch_roots = c(SSD = scratch),
+    reports_path = reports, cores = 1L, tools = "lidR",
+    workstation_id = "fixture", resource_monitoring = FALSE,
+    validation_mode = "performance-only"
+  ))
+  receipt <- file.path(f$root, "validation.rds")
+  e$saveRDS <- function(object, file, ...) {
+    if (identical(file, receipt)) stop("simulated receipt persistence failure")
+    base::saveRDS(object, file, ...)
+  }
+  e$benchmark_validation_points <- function(...) stop("Input decoding must not run")
+  context <- list2env(list(
+    dir_in = f$input, scratch_root = scratch, cores = 1L, output_format = "tif",
+    task_id = "pixel_metrics_1a", validate_artifacts = TRUE, validation_report = receipt
+  ), parent = e)
+  call <- e$benchmark_tasks$task_call_lidR[[match("pixel_metrics_1a", e$benchmark_tasks$task_id)]]
+  result <- e$benchmark_run_tool("lidR", call, context, config, "receipt-failure")
+  expect_identical(result$validation_status, "failed")
+  expect_false(result$structural_validation_passed)
+  expect_match(result$validation_diagnostic, "Cannot persist validation report")
+  expect_false(file.exists(receipt))
+  expect_length(list.files(scratch), 0L)
+})
+
 test_that("native percentile inventory uses the observed zero-padded fifth percentile", {
   fixture <- validation_fixture()
   env <- fixture$env

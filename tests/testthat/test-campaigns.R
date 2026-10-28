@@ -159,6 +159,35 @@ test_that("accepted native warning receipts require their frozen opt-in", {
   }
 })
 
+test_that("performance-only structural receipts must agree with the frozen policy and report", {
+  f <- campaign_fixture()
+  e <- f$env
+  f$config$validation_mode <- "performance-only"
+  campaign <- fixture_campaign(e, f$tasks, f$runs, f$config)
+  append <- function(repetition, report_success = TRUE, with_receipt = TRUE) {
+    attempt <- e$benchmark_attempt_start(campaign, f$tasks$task_id, f$runs$ID, "lidR", repetition)
+    report <- file.path(attempt$path, "validation.rds")
+    saveRDS(list(schema = "validation-v1", validation_mode = "performance-only",
+      status = "unverified", structural_checks_passed = report_success), report)
+    e$benchmark_attempt_finish(attempt, list(
+      execution_status = "succeeded", success = 1L, validation_status = "unverified",
+      validation_mode = "performance-only", structural_validation_passed = TRUE,
+      validation_report_md5 = if (with_receipt) unname(tools::md5sum(report)) else NA_character_
+    ))
+    attempt
+  }
+  good <- append(1L)
+  expect_no_error(e$benchmark_read_attempt(good$path, campaign$manifest))
+  expect_true(e$benchmark_campaign_completed(campaign, f$tasks$task_id, f$runs$ID, "lidR", 1L))
+  invalid <- campaign$manifest
+  invalid$identity$config$validation_mode <- "numerical"
+  expect_error(e$benchmark_read_attempt(good$path, invalid), "validation mode differs")
+  bad <- append(2L, report_success = FALSE)
+  expect_error(e$benchmark_read_attempt(bad$path, campaign$manifest), "does not match its validation report")
+  missing <- append(3L, with_receipt = FALSE)
+  expect_error(e$benchmark_read_attempt(missing$path, campaign$manifest), "immutable validation report")
+})
+
 test_that("resume and repetitions preserve skipped, failed and successful retries", {
   f <- campaign_fixture()
   env <- f$env

@@ -39,6 +39,14 @@ test_that("configuration loading and path validation fail explicitly for unsafe 
     valid <- config
     valid$datasets_org <- c(ALS_1000_1 = "tile_1000_density_1")
     expect_identical(env$benchmark_validate_config(valid)$datasets_org, valid$datasets_org)
+    expect_identical(config$validation_mode, "numerical")
+    valid$validation_mode <- "performance-only"
+    expect_identical(env$benchmark_validate_config(valid)$validation_mode, "performance-only")
+    for (mode in list("", "off", NA_character_, TRUE, c("numerical", "performance-only"))) {
+      invalid <- config
+      invalid$validation_mode <- mode
+      expect_error(env$benchmark_validate_config(invalid), "validation_mode")
+    }
     invalid <- config
     invalid$resource_monitoring <- TRUE
     if (identical(unname(Sys.info()[["sysname"]]), "Linux")) {

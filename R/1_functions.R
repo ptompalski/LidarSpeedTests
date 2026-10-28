@@ -184,6 +184,7 @@ benchmark_validate_config <- function(config) {
     stop("cores must contain positive integers.")
   }
   config$scheduling <- benchmark_scheduling_config(config$scheduling)
+  config$validation_mode <- benchmark_validation_mode(config$validation_mode)
   if (!is.null(config$datasets_org)) {
     datasets <- config$datasets_org
     if (!is.character(datasets) || !length(datasets) || anyNA(datasets) ||
@@ -225,6 +226,26 @@ benchmark_validate_config <- function(config) {
   }
   benchmark_file_component(config$workstation_id, "workstation_id")
   config
+}
+
+benchmark_validation_mode <- function(mode = NULL) {
+  if (is.null(mode)) return("numerical")
+  if (!is.character(mode) || length(mode) != 1L || is.na(mode) ||
+      !mode %in% c("numerical", "performance-only")) {
+    stop("validation_mode must be numerical or performance-only.")
+  }
+  mode
+}
+
+benchmark_performance_success <- function(record) {
+  fields <- c("validation_mode", "validation_status", "structural_validation_passed",
+              "validation_report_md5")
+  if (!all(fields %in% names(record))) return(rep(FALSE, nrow(record)))
+  good <- record$validation_mode == "performance-only" &
+    record$validation_status == "unverified" &
+    record$structural_validation_passed %in% TRUE &
+    !is.na(record$validation_report_md5) & nzchar(record$validation_report_md5)
+  !is.na(good) & good
 }
 
 benchmark_input_metadata <- function(metadata) {
@@ -606,12 +627,14 @@ check_results <- function(path, manifest = NULL, task_id = NULL, tool = NULL,
     output_file_count = length(files),
     output_total_size = sum(file.info(files)$size),
     validation_status = "unverified",
+    structural_validation_passed = FALSE,
     validation_diagnostic = "No input/workload validation manifest supplied.",
     expected_output_file_count = NA_integer_
   )
   if (is.null(manifest)) return(result)
   report <- benchmark_validate_artifacts(path, manifest, task_id, tool, execution)
   result$validation_status <- report$status
+  result$structural_validation_passed <- isTRUE(report$structural_checks_passed)
   result$validation_diagnostic <- report$diagnostic
   result$expected_output_file_count <- report$expected_file_count
   result$boundary_difference_points <- sum(vapply(report$artifacts, function(artifact) {
@@ -1178,6 +1201,9 @@ benchmark_run_tool <- function(tool, task_call, context, config, label) {
     result <- benchmark_with_resources(tool, context$cores, config, label, function() {
       benchmark_execute_call(task_call, tool, context)
     }, monitor_path = context$monitor_path)
+    if (identical(config$validation_mode, "performance-only")) {
+      cli::cli_inform("Checking output structure only; input-cloud decoding and numerical references are disabled.")
+    }
     counts <- tryCatch(
       check_results(context$dir_out, manifest, context$task_id, tool, result),
       error = function(e) {
@@ -1196,6 +1222,7 @@ benchmark_run_tool <- function(tool, task_call, context, config, label) {
         counts$validation_report_md5 <- benchmark_checksums(context$validation_report)$md5
       }, error = function(e) {
         counts$validation_status <<- "failed"
+        counts$structural_validation_passed <<- FALSE
         counts$validation_diagnostic <<- paste(
           counts$validation_diagnostic, "Cannot persist validation report:", conditionMessage(e))
         message(counts$validation_diagnostic)
@@ -1361,6 +1388,7 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
                      workers = if (tool == "lastools") 1L else run$cores,
                      native_threads = if (tool == "lastools") run$cores else 1L,
                      blas_threads = 1L,
+                     validation_mode = config$validation_mode,
                      cache_policy = config$scheduling$cache_policy,
                      cooldown_seconds = config$scheduling$cooldown_seconds,
                      monitoring_scope = config$monitoring$scope,
@@ -1388,6 +1416,8 @@ benchmark_run <- function(task_id, run_id, run_lidR = "lidR" %in% config$tools,
       elapsed <- result$finish_time - result$start_time
       if (identical(result$validation_status, "passed")) {
         cli::cli_alert_success("Finished in {elapsed} sec.; validation passed.")
+      } else if (isTRUE(result$structural_validation_passed)) {
+        cli::cli_alert_success("Finished in {elapsed} sec.; structural checks passed; numerical results unverified (performance-only).")
       } else if (identical(result$validation_status, "failed")) {
         cli::cli_alert_danger("Execution finished in {elapsed} sec.; artifact validation failed.")
       } else {
@@ -1642,7 +1672,8 @@ benchmark_read_attempt <- function(attempt, manifest) {
     recorded_at = readr::col_datetime(), output_file_count = readr::col_double(),
     exit_status = readr::col_integer(), density_points = readr::col_double(),
     expected_output_file_count = readr::col_integer(),
-    boundary_difference_points = readr::col_double()
+    boundary_difference_points = readr::col_double(),
+    structural_validation_passed = readr::col_logical()
   )
   header <- names(readr::read_csv(
     result, n_max = 0, col_types = readr::cols(.default = readr::col_character()),
@@ -1681,6 +1712,24 @@ benchmark_read_attempt <- function(attempt, manifest) {
   } else if ("validation_status" %in% names(record) &&
              record$validation_status %in% c("passed", "accepted_exception")) {
     stop("Passed validation or an accepted exception requires an immutable validation report: ", attempt)
+  }
+  if ("validation_mode" %in% names(record) &&
+      !identical(benchmark_validation_mode(record$validation_mode),
+                 benchmark_validation_mode(manifest$identity$config$validation_mode))) {
+    stop("Attempt validation mode differs from its frozen campaign: ", attempt)
+  }
+  if ("structural_validation_passed" %in% names(record) &&
+      isTRUE(record$structural_validation_passed)) {
+    if (!isTRUE(benchmark_performance_success(record))) {
+      stop("Structural success requires performance-only mode and an immutable validation report: ", attempt)
+    }
+    validation <- readRDS(file.path(attempt, "validation.rds"))
+    if (!identical(validation$schema, "validation-v1") ||
+        !identical(validation$validation_mode, "performance-only") ||
+        !identical(validation$status, record$validation_status) ||
+        !isTRUE(validation$structural_checks_passed)) {
+      stop("Structural success does not match its validation report: ", attempt)
+    }
   }
   if ("validation_status" %in% names(record) &&
       record$validation_status == "accepted_exception" &&
@@ -1757,7 +1806,9 @@ benchmark_campaign_completed <- function(campaign, task_id, run_id, tool, repeti
       (record$execution_status == "skipped" ||
          (record$execution_status == "succeeded" &&
             record$success == 1 && "validation_status" %in% names(record) &&
-            record$validation_status %in% c("passed", "accepted_exception")))
+            (record$validation_status %in% c("passed", "accepted_exception") ||
+               (identical(campaign$manifest$identity$config$validation_mode, "performance-only") &&
+                  isTRUE(benchmark_performance_success(record))))))
   }, logical(1)))
 }
 
@@ -1777,6 +1828,7 @@ benchmark_validation_manifest <- function(ctg, config = NULL) {
   }
   list(schema = "validation-v1", tiles = tiles, crs = sf::st_crs(ctg),
        inputs = benchmark_checksums(tiles$filename), buffer = 20,
+       validation_mode = benchmark_validation_mode(config$validation_mode),
        input_metadata = config$input_metadata,
        accept_known_surface_discrepancies = isTRUE(config$accept_known_surface_discrepancies),
        accept_known_extent_discrepancies = isTRUE(config$accept_known_extent_discrepancies),
@@ -2033,7 +2085,8 @@ benchmark_validate_raster <- function(file, spec, tile, manifest, cloud, numeric
   }
   layers <- max(1L, length(spec$bands))
   if (terra::nlyr(raster) != layers) stop("Raster band count mismatch.")
-  if (length(spec$bands) && numerical && !identical(names(raster), spec$bands)) {
+  if (length(spec$bands) && (numerical || isTRUE(tool %in% c("lidR", "lasR"))) &&
+      !identical(names(raster), spec$bands)) {
     stop("Raster band names/order mismatch.")
   }
   actual <- terra::values(raster, mat = TRUE)
@@ -2179,6 +2232,8 @@ benchmark_validate_artifacts <- function(path, manifest, task_id, tool, executio
   on.exit(lidR::set_lidr_threads(previous_threads), add = TRUE)
   lidR::set_lidr_threads(1L)
   contract <- benchmark_workload_contract(task_id, tool, isTRUE(manifest$diagnostic_lasR))
+  mode <- benchmark_validation_mode(manifest$validation_mode)
+  performance_only <- identical(mode, "performance-only")
   specs <- contract$validation
   tiles <- manifest$tiles
   expected <- unlist(lapply(tiles$id, function(id) {
@@ -2186,6 +2241,7 @@ benchmark_validate_artifacts <- function(path, manifest, task_id, tool, executio
   }), use.names = FALSE)
   report <- list(
     schema = "validation-v1", task_id = task_id, tool = tool,
+    validation_mode = mode, structural_checks_passed = FALSE,
     started_at = Sys.time(),
     workload_contract = contract$workload_contract, input_manifest = manifest,
     expected_files = expected, expected_file_count = length(expected),
@@ -2221,13 +2277,14 @@ benchmark_validate_artifacts <- function(path, manifest, task_id, tool, executio
       paste(setdiff(expected, basename(primary)), collapse = ", "),
       "; unexpected: ", paste(setdiff(basename(primary), expected), collapse = ", ")))
   }
-  numerical <- tool != "lastools" && !(tool == "lasR" && task_id == "tree_detection") &&
+  numerical <- !performance_only && tool != "lastools" && !(tool == "lasR" && task_id == "tree_detection") &&
     !startsWith(task_id, "complex_")
   for (i in seq_len(nrow(tiles))) {
     tile <- tiles[i, , drop = FALSE]
     warnings <- character()
     tile_result <- tryCatch(withCallingHandlers({
-      cloud <- benchmark_validation_points(manifest, tile, task_id, tool)
+      cloud <- if (performance_only) NULL else
+        benchmark_validation_points(manifest, tile, task_id, tool)
       lapply(specs, function(spec) {
         file <- file.path(path, paste0(tile$id, spec$suffix))
         detail <- tryCatch({
@@ -2265,6 +2322,10 @@ benchmark_validate_artifacts <- function(path, manifest, task_id, tool, executio
   } else if (contract$comparison_status == "diagnostic_only") {
     report$status <- "unverified"
     report$diagnostic <- contract$comparison_note
+  } else if (performance_only) {
+    report$status <- "unverified"
+    report$structural_checks_passed <- TRUE
+    report$diagnostic <- "Performance-only structural checks passed; numerical equivalence was not evaluated."
   } else if (!numerical) {
     report$status <- "unverified"
     report$diagnostic <- "Structural checks passed; native numerical/ownership conventions are unverified."

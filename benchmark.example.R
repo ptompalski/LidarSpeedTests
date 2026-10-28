@@ -32,6 +32,8 @@ list(
   lastools_path = "/path/to/LAStools/bin",
   workstation_id = unname(Sys.info()[["nodename"]]),
   resource_monitoring = FALSE,
+  # Freeze output checks in campaign identity; performance-only skips numerical references.
+  validation_mode = "numerical",
   # Linux /proc only. Samples/reports live inside each immutable attempt.
   # process-tree is reserved for future implementation, not a supported scope.
   monitoring = list(scope = "whole-machine", interval_seconds = 1)

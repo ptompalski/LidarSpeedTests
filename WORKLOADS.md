@@ -215,6 +215,21 @@ complex candidates normalize before computing canopy height.
 
 ## Artifact validation: validation-v1
 
+The frozen execution setting `validation_mode` defaults to `"numerical"`, as
+described below. The explicit `"performance-only"` setting instead checks output
+inventory, readability, CRS/grid/band metadata, finite coverage/coordinates and
+core bounds without reading buffered input clouds or building numerical
+references. Raster values and NoData masks are not compared to expected values.
+Point-cloud output payloads are still decoded once for structural checks.
+Input checksum/provenance checks, unexpected processing diagnostics, the exact
+native cutoff-warning policy and blocked-workload rules remain enforced.
+Successful structural checks are always `unverified`; attempts and validation
+receipts record the execution mode and a structural-success flag. They are
+resumable only under the same frozen policy and enter only performance-only
+reporting, never validated numerical comparisons. Historical native structural
+checks remain readable. Changing this execution setting or the warmup count
+requires a new campaign; the report-only mode does not change execution checks.
+
 Expectations are the product of unique input tile stems and workload artifacts,
 not successful peer runs. Input manifests record unbuffered header bounds/counts,
 CRS and file checksums. Each R raster/vector/LAZ must use its original tile stem;

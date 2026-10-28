@@ -139,6 +139,38 @@ output, not equivalent-result speedups. Failed/skipped execution, failed/missing
 validation, warmups, superseded retries and invalid/sub-0.1-second timings remain
 excluded. Existing error/warning and artifact checks are not relaxed.
 
+### Lightweight execution checks
+
+Reporting mode and execution validation are separate settings. To avoid
+expensive input-cloud decoding and reference calculations during a new
+performance-focused campaign, set this in the workspace's `benchmark.R`:
+
+```r
+validation_mode = "performance-only"
+```
+
+The default is `"numerical"`, retaining the existing exhaustive checks.
+Performance-only execution still requires successful processing with acceptable
+logs, exactly the expected nonempty/readable primary files, CRS/grid/band
+metadata, finite raster coverage and valid output coordinates. It reads output
+payloads but never builds buffered input clouds or numerical references.
+Point-cloud output checks still decode the output once to check its payload;
+they do not reread the input or neighboring clouds. Input checksums, prepared
+readiness checks, campaign identity and blocked-workload policies are unchanged.
+These safeguards can still take time, but no per-output input-cloud
+decompression/reference loop runs.
+
+Successful checks are recorded as `unverified`, with explicit structural-success
+and validation-mode fields in the attempt and immutable validation receipt.
+They are resumable under the same frozen campaign and appear only in
+performance-only timing reports, not numerically validated comparisons.
+Changing `validation_mode` requires a new campaign ID; stop any active run first.
+
+Warmups are optional. Set `scheduling$warmups` to `0L` to omit them; retain three
+measured repetitions. Without warmups, first-use overhead can affect the first
+measurement. Neither setting flushes caches or guarantees a particular cache
+state. Warmup settings are frozen too, so changing them requires a new campaign.
+
 ## Full benchmark on prepared data
 
 The full runner uses all nine task definitions, recording explicit skips for
@@ -188,9 +220,14 @@ with the environment-variable invocation; it does not apply to `--init`.
 The current configured workspace is
 `/data/nvme2/LidarSpeedTestWorkingDir/fresh-benchmark-full`, with LAStools 261023
 and the same enabled extent/cutoff exception policies as the successful pilot.
+It now uses `validation_mode = "performance-only"` and zero warmups:
+**324 measured entries** for simple metrics alone, or **2916** for all tasks.
+The interrupted `simple-metrics-001` campaign is retained unchanged; use a new
+ID such as `simple-metrics-002` with the updated settings.
 No benchmark is launched by initialization or preflight.
 
-`cli` reports overall `Task X of 3888` progress, with the workload, tool,
+`cli` reports overall `Task X of N` progress (3888 with the example defaults),
+with the workload, tool,
 dataset/core/storage run, phase and repetition. Each entry is one scheduled
 tool call, not one tile; warmups, skips and already-complete entries count toward
 schedule traversal. The progress bar follows `cli`'s terminal defaults, while
@@ -208,7 +245,8 @@ LIDAR_REPORT_MODE=performance-only \
 Rscript --vanilla R/5_report.R
 ```
 
-Performance-only reporting does not disable execution-time validation or unblock
-known-broken workloads. Use a new campaign ID after changing source code,
+Performance-only reporting alone does not change execution checks; use
+`validation_mode` for lightweight execution. Neither mode unblocks known-broken
+workloads. Use a new campaign ID after changing source code,
 configuration or inputs. Invoking the runner without arguments still supports
 `LIDAR_BENCHMARK_CONFIG`/`LIDAR_CAMPAIGN_ID`, now selecting all task/run combinations.

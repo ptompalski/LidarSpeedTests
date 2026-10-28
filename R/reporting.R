@@ -36,7 +36,8 @@ benchmark_report_prepare <- function(records, manifest, mode = c("validated", "p
     r$validation_status == "unverified" &
       !is.na(r$validation_report_md5) & nzchar(r$validation_report_md5) &
       r$validation_diagnostic ==
-        "Structural checks passed; native numerical/ownership conventions are unverified.", FALSE)
+        "Structural checks passed; native numerical/ownership conventions are unverified.", FALSE) |
+    benchmark_performance_success(r)
   validation_eligible <- r$validation_status %in% c("passed", "accepted_exception") |
     (mode == "performance-only" & r$structural_checks_passed)
   r$exclusion <- dplyr::case_when(

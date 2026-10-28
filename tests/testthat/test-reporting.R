@@ -1,7 +1,9 @@
-reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE) {
+reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE,
+                              validation_mode = "numerical") {
   f <- campaign_fixture(envir)
   env <- f$env
   f$config$accept_known_surface_discrepancies <- accept_exceptions
+  f$config$validation_mode <- validation_mode
   sys.source(file.path(repo, "R/reporting.R"), env)
   f$tasks <- data.frame(
     task_id = c("pixel_metrics_1a", "complex_task1", "normalization"),
@@ -14,17 +16,20 @@ reporting_fixture <- function(envir = parent.frame(), accept_exceptions = FALSE)
                        repetition = 1L, seconds = 2, status = "succeeded",
                        validation = "passed", phase = "measurement", monitor = "available",
                        comparison = "matched_definition_pending_validation", boundary_points = 0L,
-                       validation_diagnostic = "synthetic fixture receipt") {
+                       validation_diagnostic = "synthetic fixture receipt",
+                       structural = FALSE) {
     attempt <- env$benchmark_attempt_start(f$campaign, task, run, "lidR", repetition, phase)
     # Synthetic receipts exercise reporting/ingestion, not numerical acceptance.
     validation_path <- file.path(attempt$path, "validation.rds")
-    saveRDS(list(fixture = TRUE, validation_status = validation), validation_path)
+    saveRDS(list(schema = "validation-v1", fixture = TRUE, status = validation,
+      validation_mode = validation_mode, structural_checks_passed = structural), validation_path)
     start <- as.POSIXct("2026-10-22 12:00:00", tz = "UTC")
     result <- list(
       success = as.integer(status == "succeeded"), execution_status = status,
       diagnostic = if (status == "succeeded") NA_character_ else "synthetic failure/skip",
       start_time = start, finish_time = start + seconds,
       validation_status = validation, validation_diagnostic = validation_diagnostic,
+      validation_mode = validation_mode, structural_validation_passed = structural,
       validation_report_md5 = unname(tools::md5sum(validation_path)),
       monitoring_status = monitor, monitoring_scope = "whole-machine", monitoring_platform = "Linux",
       comparison_status = comparison, comparison_group = paste0("workloads-v1/", task),
@@ -168,6 +173,22 @@ test_that("performance-only reports retain safety, retry and timing exclusions",
   records$validation_report_md5 <- NA_character_
   missing <- f$env$benchmark_report_prepare(records, f$campaign$manifest, "performance-only")
   expect_false(any(missing$attempts$report_included))
+})
+
+test_that("execution-level performance-only receipts are resumable descriptive report samples", {
+  f <- reporting_fixture(validation_mode = "performance-only")
+  f$append(validation = "unverified", structural = TRUE,
+    validation_diagnostic = "Performance-only structural checks passed; numerical equivalence was not evaluated.")
+  strict <- f$read()
+  expect_equal(sum(strict$summary$n_included), 0)
+  report <- f$read("performance-only")
+  expect_equal(sum(report$summary$n_included), 1)
+  expect_equal(sum(report$summary$n_unverified), 1)
+  expect_equal(sum(report$summary$n_comparable), 0)
+  expect_false(report$attempts$validated_success)
+  expect_true(report$attempts$structural_checks_passed)
+  expect_true(f$env$benchmark_campaign_completed(
+    f$campaign, "pixel_metrics_1a", f$runs$ID[1L], "lidR", 1L))
 })
 
 test_that("short, invalid, unvalidated, partial and non-comparable results stay explicit", {
