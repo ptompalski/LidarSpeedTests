@@ -1,0 +1,1 @@
+"""Python library adapter (placeholder)."""

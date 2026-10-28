@@ -1,0 +1,1 @@
+"""Report summarization (placeholder)."""
