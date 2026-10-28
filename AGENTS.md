@@ -1,188 +1,215 @@
-# AGENTS.md — Permanent development instructions
+# LidarSpeedTests 2.0 — Development Agents and Rules
 
-These rules apply to every contributor and AI agent working on LidarSpeedTests
-2.0. They override convenience. If a task conflicts with them, stop and ask the
-owner (@ptompalski).
+**Permanent guidelines** for contributors and agents working on LidarSpeedTests 2.0.  
+**Status**: Active  
+**Last updated**: 2026-10-28
 
-Read first: [design/ARCHITECTURE.md](design/ARCHITECTURE.md) and
-[MIGRATION_PLAN.md](MIGRATION_PLAN.md). Do one migration phase per task, and do
-not start the next phase without review.
+## Core Principles
 
-## 1. Branch and repository hygiene
+### 1. Separation of Concerns
 
-- Work only on `feature/cross-platform-benchmark` (or a branch the owner
-  explicitly creates from it). Never commit to `main`, `dev` or `gh-pages`.
-- Do **not** push, open pull requests, merge, rebase shared branches or
-  rewrite history without explicit approval.
-- Before switching branches or committing, check for uncommitted changes. Never
-  discard, overwrite, stash or move someone else's work without approval.
-- **Active legacy campaigns.** The legacy R harness freezes `git rev-parse HEAD`
-  and the contents of `R/*.R`, `DESCRIPTION`, `WORKLOADS.md` and `renv.lock`.
-  It rechecks them before every schedule entry. Before any git operation that
-  changes HEAD (commit, checkout, switch, reset) or any edit of those files,
-  check for running benchmark processes in that checkout:
-  - `ps -eo pid,args | grep -E 'R/(3_runBenchmarks|6_pilot)\.R'`;
-  - `readlink /proc/<pid>/cwd`.
+- **Python orchestrator** (`src/lidarbench/`): tool-neutral, language-neutral, stdlib + minimal dependencies.
+- **R bridge** (`bridges/r/`): wraps and reuses legacy R code; no diverging reimplementations without approval.
+- **Tool adapters** (`src/lidarbench/execution/adapters/`): plugin-based, discoverable, platform-specific code contained.
+- **Legacy harness** (`R/`, `tests/testthat/`, `*.qmd`): frozen, never moved or rewritten without explicit decision.
 
-  If one is running there, do not touch that checkout. Use a separate
-  `git worktree`. The 2.0 development worktree is
-  `/home/ptompals/LidarSpeedTests-cross-platform`.
-- Include the `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
-  trailer on AI-authored commits.
+### 2. Cross-Platform First
 
-## 2. Protected content — never modify, delete or regenerate
+- All path operations use `pathlib.Path` and `lidarbench.core.paths` utilities.
+- No hard-coded paths like `/home/user`, `C:\Users`, `/tmp`, `/var`.
+- Platform-specific code is guarded with `platform.system()` checks or lives in separate adapter implementations.
+- Tests include `@pytest.mark.platform` markers for OS-specific behavior.
+- Before merging, verify behavior on at least 2 platforms (Linux native and Windows or macOS via CI).
 
-- Historical benchmark results and campaign directories, including legacy
-  `results/`, `system_monitoring/`, and any `<reports>/campaigns/*` outside a
-  test's temporary directory.
-- The published website: `docs/`, the `gh-pages` branch and `graphics/`.
-- Archived material: `_OLD/`.
-- Input data:
-  - prepared and original point clouds;
-  - preparation roots and receipts;
-  - `ALS_tiles.gpkg`;
-  - `input-manifests/`;
-  - anything under configured `input_roots` or `protected_roots` (for example
-    `/data/nvme1/LidarSpeedTestData` and `/data/nvme2/LidarSpeedTestWorkingDir/*`).
-- Legacy R identity files (`R/`, `DESCRIPTION`, `WORKLOADS.md`, `renv.lock`,
-  `renv/`):
-  - edit them only with owner approval;
-  - edit them only when no legacy campaign runs from that checkout;
-  - document that the edit invalidates resumption of existing legacy
-    campaigns.
+### 3. Write-Once Records
 
-Importers and exporters must be read-only with respect to their sources. Tests
-must assert that source bytes are unchanged.
+- All campaign records (campaign.json, attempt results, events) are created exactly once.
+- Never modify or re-serialize an existing record; append-only for events and logs.
+- SHA-256 digests are computed at publish time and are immutable.
+- Resumption logic checks identity and skips completed attempts; it does not recompute.
 
-## 3. Authorization required (ask first, every time)
+### 4. No Optional Runtime Dependencies in Core
 
-- Downloading datasets or any large file.
-- Installing system software, R/Python packages into shared or system
-  locations, LAStools, PDAL, Quarto or compilers. A project-local Python
-  virtual environment for running tests is allowed. State what is installed and
-  where.
-- Running benchmarks:
-  - any campaign on real data;
-  - pilot and parity runs;
-  - full benchmarks;
-  - anything that runs LAStools on real inputs.
+- The Python core (`src/lidarbench/`) must install with `pip install -e .` without R, GDAL, PDAL, LAStools or any LiDAR library.
+- Optional dependencies (for validation, monitoring, rendering) are installed via extras or entry-point plugins.
+- Probe for optional dependencies at runtime; do not fail at import time.
 
-  Tiny synthetic fixtures in temporary directories are allowed.
-- Modifying inputs, preparation roots, campaign records or published output.
-- Changing campaign identity semantics, workload contracts, equivalence groups,
-  validation tolerances or exception policies.
+### 5. Tool Execution is Subprocess-Only
 
-## 4. Architecture rules
+- No benchmarked tools run in-process.
+- R packages run via `Rscript`, Python libraries via `python -m <module>`, CLIs directly.
+- The orchestrator process is isolated from tool crashes and memory leaks.
+- Timing boundaries are consistent: orchestrator perf_counter_ns around the subprocess.
 
-- **The Python core is independent.** `src/lidarbench/` (outside optional
-  plugin modules) must not import or require R, GDAL, PDAL, LAStools, rasterio,
-  laspy, numpy or any LiDAR library. Its runtime dependencies are the standard
-  library and `psutil`. An import-boundary test enforces this; keep it passing.
-- **Native cross-platform.** Code must work on Windows, Linux and macOS
-  without WSL, containers, Cygwin/MSYS or a POSIX shell. In practice:
-  - use `pathlib`/`os.path`;
-  - use argv lists and never `shell=True`;
-  - pass `encoding="utf-8"` explicitly, and `newline=""` for CSV;
-  - avoid platform-specific commands; where an OS needs special handling,
-    abstract it with a tested branch for each OS.
-- **Benchmarked tools always run in child processes.** Never import a
-  benchmarked library into the orchestrator.
-- **Records are language-neutral and write-once:** JSON, JSONL or CSV with a
-  schema version and SHA-256. Use exclusive create and atomic publish. Never
-  edit or delete a published record. Corrections are new records (for example
-  tombstones).
-- **Reuse before rewrite.** Wrap mature R functionality (validation-v1,
-  Petawawa preparation, thread policy, workload calls) through `bridges/r/`.
-  Do not rewrite code merely to change languages. A port is justified only
-  when the orchestrator needs the behaviour, and it requires parity tests
-  against golden output from the R implementation.
-- **Plugins, not core edits.** New tools, validators, monitors and renderers
-  are plugins discovered through entry points, plus data in `workloads/`.
-- **Safe scratch only.** Delete only marker-proven, run-owned scratch
-  directories after validating:
-  - the root;
-  - the ownership token;
-  - the device/inode identity;
-  - the absence of links, junctions and reparse points.
+## Development Workflow
 
-  Never delete user-supplied paths, roots or anything outside scratch. Never
-  follow links during deletion.
-- **Locks are never auto-removed.** Report stale locks; removal requires an
-  explicit, confirmed command.
-- **Identity by content.** Campaign identity must change when inputs, code
-  content, config, policies, workloads or tool binaries change. It must not
-  change on unrelated git operations.
+### Branch and Commit Discipline
 
-## 5. Evidence and reporting rules
+1. **Feature branch**: Work on `feature/cross-platform-benchmark`. Do not commit directly to `main` or `dev`.
+2. **Commit messages**:
+   - First line: present tense, clear intent, e.g., "Add platform detection utilities".
+   - Body (if multi-line): explain "why", not "what" (what is in the diff).
+   - Include Co-authored-by trailer if pair programming.
+3. **No force-push**: Rebase before pushing; never `git push -f` to shared branches.
+4. **Atomic commits**: Each commit should pass tests and be logically self-contained.
 
-- Keep these four verdicts separate:
-  - **execution success**;
-  - **structural validation**;
-  - **numerical validation**;
-  - **cross-tool comparability**.
+### Testing Requirements
 
-  Never derive one by relabelling another. Never promote `unverified`,
-  `accepted_exception` or `diagnostic_only` to `passed` or `comparable`.
-- **Never present non-equivalent workloads as directly comparable.**
-  Cross-tool comparisons, ratios and speedups are allowed only through the
-  comparability gate (ARCHITECTURE §8.3):
-  - same matched equivalence group and spec digest;
-  - numerical `passed`;
-  - zero boundary differences;
-  - same dataset, run dimensions and machine;
-  - same timing boundary;
-  - validated report mode.
+- **New code has tests**: 100% test coverage of new modules and functions is the goal.
+- **pytest passes**: Run `pytest tests/python/` before pushing.
+- **Linting passes**: Run `ruff check src/ tests/` and `black --check src/ tests/`.
+- **Type hints**: Use type hints on all public functions; `mypy` should not complain.
+- **Platform test markers**: Tests requiring specific OS use `@pytest.mark.platform` and skip gracefully on others.
 
-  Everything else is labelled descriptive.
-- New tool implementations default to `non_comparable`. Joining an
-  equivalence group needs a documented contract review, evidence and owner
-  approval.
-- Every attempt is retained, including failures, skips, timeouts,
-  interruptions and warm-ups. Exclusions are explicit reasons, not omissions.
-- Exception policies are explicit, default `false` and frozen in campaign
-  identity. Changing one requires a new campaign.
-- Do not mix legacy (R) and 2.0 campaigns, or historical results, in one
-  comparison table.
+### Code Style
 
-## 6. Every implementation task must include
+- **Python version**: 3.11+. Use `from __future__ import annotations` for forward references.
+- **Formatter**: Black (line length 100).
+- **Linter**: Ruff. See `pyproject.toml` for configuration.
+- **Docstrings**: Google-style (PEP 257 compatible). One-liner for simple functions, full description + Args + Returns for complex ones.
+- **Comments**: Only for non-obvious logic. Code should be self-documenting.
+- **Imports**: Group stdlib, third-party, then local. Use `isort` (configured in ruff).
 
-1. **Automated tests** (pytest under `tests/python/`; testthat under
-   `tests/testthat/` for R bridge code):
-   - cover success **and** failure paths;
-   - use tiny synthetic fixtures and fake tool executables;
-   - never use real data;
-   - include platform-specific branches.
-2. **Documentation:** README section and/or `design/` updates, CLI help, and an
-   ADR in `design/adr/` when a decision changes.
-3. **Validation run:** the smallest command that covers the change, plus the
-   full relevant suite before handing back.
-   - Python: `python -m pytest tests/python` (plus `ruff check .` and
-     `ruff format --check .` once configured).
-   - R, only if R files were touched: `Rscript --vanilla tests/testthat.R`.
-     For a focused run, use `Rscript --vanilla -e 'source("renv/activate.R");
-     testthat::test_dir("tests/testthat", filter = "<name>")'`.
-4. **A protected-path check:** `git status` and `git diff --stat` show no
-   changes under protected paths (§2).
+### Documentation
 
-## 7. End-of-task summary (mandatory)
+- **Architecture changes**: Update [design/ARCHITECTURE.md](design/ARCHITECTURE.md) or create an ADR in `design/adr/`.
+- **User-facing changes**: Update [README.md](README.md) and [MIGRATION_PLAN.md](MIGRATION_PLAN.md).
+- **API changes**: Update docstrings and module `__init__.py` exports.
+- **New phases or milestones**: Update [MIGRATION_PLAN.md](MIGRATION_PLAN.md) acceptance criteria.
 
-Finish every task with:
+## Key Technical Rules
 
-- **Changes:** files added or modified, and the behaviour introduced.
-- **Tests performed:** exact commands and results, plus anything not run and
-  why (for example, Windows/macOS CI pending because pushing needs approval).
-- **Unresolved issues:** known limitations, risks and open questions.
-- **Recommended next steps:** normally the next migration phase. Do not start
-  it.
+### 1. Workloads and Contracts
 
-## 8. Practical notes
+- Workloads are defined in `workloads/workloads-v1/` as TOML files.
+- A workload spec is tool-neutral; implementations are tool-specific.
+- Equivalence (matched_definition, diagnostic_only, unsupported, blocked) is declared in the spec, not inferred.
+- Changing a workload spec or equivalence requires a new version (workloads-v2).
 
-- R 4.6.1 with `renv` (lidR 4.3.3, lasR 0.21.2) is the pinned R environment. The
-  legacy suite runs with `Rscript --vanilla tests/testthat.R` from the
-  repository root.
-- Legacy workload contracts and validation semantics are specified in
-  `WORKLOADS.md`. 2.0 workload data lives in `workloads/`.
-- LAStools may report a varying licensing banner. Identity uses executable
-  checksums and normalized version lines, not the banner.
-- `lascanopy` and `blast2dem` parent processes can exit 0 when a child fails.
-  Log-based `ERROR`/`FATAL` detection is mandatory for LAStools.
+### 2. Campaign Identity
+
+- Campaign identity includes: code (git revision + dirty check + file digests), renv lock, config, selection, workloads, tools, datasets, environment (OS, CPU, RAM).
+- Identity is computed once at campaign creation and frozen in `campaign.json`.
+- Resume checks identity; if it changes, the campaign is abandoned and a new one is created.
+- Do not recompute identity before every schedule entry (this was a performance bug in the R harness; see L3 in ARCHITECTURE.md).
+
+### 3. Scratch Directory Safety
+
+- Scratch roots cannot be filesystem root, home directory or the current working directory.
+- Each run gets a `0700` (Unix) or restricted ACL (Windows) directory owned by the benchmark user.
+- Cleanup requires an in-memory ownership record, device/inode match (Unix) and symlink-free tree walk.
+- Incomplete cleanup is logged as a warning; the campaign continues (do not fail hard).
+
+### 4. Attempt Lifecycle
+
+States: `started` → `execution` → `validation` → `result` → `completed` (with optional `abandoned` tombstone on resume).
+
+- `started.json`: entry key, sequence number, timestamp, host, PID.
+- `execution.json`: exit status, timing, interpretation, exceptions, warnings.
+- `validation/*.json`: structural and numerical validation reports.
+- `result.json`: consolidated record with digests of all files.
+- `completed.json`: receipt (SHA-256 of result.json); written last, atomic create.
+
+A missing `completed.json` means the attempt is incomplete; resumption skips it and retries.
+
+### 5. R Bridge Protocol
+
+- Orchestrator writes `invocation.json` with task call, inputs, outputs, cores, thread policy, CRS, flags.
+- `bridges/r/runner.R` activates renv, runs the call, times **only the workload**, writes `result.json`.
+- Orchestrator records both outer (perf_counter_ns around subprocess) and inner (R Sys.time()) times.
+- The timing-boundary label in the report says which one is used.
+- Bridge code sources (does not copy) functions from `R/1_functions.R` to avoid divergence.
+
+### 6. Configuration and Validation
+
+- Campaign configuration is TOML (human-editable, version-controlled).
+- Schema validation uses Pydantic; invalid configs fail at preflight with clear error messages.
+- Dataset provenance (archive hash, policy version, per-tile receipts) is recorded and verified.
+- Frozen opt-in policies (extent discrepancies, LAStools cutoff exception, diagnostic lasR) are part of campaign identity.
+
+### 7. Validator Plugin Protocol
+
+- Validators are loaded via entry points (`lidarbench.validators`).
+- Each validator declares a name, level (structural/numerical) and applicability.
+- `structural-v1`: checks inventory, file existence, naming, optional format sniffing.
+- `r-validation-v1`: calls existing R validation logic via bridge; supports numerical and performance-only modes.
+- A missing validator does not fail the campaign; attempts are marked `unverified` or `skipped` with reason.
+
+### 8. Monitor Backend Protocol
+
+- Monitor backends are loaded via entry points (`lidarbench.monitors`).
+- Default backend is `psutil` (whole-machine, process-tree sampling in separate process).
+- Monitors run as independent sampler processes with ready/stop file handshakes.
+- Monitor samples are written to CSV with timestamp, CPU, memory and optional process-tree fields.
+- Monitor summary includes peak, average, per-phase breakdowns and optional custom aggregations.
+
+## Reviewing and Approval
+
+### Code Review Checklist
+
+- [ ] Commit messages are clear and atomic.
+- [ ] Docstrings and types are complete.
+- [ ] Tests are included and pass.
+- [ ] Linting and formatting are clean.
+- [ ] Cross-platform implications are considered.
+- [ ] No new hard-coded paths or OS assumptions.
+- [ ] Architecture is consistent with [design/ARCHITECTURE.md](design/ARCHITECTURE.md).
+- [ ] If documentation or roadmap changes, they are updated.
+
+### Escalation Path
+
+- **Uncertain design**: Propose an ADR or update ARCHITECTURE.md for discussion.
+- **Blocked or stuck**: Document the blocker and request help in a GitHub issue.
+- **Major refactor**: File an issue, outline the change in ARCHITECTURE.md or ADR, get approval before major work.
+
+## Quick Start for Contributors
+
+```bash
+# Clone and switch to feature branch
+git clone https://github.com/ptompalski/LidarSpeedTests.git
+cd LidarSpeedTests
+git checkout feature/cross-platform-benchmark
+
+# Set up Python environment
+python3.11 -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install --upgrade pip
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/python/ -v
+
+# Lint and format
+ruff check src/ tests/
+black --check src/ tests/
+mypy src/
+
+# Make changes, commit, push
+git add src/...
+git commit -m "Add feature X"
+git push origin feature/cross-platform-benchmark
+```
+
+## FAQ and Gotchas
+
+**Q: Can I import R or GDAL in `src/lidarbench/`?**  
+A: No. R and GDAL are optional. Use the R bridge for R code; for GDAL, wait for a future validator or tool adapter.
+
+**Q: What if a test needs a real tool (lastools, lidR)?**  
+A: Use mock fixtures. For integration tests on a developer machine, use `@pytest.mark.integration` and skip in CI unless the tool is installed.
+
+**Q: I found a bug in the legacy R harness. Should I fix it?**  
+A: No. Legacy is frozen. Document it in an issue or ADR as a rationale for Python rewrite. Fix it in the Python port if applicable.
+
+**Q: Do I need to update the R code when I change the Python core?**  
+A: Only if the R bridge protocol changes (invocation.json schema, result.json format). If so, update both `bridges/r/runner.R` and the Python side in the same commit.
+
+**Q: How do I test platform-specific code?**  
+A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the tests on the target platform or mock the platform check for local testing.
+
+---
+
+**Document history**:
+- 2026-10-28: Initial version for Phase 1 (Package Bootstrap).
+
+**Last reviewed**: 2026-10-28

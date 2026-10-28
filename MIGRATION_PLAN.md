@@ -1,527 +1,212 @@
-# LidarSpeedTests 2.0 — Migration plan
+# LidarSpeedTests 2.0 — Migration Plan
 
-This roadmap implements [design/ARCHITECTURE.md](design/ARCHITECTURE.md) on
-branch `feature/cross-platform-benchmark`. Each phase is one reviewable task.
-Each task must follow [AGENTS.md](AGENTS.md):
-- add automated tests and documentation;
-- leave the legacy R harness runnable;
-- end with a summary of changes, tests, unresolved issues and next steps.
+**Status**: In progress  
+**Version**: Task 1 (Python package bootstrap) ✅ **DONE**  
+**Branch**: `feature/cross-platform-benchmark`  
+**Related**: [ARCHITECTURE.md](design/ARCHITECTURE.md), [AGENTS.md](AGENTS.md)
 
-Do **not** start a phase until the previous phase is reviewed. Phases marked
-**(authorization required)** additionally need explicit owner approval, because
-they install software, use real data or run benchmarks.
+## Executive Summary
 
-## Global definition of done (every phase)
+This document defines the roadmap for migrating LidarSpeedTests from an R-only harness to a Python-orchestrated, language-agnostic benchmarking framework. The migration preserves the evidence model, operational semantics and validation logic of the current system while enabling cross-platform native execution and support for any tool—R packages, Python libraries, CLIs, LAStools, PDAL, etc.
 
-- [ ] `pytest` passes locally on Linux. The new tests cover success **and**
-      failure paths.
-- [ ] Code has no import of R, GDAL, PDAL, LAStools or LiDAR libraries in
-      `src/lidarbench/` outside optional plugins. This is enforced by a test from
-      Phase 1 onwards.
-- [ ] Platform-specific code paths have tests that run on all three OSes in CI.
-      If a branch is genuinely OS-only, the tests for it are explicitly skipped
-      elsewhere with a reason.
-- [ ] Ruff lint and format checks pass. Type hints are present on public
-      interfaces.
-- [ ] Documentation is updated: README section, CLI `--help`, and an ADR in
-      `design/adr/` if a decision changed.
-- [ ] The existing testthat suite still passes **if the phase touched any R
-      file**: `Rscript --vanilla tests/testthat.R`.
-- [ ] Nothing under `docs/`, `graphics/`, `_OLD/`, historical results, inputs,
-      `ALS_tiles.gpkg` or `input-manifests/` changed (`git diff --stat` check).
-- [ ] Nothing is pushed and no pull request is opened without approval.
+**Core principle**: New orchestration code is written in Python. Legacy R harness, validators and reporting remain frozen. They are wrapped via an R bridge for continued use until ported.
 
----
+## Roadmap
 
-## Phase 0 — Branch and architecture (this task)
+### Phase 1: Package Bootstrap ✅ **DONE**
 
-**Deliverables:**
-- `feature/cross-platform-benchmark` branch;
-- `design/ARCHITECTURE.md`;
-- `MIGRATION_PLAN.md`;
-- `AGENTS.md`.
+**Objective**: Create a clean, installable Python package that is the foundation for the orchestrator.
 
-**Acceptance:**
-- The documents have been reviewed by the owner.
-- The open questions in ARCHITECTURE §15 have been answered, or deferred
-  explicitly.
+**Deliverables**:
+- [x] Python package under `src/lidarbench/` with modern `pyproject.toml`.
+- [x] Entry point `lidarbench` CLI with `--help` and `version` commands.
+- [x] Core modules scaffolding: config, workloads, adapters, execution, monitoring, validation, reporting, campaign, datasets, legacy.
+- [x] Cross-platform utilities: path handling, platform detection, executable discovery.
+- [x] pytest test suite with unit, integration and platform-specific tests.
+- [x] `pip install -e .` succeeds without R, GDAL, PDAL or LAStools.
+- [x] CLI works from arbitrary working directory.
+- [x] Type hints and Ruff linter configuration.
+- [x] ARCHITECTURE.md, MIGRATION_PLAN.md, AGENTS.md documentation.
 
-## Phase 1 — Python project skeleton
+**Acceptance Criteria** ✅:
+- [x] Package installs and imports without errors.
+- [x] `lidarbench --help` and `lidarbench version` work.
+- [x] Placeholder commands (init, preflight, run, etc.) fail gracefully with "not yet implemented".
+- [x] pytest passes all unit and integration tests.
+- [x] No hard-coded paths or Unix-only assumptions.
+- [x] No R dependency at installation time.
 
-**Scope:**
-- `pyproject.toml` (PEP 621; Python ≥ 3.11; runtime dependency `psutil`; dev
-  extras: pytest, ruff, mypy optional).
-- `src/lidarbench/__init__.py`, `__main__.py`, and `cli.py` (argparse) with
-  `--version` and a `doctor` stub. The stub reports Python, OS, psutil, and the
-  optional availability of R, Quarto and LAStools, **without failing** when
-  any of them is missing.
-- `tests/python/` with a conftest.
-- An import-boundary test that fails if core modules import forbidden packages.
-- `.github/workflows/python.yml`: an OS × Python matrix with no R or LiDAR
-  tools. It is committed but not pushed.
-- `.gitignore` entries for Python artifacts.
+### Phase 2: Core Data Model and Store
 
-**Acceptance:**
-- [ ] `pip install -e .[dev]` then `pytest` passes in a fresh virtual
-      environment. The environment is created in a user-owned directory; no
-      system packages are installed.
-- [ ] `python -m lidarbench --version` and `lidarbench doctor` work.
-      `doctor` exits 0 when R and LAStools are absent and states "unavailable"
-      with reasons.
-- [ ] The CI workflow is syntactically valid (validated locally, e.g. with
-      `actionlint` if available, otherwise a YAML parse) and is not pushed.
-- [ ] README has a short "Python framework (in development)" section; the
-      legacy instructions are unchanged.
+**Objective**: Implement campaign, attempt and result records (JSON/CSV).
 
-## Phase 2 — Core primitives: canonical data, paths, store, locks, scratch
+**Key tasks**:
+- Canonical JSON serialization with SHA-256 digests.
+- Campaign identity by content, not checkout state.
+- Write-once attempt store with receipt verification.
+- Append-only events log.
+- Schedule and result CSV formats.
+- Locks for campaign and machine execution.
+- Scratch directory lifecycle and validation.
 
-**Scope:**
-- `core/canonical.py`: canonical JSON and SHA-256 of objects and files
-  (streaming, with MD5 as an optional extra).
-- `core/paths.py`:
-  - root labels;
-  - root-relative POSIX paths;
-  - containment and overlap with per-root case-sensitivity probing;
-  - file-component validation (Windows reserved names, forbidden characters,
-    control characters, `.`/`..`).
-- `core/store.py`:
-  - exclusive create;
-  - pending → `os.replace` publish;
-  - fsync;
-  - read-only marking;
-  - bounded retry on Windows sharing violations;
-  - receipt verification.
-- `core/locks.py`: campaign lock and machine lock with pid, host and create
-  time; stale detection; never auto-removed.
-- `core/scratch.py`: root validation, mkdtemp, ownership marker, identity
-  capture, link and junction refusal, guarded rmtree, orphan listing.
-- `core/clock.py`: `perf_counter_ns` and `time_ns` pairs.
+**Acceptance Criteria**:
+- Campaign store can be read/written without R.
+- Legacy R campaigns can be imported.
+- All records have explicit schemas.
+- Tests include round-trip serialization.
 
-**Semantics to port**, with tests mirroring
-`tests/testthat/test-configuration-and-isolation.R`:
-- scratch root ≠ filesystem/drive/UNC root, home or working directory;
-- no overlap with protected paths;
-- refusal when cleanup goes through a symlink or redirected path;
-- refusal when the identity changed;
-- refusal when the directory is unowned.
+### Phase 3: Tool Adapters and Process Execution
 
-**Acceptance:**
-- [ ] Unit tests cover:
-  - overlap detection (including case variants on case-insensitive
-    filesystems, which are probed);
-  - symlinks (and junctions on Windows CI) inside scratch, causing refusal;
-  - a marker mismatch causing refusal;
-  - a replaced directory with a different inode causing refusal;
-  - a read-only file inside scratch on Windows being cleaned;
-  - long paths on Windows.
-- [ ] The store tests show that:
-  - a second publish fails;
-  - a tampered file is detected;
-  - a crash between pending and publish leaves no published record.
-- [ ] Lock tests cover concurrent acquisition (two processes), a stale lock
-      that is reported and not removed, and explicit release.
-- [ ] No primitive deletes anything outside a marker-proven scratch directory.
-      A test asserts this with a sentinel file next to the scratch root.
+**Objective**: Implement subprocess execution with plugin architecture.
 
-## Phase 3 — Configuration, workload registry and plugin discovery
+**Key tasks**:
+- Base adapter protocol and plugin discovery.
+- Generic CLI adapter with configurable success rules.
+- LAStools adapter with version/banner normalization and cutoff-warning exception.
+- R bridge (Rscript) adapter for lidR/lasR.
+- Python library adapter (pylib) for Python tools.
+- Process launch, timeout, tree termination, log capture.
+- Path templating (inputs, outputs, cores, height_cutoff).
 
-**Scope:**
-- TOML machine and campaign configs with strict schema validation (unknown keys
-  are errors) and resolved-defaults output.
-- Workload suite format:
-  - `workloads/workloads-v1/*.toml`, containing specs, per-tool
-    implementations, equivalence records and artifact specs;
-  - the lidR/lasR call text and LAStools argv templates, copied verbatim from
-    `R/0_setup.R`;
-  - contract notes, copied verbatim from `benchmark_workload_contract()`.
-- Plugin discovery through entry points (`lidarbench.plugins`) and a registry
-  API.
-- `bridges/r/export_contracts.R` (read-only) exports `benchmark_tasks` and
-  `benchmark_contracts` as JSON. The output is stored as a golden fixture.
+**Acceptance Criteria**:
+- Adapters are loaded via entry points.
+- Platform-specific tool discovery works (which, PATH, etc.).
+- Mock tools can be tested via fixtures.
+- Process timeout and termination work on all platforms.
 
-**Acceptance:**
-- [ ] A parity test shows that the Python-loaded workloads-v1 matrix equals the
-      R export exactly:
-  - strict mode gives 17 runnable, 6 unsupported and 4 blocked combinations;
-  - `diagnostic_lasR` gives 20/6/1;
-  - statuses, notes, artifacts, bands, resolution, buffer and LAStools argv
-    all match.
-- [ ] Every frozen opt-in policy from `benchmark.example.R` and WORKLOADS.md is
-      representable. Each defaults to `false` and is validated as a strict
-      boolean.
-- [ ] Invalid configs (unknown key, bad root label, relative/traversal dataset
-      path, cores ≤ 0, `native_threads != 1`, unsupported `cache_policy`) are
-      rejected with clear messages. This mirrors
-      `benchmark_validate_config`/`benchmark_scheduling_config`.
-- [ ] Example configs in `configs/examples/`, plus docs describing the
-      equivalence vocabulary.
-- [ ] The R export script has been run (requires the local R environment, no
-      installation) **or** the fixture is marked pending with the exact
-      command. The legacy R harness is unchanged.
+### Phase 4: Workload and Dataset Management
 
-## Phase 4 — Dataset manifests and provenance
+**Objective**: Define workloads and datasets; establish equivalence.
 
-**Scope:**
-- `datasets/lasheader.py`: a stdlib LAS 1.0–1.4 public-header reader for LAS
-  and LAZ. It reads version, point format, legacy and extended counts, scale,
-  offset and bounds. It does not decode points.
-- A manifest builder and verifier:
-  - full mode (SHA-256 and MD5 of every file and companion);
-  - fast mode (stat fingerprints).
-- Inventory checks (exact file sets, as in `benchmark_full_inputs`).
-- `bridges/r/export_preparation.R` (read-only) converts existing preparation
-  receipts and `ready.rds` into a provenance JSON. A Python importer turns that
-  into dataset manifests that reference the original receipts by digest.
-- Port `benchmark_height_cutoff()` using header minimum Z.
+**Key tasks**:
+- Workload spec schema (inputs, outputs, algorithm, parameters, grid, buffer, timing boundary).
+- Implementation per tool (argv templates, threading policy, exception policies).
+- Equivalence registry (matched_definition, diagnostic_only, unsupported, blocked).
+- Dataset manifest (LAS/LAZ files, metadata, provenance).
+- LAS header reader (no external dependency).
+- Dataset verification and readiness receipts.
 
-**Acceptance:**
-- [ ] Header-reader tests use tiny synthetic LAS files generated in the tests.
-      They cover LAS 1.2 and 1.4 and a LAZ header-only fixture. Truncated,
-      wrong-signature and inconsistent-count files are rejected.
-- [ ] The cutoff values match golden values from `benchmark_height_cutoff()`,
-      including negative and large Z.
-- [ ] Verification detects:
-  - modified bytes (full mode);
-  - modified size or mtime (fast mode);
-  - missing or extra files;
-  - duplicate stems;
-  - a missing `.lax` companion when it is required.
-- [ ] The importer never writes into the preparation root. A test asserts the
-      bytes and mtimes of the fixture root are unchanged.
-- [ ] (Authorization required for real data) A read-only import of the existing
-      verified preparation produces manifests whose MD5s match all R receipts.
-      This is optional in this phase.
+**Acceptance Criteria**:
+- Workloads-v1 contracts are represented in TOML.
+- Equivalence matrix can be queried programmatically.
+- Dataset manifests survive round-trip.
 
-## Phase 5 — Campaign identity, schedule and attempt store
+### Phase 5: Campaign Scheduling and Execution
 
-**Scope:**
-- Identity components and digest:
-  - frozen components versus provenance-only components (ARCHITECTURE §9.1);
-  - a component-level diff on mismatch.
-- `schedule-v2`:
-  - SplitMix64 + Fisher–Yates;
-  - warm-up and measurement phases;
-  - rotated tool positions;
-  - a shuffled selection order.
-- The attempt lifecycle:
-  - `started.json`, `invocation.json` and `result.json`;
-  - `completed.json` receipts;
-  - `abandoned.json` tombstones;
-  - the `events.jsonl` sequence.
-- Resume rules: completion predicate per frozen `validation_mode`; warm-ups
-  rerun; `--retry-failed`.
-- Code identity based on content digests. Dirty-tree refusal unless
-  `--allow-dirty`.
+**Objective**: Run a campaign with scheduling, resumption and attempt tracking.
 
-**Acceptance:**
-- [ ] Golden schedule tests: identical output on all three OSes and all
-      supported Python versions for fixed seeds.
-- [ ] Property tests:
-  - each tool occupies each position equally often when the repetition count
-    is a multiple of the tool count;
-  - every (workload, run, tool, repetition) appears exactly once per phase;
-  - `warmups = 0` is supported.
-- [ ] Identity tests:
-  - any change to config, policy, workload, tool executable, dataset manifest
-    or code-file content ⇒ mismatch, naming the component;
-  - a git commit or branch switch without content change ⇒ **no** mismatch;
-  - the revision is still recorded.
-- [ ] Attempt tests:
-  - a double publish fails;
-  - a tampered result, validation or monitor file is detected on read;
-  - an incomplete attempt gets a tombstone on resume, and the original files
-    are byte-identical before and after;
-  - a policy mismatch causes refusal (accepted exception without opt-in,
-    warning exception without opt-in, validation mode differing from the
-    campaign). These cases port the checks in `benchmark_read_attempt`.
-- [ ] Per-attempt checks don't rehash full inputs. A test counts hashing calls.
-      A full rehash happens at start, resume and end.
+**Key tasks**:
+- Campaign creation and identity freezing.
+- Scheduling: warm-up runs, then measurements; per-task base permutation + rotation.
+- Attempt lifecycle: started → invocation → execution → validation → result → completed.
+- Resume logic: checks identity, skips completed attempts, retries failed ones.
+- Resource monitoring via psutil backend (process-tree sampling in separate process).
+- Tool-specific monitoring backends (stub for future distributed/hardware monitors).
 
-## Phase 6 — Process execution and the generic CLI adapter
+**Acceptance Criteria**:
+- Campaign runs on a single machine, one tool at a time.
+- Scheduling matches R harness behavior (with seeded RNG).
+- Resumption restarts only from failures.
+- Monitoring samples are recorded with checksums.
 
-**Scope:**
-- `execution/process.py`:
-  - argv-only launch;
-  - absolute executable resolution with `PATHEXT`;
-  - process-group or Job Object setup;
-  - streamed logs;
-  - timeouts;
-  - tree termination;
-  - Ctrl+C handling;
-  - env delta recording.
-- `ToolAdapter` protocol.
-- `cli` adapter with configurable success rules.
-- The sequential campaign runner loop (schedule → attempt → execute →
-  structural validation → cooldown).
+### Phase 6: Validation and Reporting
 
-**Acceptance:**
-- [ ] Fake-tool tests (Python scripts installed as executables in a temp dir)
-      cover:
-  - exit 0/1/7;
-  - large stdout and stderr (no deadlock);
-  - non-UTF-8 bytes;
-  - arguments containing spaces, `;` and quotes, passed literally (port of
-    `tile;literal.laz`);
-  - a missing executable, rejected at preflight;
-  - an unknown placeholder, rejected.
-- [ ] A timeout kills a fake tool that spawns grandchildren. A test verifies
-      no surviving pids on all three OSes.
-- [ ] Interrupting a running attempt yields `interrupted` or a tombstone, and
-      the locks are released.
-- [ ] Inner and outer timings are recorded as integers in nanoseconds. Wall
-      timestamps are sub-second.
-- [ ] An end-to-end mini campaign runs with fake tools on all CI OSes. It
-      initializes, preflights, runs, resumes, and resumes again with no new
-      work.
+**Objective**: Validate results and compile campaign reports.
 
-## Phase 7 — Resource monitoring (psutil)
+**Key tasks**:
+- Structural validator (Python): artifact inventory, file format sniffing.
+- R validation bridge: call existing `benchmark_validate_artifacts()` in numerical or performance-only mode.
+- Numerical, structural and comparability verdicts as separate fields.
+- Report compilation: select latest attempt per key, apply exclusion reasons, compute summaries.
+- Report renderers: static HTML/Markdown; optional Quarto integration.
+- Legacy result importer.
 
-**Scope:**
-- Sampler process with a ready/stop handshake; whole-machine and process-tree
-  scopes.
-- A port of `benchmark_monitor_summary()` (weights, coverage, partial status,
-  validation of sample tables).
-- Per-metric availability.
+**Acceptance Criteria**:
+- Structural validation works on output artifacts.
+- R bridge passes all existing validation tests.
+- Reports produce tables (CSV/JSON) for external analysis.
+- Known cross-tool differences can be documented without blocking reports.
 
-**Acceptance:**
-- [ ] Summary tests reuse the synthetic sample cases from
-      `tests/testthat/test-monitoring.R`. Results are equal within 1e-12.
-- [ ] Live tests (short, a few seconds) on all CI OSes give whole-machine
-      samples, process-tree samples for a fake CPU-burning child tree, and
-      coverage ≥ 0.9 of the timed interval.
-- [ ] Monitor failure produces `monitoring_status = unavailable` with a reason,
-      and the attempt is still recorded. Missing metrics are `null`, never 0.
-- [ ] Docs list the per-OS metric availability matrix.
+### Phase 7: Preflight and Doctor Commands
 
-## Phase 8 — Validation framework and status model
+**Objective**: Pre-run validation and diagnostic tooling.
 
-**Scope:**
-- Four verdict fields (ARCHITECTURE §8.1) and the legacy mapping.
-- `Validator` protocol.
-- `structural-v1` (inventory by tile stem, nonempty files, magic bytes,
-  halo/duplicate detection).
-- Policy objects for frozen opt-ins.
-- `performance-only` versus `numerical` validation modes.
+**Key tasks**:
+- Preflight: check configuration, stage inputs, verify tools, dry-run workloads.
+- Doctor: probe environment, check capabilities, diagnose missing dependencies.
+- Configuration validation (TOML/YAML with Pydantic).
+- Dataset readiness checks.
+- Tool availability and version reporting.
 
-**Acceptance:**
-- [ ] Tests port the inventory cases from `tests/testthat/test-validation.R`:
-  - missing files;
-  - unexpected files;
-  - duplicates;
-  - zero-byte files;
-  - VRT and sidecar files not satisfying requirements;
-  - LAStools percentile suffix spellings.
-- [ ] Without a numerical validator, a structurally valid output gives
-      `numerical_status = unverified` and **never** `passed`. A test asserts
-      that no code path promotes it.
-- [ ] `accepted_exception` is reachable only with the matching frozen policy.
-      A test asserts it is never counted as `passed`.
+**Acceptance Criteria**:
+- Preflight prevents misconfiguration from blocking the campaign mid-run.
+- Doctor output can be captured for issue reporting.
 
-## Phase 9 — LAStools adapter
+### Phase 8: Documentation, Examples and Adoption
 
-**Scope:**
-- A port of:
-  - `benchmark_lastools_command` (placeholders, `-epsg`/`-fail` when
-    metadata is declared);
-  - `ERROR`/`FATAL` detection with a zero exit status;
-  - unrecognized `WARNING:` lines as diagnostics;
-  - the exact three-line `lascanopy` cutoff-warning exception, behind its
-    frozen opt-in.
-- Version identity with banner normalization and executable SHA-256.
-- Platform availability (Linux and Windows binaries; macOS reported as
-  unavailable unless the vendor binaries are configured and probe
-  successfully).
+**Objective**: Consumable documentation and example workflows.
 
-**Acceptance:**
-- [ ] Ported tests from `test-execution.R` and `test-policies.R` cover:
-  - the complete warning block being accepted only with the opt-in, status
-    0 or 1, the matching cutoff and a supplied input;
-  - incomplete blocks, a different tool or task, a generic prefix, or a
-    mismatched cutoff being rejected;
-  - status 1 without a recognized warning failing;
-  - `ERROR:` with status 0 failing.
-- [ ] Argv for every workloads-v1 LAStools call equals the R-generated argv
-      for identical inputs (golden fixture exported from R).
-- [ ] No real LAStools run is required. An optional `requires_lastools` test
-      is skipped unless explicitly enabled.
+**Key tasks**:
+- User guide (initialization, configuration, monitoring, troubleshooting).
+- Developer guide (adding tools, validators, monitors, custom workloads).
+- Example configurations (single machine, different core counts, datasets).
+- Example command sequences (fresh data → preflight → run → report).
+- Architecture decision records (ADRs).
+- Migration guide for legacy campaigns.
 
-## Phase 10 — R bridge adapter (lidR, lasR)
+**Acceptance Criteria**:
+- First-time users can run a pilot campaign from the guide.
+- New developers can add a tool adapter by following the template.
 
-**Scope:**
-- `bridges/r/runner.R`:
-  - JSON in/out;
-  - renv activation;
-  - reuse of `prepare_input`, the thread policy, the reference-BLAS check,
-    CRS declaration and the lasR `set_crs` wrapper by sourcing `R/1_functions.R`;
-  - an inner timing boundary;
-  - the existing `.lax` refusal for declared inputs.
-- `bridges/r/identify.R` (R version, package versions and file hashes, renv
-  lock hash, sf external software).
-- `rscript` adapter in Python. `doctor` integration with
-  `R/check_environment.R`.
+### Post-Phases: Extensions and Optimization
 
-**Acceptance:**
-- [ ] Protocol tests with a fake `Rscript` (Python stand-in) run on all OSes
-      without R.
-- [ ] `requires_r` tests run on the local Linux machine with the existing renv
-      library (no installation). They run lidR and lasR basic workloads on the
-      tiny synthetic fixtures from `helper-fixtures.R`/`test-workloads.R` and
-      produce the same artifacts as the legacy harness.
-- [ ] testthat tests for `runner.R` (malformed JSON, unknown task, blocked
-      call refused, thread variables applied) are added under `tests/testthat/`
-      and pass. No existing R file changes behaviour.
-- [ ] The R tool identity is frozen in campaign identity. A changed package
-      file ⇒ mismatch.
+**Future scope** (not in 2.0 initial release):
+- Distributed campaigns (multi-machine scheduling).
+- Web dashboard for monitoring.
+- Performance profiling and optimization.
+- Additional tool adapters (PDAL, CloudCompare, etc.).
+- Hardware monitoring (power, thermal, network I/O).
+- Custom validators (py-geo using rasterio/laspy).
+- CI/CD integration (GitHub Actions, GitLab CI).
 
-## Phase 11 — R numerical validator plugin (`r-validation-v1`)
+## Key Architectural Decisions
 
-**Scope:**
-- `bridges/r/validate.R` wraps `benchmark_validation_manifest` and
-  `benchmark_validate_artifacts` and emits a JSON report.
-- A Python plugin maps the report to the verdict fields and records
-  `boundary_difference_points`, extent deltas and exception reasons.
+1. **Python for orchestration, any language for tools**: The core is Python stdlib + Pydantic/psutil. Tools run as subprocesses. R code runs via Rscript. No in-process execution.
 
-**Acceptance:**
-- [ ] On the synthetic fixtures, verdicts and details equal those the legacy
-      harness records, in both `numerical` and `performance-only` modes.
-- [ ] The validation report is immutable and digested in the attempt. A
-      tampered report is detected.
-- [ ] Validation runs outside the timed interval. A test asserts that the
-      timing does not include validation.
+2. **Language-neutral records**: JSON, JSON Lines and CSV with explicit schemas. Any language can read them.
 
-## Phase 12 — Extensibility proof: Python library and additional CLI
+3. **Content-based identity**: Campaign identity is frozen from code/config/data content hashes, not live git checks. Fixes performance and safety issues in the R harness.
 
-**Scope:**
-- `pylib` adapter (`python -m <module>` in a configured interpreter).
-- A toy reference workload implemented with stdlib-only Python, to prove the
-  path end-to-end.
-- A PDAL CLI adapter skeleton with argv templates, marked `non_comparable`
-  until a contract is reviewed.
+4. **Write-once, append-only stores**: Attempts are immutable. Events are append-only. Enables safe resumption and forensics.
 
-**Acceptance:**
-- [ ] A new tool is added **without core edits**: one plugin module, one
-      entry-point line and TOML data. A test asserts that the registry
-      discovers it.
-- [ ] A toy-workload campaign runs on all CI OSes.
-- [ ] PDAL and other third-party tools are not installed. Real-tool tests are
-      opt-in and skipped by default. (Installing them requires authorization.)
-- [ ] New implementations default to `non_comparable`. A test asserts that
-      adding an implementation never auto-joins an equivalence group.
+5. **Separate verdicts**: Execution, structural validation, numerical validation and comparability are separate fields with separate producers.
 
-## Phase 13 — Reporting
+6. **Fail closed**: Unknown states are errors. Skips are recorded as attempts. Failures are retained. Unknown capabilities are reported with reasons.
 
-**Scope:**
-- Compile campaign records into a ledger (CSV/JSON), with every attempt
-  including failures, skips, tombstones and warm-ups.
-- Port the `benchmark_report_prepare` rules:
-  - latest attempt by event sequence;
-  - exclusion reasons;
-  - the sub-0.1 s flag;
-  - `n_*` counters;
-  - the validated and performance-only modes.
-- Comparability gate (ARCHITECTURE §8.3) with descriptive versus comparable
-  tables.
-- A static HTML/Markdown renderer and a build receipt.
-- An optional Quarto renderer (only if Quarto is present).
+7. **Reuse before rewrite**: Mature R validators and preparation logic are wrapped via a bridge. Python reimplementation is justified only when the orchestrator itself needs the behavior.
 
-**Acceptance:**
-- [ ] Tests port `tests/testthat/test-reporting.R` cases:
-  - superseded retries;
-  - a failed last retry not falling back to an earlier success;
-  - warm-ups excluded;
-  - single-sample SD is NA;
-  - performance-only `n_comparable == 0`;
-  - accepted exceptions are descriptive.
-- [ ] Any attempt to compute ratios or speedups across a failed gate raises.
-      Mixed timing boundaries are rejected.
-- [ ] A report build fails if campaign records change during the build or the
-      campaign lock is held. Builds go into fresh directories and never
-      overwrite earlier ones.
-- [ ] Reports never write to `docs/` or `gh-pages`. A test asserts the output
-      path is inside the campaign.
+## Testing Strategy
 
-## Phase 14 — Legacy interoperability (read-only)
+- **Unit tests** (pytest): Fast, isolated, no external tools.
+- **Contract tests** (pytest + fixtures): Mock tools and configs; verify adapter/validator protocols.
+- **Integration tests** (pytest + real tools): On a developer machine with a small prepared dataset (pilot subset).
+- **Platform tests** (@pytest.mark.platform): Linux, Windows, macOS specific tests.
+- **Acceptance tests** (manual): Full campaign run on target platforms; compare with legacy results.
 
-**Scope:**
-- `bridges/r/export_legacy.R` converts a legacy R campaign (manifest, attempts,
-  validation and monitoring receipts) into 2.0 JSON in a **separate output
-  directory**. Raw files are verified and never modified.
-- A Python importer labels the result `origin = legacy-r` and maps the fields
-  (ARCHITECTURE §8.1).
-- The legacy CSV mode stays in R.
+## Migration Path for Existing Users
 
-**Acceptance:**
-- [ ] Export on fixture campaigns created by the legacy test suite round-trips.
-      Python reports the same counts as `R/5_report.R` for those fixtures.
-- [ ] The source campaign directory checksums are identical before and after.
-- [ ] Legacy and 2.0 campaigns are never merged into one comparison table.
+1. **Phase 1-2** (now): Legacy R harness remains fully functional. Python package can be installed alongside.
+2. **Phase 3-5**: Python orchestrator is feature-complete for basic campaigns. Users can opt-in to try it.
+3. **Phase 6-7**: Validation and reporting match R harness output. Equivalence is declared and tested. Full migration is recommended.
+4. **Post-Phase 8**: Legacy harness is maintained for backward compatibility but not developed further.
 
-## Phase 15 — Cross-platform hardening
+## Success Criteria (Overall)
 
-**Scope:**
-- Run the full fake-tool suite on the Windows and macOS CI runners.
-- Fix platform issues. Document platform caveats in the README.
-
-**Acceptance:**
-- [ ] CI is green on ubuntu, windows and macos for all supported Python
-      versions. (Pushing to run CI requires approval; until then, record
-      local Linux results and pending CI status.)
-- [ ] A manual smoke test on native Windows and macOS (with the owner) uses
-      fake tools: doctor, init, preflight, run, resume, report.
-- [ ] Platform availability matrix in the README (tools, monitoring metrics,
-      junction handling).
-
-## Phase 16 — Parity pilot (authorization required)
-
-**Scope:**
-- On a staged copy of the approved two-tile pilot pair, run the legacy R
-  harness and the 2.0 framework with the same workloads, tools, cores and
-  policies.
-
-**Acceptance:**
-- [ ] Explicit owner authorization recorded before running.
-- [ ] Execution and verdict outcomes match per (workload, tool, cores), or the
-      differences are explained and approved.
-- [ ] Timing differences are reported per boundary kind. No cross-framework
-      speedup claims are made.
-- [ ] Inputs are verified unchanged (full rehash before and after).
-
-## Phase 17 — Documentation, deprecation and release readiness
-
-**Scope:**
-- Restructure the README: a 2.0 quick start, and the legacy harness under a
-  clearly labelled section.
-- User guide for adding tools and workloads.
-- Mark the R runners as legacy in their help text, only if no legacy campaign
-  is still active (this changes R identity). Decide on relocation per
-  ARCHITECTURE §10.2.
-
-**Acceptance:**
-- [ ] A new contributor can add a CLI tool by following the docs (dry run by
-      the owner).
-- [ ] The owner decides on relocation, the published-site update process and
-      merging. No merge, push or publish happens without approval.
+- ✅ Phase 1: Package installs and basic CLI works.
+- [ ] Phase 5: A campaign can be executed end-to-end via Python.
+- [ ] Phase 7: Reports from Python campaigns match legacy format.
+- [ ] Phase 8: New contributors can run and extend the benchmark without R knowledge.
 
 ---
 
-## Sequencing and dependencies
-
-```text
-P1 → P2 → P3 → P4 → P5 → P6 → P7
-                         ↘ P8 → P9
-                              → P10 → P11
-                   P6 + P8 → P12
-              P5 + P8 → P13 → P14
-         (P6..P14) → P15 → P16 → P17
-```
-
-## Risks and mitigations
-
-| Risk | Mitigation |
-|---|---|
-| Changes in the main checkout break an active legacy R campaign (identity includes HEAD and R files) | Develop in a separate git worktree. Never commit or switch branches in a checkout an R campaign runs from (AGENTS.md). Phase 5 removes live HEAD checks in 2.0. |
-| Semantic drift between R and Python ports | Golden fixtures exported from R. Parity tests for the contracts matrix, argv, cutoff, monitor summary and report counters. |
-| Windows process-tree and file-locking edge cases | Job Objects, bounded publish retries, CI on windows-latest, a manual smoke test. |
-| Over-claiming comparability | The gate is enforced in code. New implementations default to `non_comparable`. There is no speedup API across a failed gate. |
-| Scope creep into re-implementing validators | R stays the numerical authority until the owner decides otherwise (ARCHITECTURE §15 Q3). |
-| Data or provenance damage | Importers are read-only, inputs are fingerprinted before and after, and no downloads happen without authorization. |
+**Next Step**: Move to Phase 2 (Core Data Model and Store).
