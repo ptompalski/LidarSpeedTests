@@ -9,7 +9,7 @@ description = "Cross-platform LiDAR processing software benchmarking orchestrati
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-authors = [{ name = "Piotr Tompalski", email = "" }]
+authors = [{ name = "Piotr Tompalski" }]
 keywords = ["lidar", "benchmarking", "performance", "orchestration"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -45,11 +45,10 @@ dev = [
 [project.scripts]
 lidarbench = "lidarbench.cli:main"
 
+# Entry-point name must equal the adapter's adapter_id. Real tool adapters
+# (cli, lastools, rscript, pylib) are registered when they are implemented.
 [project.entry-points."lidarbench.adapters"]
-cli = "lidarbench.execution.adapters.cli:CLIAdapter"
-lastools = "lidarbench.execution.adapters.lastools:LastoolsAdapter"
-rscript = "lidarbench.execution.adapters.rscript:RScriptAdapter"
-pylib = "lidarbench.execution.adapters.pylib:PylibAdapter"
+synthetic = "lidarbench.execution.adapters.synthetic:SyntheticAdapter"
 
 [project.entry-points."lidarbench.monitors"]
 psutil = "lidarbench.monitoring.psutil_backend:PsutilBackend"

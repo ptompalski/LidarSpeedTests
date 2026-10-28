@@ -2,18 +2,18 @@
 
 import argparse
 import sys
-from typing import Optional
 
 import lidarbench
 
 
 def add_subparsers(parser: argparse.ArgumentParser) -> None:
     """Add subcommands to the argument parser.
-    
+
     Currently includes:
     - version: display version information
+    - check: display operating system facts and adapter capabilities
     - help: display help (implicit)
-    
+
     Additional commands (init, preflight, run, resume, etc.) are placeholders
     and will be implemented in later phases.
     """
@@ -23,6 +23,18 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     subparsers.add_parser(
         "version",
         help="display version information",
+    )
+
+    check = subparsers.add_parser(
+        "check",
+        help="display operating system information and detected adapter capabilities",
+    )
+    check.add_argument("--json", action="store_true", help="print the report as JSON")
+    check.add_argument(
+        "--adapter",
+        action="append",
+        metavar="ID",
+        help="only report this adapter (repeatable)",
     )
 
     # Placeholder commands (not yet implemented; --help works but execution warns)
@@ -57,12 +69,12 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def main(args: Optional[list[str]] = None) -> int:
+def main(args: list[str] | None = None) -> int:
     """Main CLI entry point.
-    
+
     Args:
         args: Command-line arguments (defaults to sys.argv[1:] if None)
-    
+
     Returns:
         Exit code (0 on success, non-zero on failure)
     """
@@ -94,6 +106,11 @@ def main(args: Optional[list[str]] = None) -> int:
     if parsed.command == "version":
         print(f"lidarbench {lidarbench.__version__}")
         return 0
+
+    if parsed.command == "check":
+        from lidarbench.check import run_check
+
+        return run_check(as_json=parsed.json, adapter_ids=parsed.adapter)
 
     # Placeholder commands
     if parsed.command in ("init", "preflight", "run", "resume", "report", "doctor"):

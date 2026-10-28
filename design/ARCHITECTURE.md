@@ -266,12 +266,23 @@ published file has a SHA-256 digest recorded in its parent receipt.
 
 ## 7. Interfaces
 
-Interfaces are Python `typing.Protocol`s plus versioned JSON schemas. Plugins are
-discovered through the `lidarbench.plugins` entry-point group. Built-in plugins
-are registered the same way. Core never imports a plugin's optional dependencies
+Interfaces are Python abstract base classes or `typing.Protocol`s plus versioned
+JSON schemas. Plugins are discovered through one entry-point group per kind:
+`lidarbench.adapters`, `lidarbench.monitors` and `lidarbench.validators`. Built-in
+plugins are registered the same way. Core never imports a plugin's optional dependencies
 at import time.
 
 ### 7.1 Tool adapter
+
+**Implemented** as `lidarbench.adapter/1`. The normative contract is
+[ADAPTERS.md](ADAPTERS.md). The implemented names map to the sketch below:
+`probe(platform)`, `identify()`, `workload_support()` / `support_for()`
+(implementation status with explicit reasons and threading ranges),
+`build_command(invocation) -> CommandSpec` (argv tuple, env delta, cwd, config
+files), `expected_outputs(invocation) -> list[ArtifactSpec]` and
+`invocation_metadata()`. The core-side `plan_invocation()` turns these into a
+ready command or a `skipped_*` plan. `interpret()` and the per-attempt timeout
+arrive with process execution. The original sketch is kept for context:
 
 ```python
 class ToolAdapter(Protocol):

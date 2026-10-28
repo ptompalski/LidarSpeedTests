@@ -1,7 +1,7 @@
 # LidarSpeedTests 2.0 — Migration Plan
 
 **Status**: In progress  
-**Version**: Task 1 (Python package bootstrap) ✅ **DONE**  
+**Version**: Task 1 (Python package bootstrap) ✅ **DONE**; Task 3 (tool adapter interface) ✅ **DONE**  
 **Branch**: `feature/cross-platform-benchmark`  
 **Related**: [ARCHITECTURE.md](design/ARCHITECTURE.md), [AGENTS.md](AGENTS.md)
 
@@ -59,8 +59,21 @@ This document defines the roadmap for migrating LidarSpeedTests from an R-only h
 
 **Objective**: Implement subprocess execution with plugin architecture.
 
+**Progress — Task 3 (adapter interface) ✅ DONE**: language-independent adapter
+contract `lidarbench.adapter/1` ([design/ADAPTERS.md](design/ADAPTERS.md)),
+entry-point registry, core-side planning with explicit `skipped_unavailable` /
+`skipped_unsupported` / `skipped_blocked` outcomes, argv helpers for native,
+Rscript, Python-module and config-file (PDAL-style) tools, a deterministic
+`synthetic` adapter, and `lidarbench check`. No real LiDAR adapters yet.
+
+Task 3 acceptance criteria:
+- [x] New adapters are added through the `lidarbench.adapters` entry point without core changes.
+- [x] Missing software is reported as unavailable (with a reason), not as a benchmark failure.
+- [x] Unsupported and blocked workload combinations are explicit, with reasons.
+- [x] Tests cover discovery, capability reporting, argv construction and paths with spaces.
+
 **Key tasks**:
-- Base adapter protocol and plugin discovery.
+- [x] Base adapter protocol and plugin discovery.
 - Generic CLI adapter with configurable success rules.
 - LAStools adapter with version/banner normalization and cutoff-warning exception.
 - R bridge (Rscript) adapter for lidR/lasR.

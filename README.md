@@ -34,6 +34,24 @@ records the verifier implementation, worker logs, per-tile successes and final
 status. A failed verification never creates a readiness receipt, and a hard-killed
 verifier may leave no final status record.
 
+## LidarSpeedTests 2.0 orchestrator (in development)
+
+The Python orchestrator `lidarbench` is being built beside the R harness (see
+[design/ARCHITECTURE.md](design/ARCHITECTURE.md) and
+[MIGRATION_PLAN.md](MIGRATION_PLAN.md)); it does not run campaigns yet.
+
+```sh
+pip install -e ".[dev]"
+lidarbench check            # OS facts and detected tool adapters
+lidarbench check --json     # the same as a lidarbench.check/1 JSON document
+```
+
+`check` lists each adapter's availability (with the reason when software is
+missing or the platform is unsupported), version and declared workloads, including
+why a workload is unsupported or blocked. Only the deterministic `synthetic` test
+adapter exists so far. New tools are added as plugins; see
+[design/ADAPTERS.md](design/ADAPTERS.md).
+
 ## Benchmark pilot on prepared data
 
 The benchmark pilot is separate from preparation's `--pilot` stage. It stages
