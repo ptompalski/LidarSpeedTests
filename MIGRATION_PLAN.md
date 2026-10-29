@@ -90,11 +90,30 @@ Task 4 acceptance criteria:
 - [x] Tests cover completion, non-zero exits, timeouts, cancellation, child processes, paths with spaces and monitoring failures.
 - [ ] Verified natively on Windows and macOS CI runners (Linux verified locally).
 
+**Progress — Task 7 (lidR and lasR adapters) ✅ DONE**: independent `lidr`
+and `lasr` adapters run the legacy calls in fresh `Rscript` processes through
+the R bridge (`bridges/r/runner.R`). The bridge sources `R/1_functions.R`
+unchanged, extracts and verifies the pinned calls of `R/0_setup.R`, uses the
+project renv library, and applies the legacy catalog, buffer and thread
+settings. It writes a structured result record. A new generic adapter
+`interpret()` hook (untimed, fail-closed) turns R errors, R warnings during the
+workload, missing records and version drift into failures. It also records the
+inner workload interval and the fresh-process start-up overhead. Probing
+reports a missing R, missing packages and versions that differ from
+`renv.lock`. See [design/R_BRIDGE.md](design/R_BRIDGE.md).
+
+Task 7 acceptance criteria:
+- [x] lidR and lasR run through the generic execution API (`plan_invocation` → `execute_plan`) and the campaign runner; results use the common campaign schema (`lidarbench.attempt/1`, results table).
+- [x] The orchestrator does not embed or depend on R; missing R or packages are `skipped_unavailable` with reasons.
+- [x] `pixel_metrics_1a` and `generate_DSM1` keep their exact legacy definitions (pinned calls checked against `R/0_setup.R` and the workloads-v1 contracts).
+- [x] Mocked-command tests; optional real-R integration tests compare outputs with the independent validator (lidR validated but descriptive only; lasR `accepted_exception` only under the extent policy; neither comparable).
+- [ ] Verified natively on Windows and macOS.
+
 **Key tasks**:
 - [x] Base adapter protocol and plugin discovery.
 - Generic CLI adapter with configurable success rules.
 - LAStools adapter with version/banner normalization and cutoff-warning exception.
-- R bridge (Rscript) adapter for lidR/lasR.
+- [x] R bridge (Rscript) adapter for lidR/lasR.
 - Python library adapter (pylib) for Python tools.
 - [x] Process launch, timeout, tree termination, log capture.
 - Path templating (inputs, outputs, cores, height_cutoff).

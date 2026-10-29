@@ -976,6 +976,7 @@ class CampaignRunner:
                 monitor_backend=backend,
                 monitor_required=cfg.monitoring.required,
                 thread_budget=ThreadBudget(entry.cpus, state.threading_model),
+                adapter=tool.adapter,
             )
         except ExecutionInterrupted as exc:
             state.process = exc.result
@@ -1079,6 +1080,7 @@ class CampaignRunner:
             "launched": bool(process is not None and process.launched),
             "exit_code": process.exit_code if process else None,
             "timing": timing,
+            "tool_timing": state.execution.tool_timing if state.execution else None,
             "monitoring_status": monitoring_status,
             "structural_status": "not_run",
             "numerical_status": numerical,

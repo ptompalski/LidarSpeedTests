@@ -3,8 +3,9 @@
 See ``design/ADAPTERS.md`` for the contract. Adapters are discovered through the
 ``lidarbench.adapters`` entry-point group (:class:`AdapterRegistry`).
 
-The ``cli``, ``lastools``, ``rscript`` and ``pylib`` modules are placeholders
-for later phases and are not registered.
+``lidr`` and ``lasr`` run R packages through the R bridge (:mod:`.rscript`).
+The ``cli``, ``lastools`` and ``pylib`` modules are placeholders for later
+phases and are not registered.
 """
 
 from lidarbench.execution.adapters.base import (
@@ -15,11 +16,13 @@ from lidarbench.execution.adapters.base import (
     CommandSpec,
     ConfigFile,
     ImplementationStatus,
+    Interpretation,
     Invocation,
     ThreadingModel,
     ThreadingSupport,
     ToolAdapter,
     ToolIdentity,
+    ToolTiming,
     UnavailableReason,
     UnsupportedCombinationError,
     WorkloadSupport,
@@ -43,11 +46,13 @@ __all__ = [
     "CommandSpec",
     "ConfigFile",
     "ImplementationStatus",
+    "Interpretation",
     "Invocation",
     "ThreadingModel",
     "ThreadingSupport",
     "ToolAdapter",
     "ToolIdentity",
+    "ToolTiming",
     "UnavailableReason",
     "UnsupportedCombinationError",
     "WorkloadSupport",

@@ -194,16 +194,17 @@ LidarSpeedTests/
 │   ├── campaign/                 # identity, schedule, runner, resume, events
 │   ├── execution/
 │   │   ├── process.py            # subprocess launch, timeout, tree termination, logs
-│   │   └── adapters/             # base.py, cli.py, lastools.py, rscript.py, pylib.py
+│   │   └── adapters/             # base.py, rscript.py (R bridge), lidr.py, lasr.py, cli.py, lastools.py, pylib.py
 │   ├── monitoring/               # base.py, psutil_backend.py, summary.py
 │   ├── validation/               # status model, structural.py, plugin protocol, r_bridge.py
 │   ├── reporting/                # compile.py, summarize.py, renderers/
 │   └── legacy/                   # read-only importers for exported legacy campaigns
 ├── bridges/
 │   └── r/                        # R side of the R bridge (NOT under R/, see §10.2)
-│       ├── runner.R              # executes one lidR/lasR invocation from JSON
+│       ├── runner.R              # executes one lidR/lasR invocation from JSON (implemented)
+│       ├── probe.R               # R/package availability and versions → JSON (implemented)
+│       ├── bridge.R              # base-R helpers: args, JSON writer, legacy task table (implemented)
 │       ├── validate.R            # wraps validation-v1 → JSON report
-│       ├── identify.R            # R/package/native-library identity → JSON
 │       └── export_legacy.R       # legacy RDS campaigns/receipts → JSON (read-only)
 ├── workloads/
 │   └── workloads-v1/             # tool-neutral specs + per-tool implementations (TOML)
@@ -281,8 +282,11 @@ at import time.
 `build_command(invocation) -> CommandSpec` (argv tuple, env delta, cwd, config
 files), `expected_outputs(invocation) -> list[ArtifactSpec]` and
 `invocation_metadata()`. The core-side `plan_invocation()` turns these into a
-ready command or a `skipped_*` plan. `interpret()` and the per-attempt timeout
-arrive with process execution. The original sketch is kept for context:
+ready command or a `skipped_*` plan. The optional `interpret(invocation,
+process) -> Interpretation` reads tool-specific results after the process has
+exited (untimed). It can only fail an attempt, and it can report an inner
+workload interval (`ToolTiming`). The per-attempt timeout is part of process
+execution. The original sketch is kept for context:
 
 ```python
 class ToolAdapter(Protocol):
@@ -316,19 +320,30 @@ class ToolAdapter(Protocol):
 
 ### 7.2 R bridge protocol (`rscript` adapter)
 
+**Implemented** (Task 7) as two adapters, `lidr` and `lasr`, on a shared
+`RBridgeAdapter` base. [R_BRIDGE.md](R_BRIDGE.md) is normative.
+
 ```text
-Rscript --vanilla bridges/r/runner.R <invocation.json> <result.json>
+Rscript --vanilla bridges/r/runner.R --project <dir> --renv on|off \
+    --invocation <work_dir>/r-invocation.json --result <work_dir>/r-bridge-result.json
 ```
 
-- `invocation.json` contains the workload implementation (task call reused from
-  `R/0_setup.R`), input file list, output directory, cores, thread policy, CRS
-  declaration and policy flags.
+The implemented protocol uses named arguments instead of the two positional
+paths sketched earlier. The project and renv switch are needed before
+`jsonlite` can be loaded, and the result path lets failures before parsing
+still be reported.
+
+- `r-invocation.json` contains the workload ID, the pinned task call (it must
+  equal `R/0_setup.R`), the input file list, the output directory, the threads,
+  the buffer, an optional CRS declaration and the required packages.
 - `runner.R` activates the project `renv` and applies the existing thread policy
   (`lidR` multisession × 1 thread, `lasR concurrent_files`, reference BLAS
-  check). It builds the catalog with `prepare_input()` semantics. It times
-  **only the workload call** with a high-resolution clock (`Sys.time()` with
-  sub-second precision, recorded as integer nanoseconds since epoch, plus
-  `proc.time()` elapsed). It writes `result.json` atomically.
+  check) through `benchmark_with_resources()`. It builds the lidR catalog with
+  `prepare_input()`. It times **only the workload call** through
+  `benchmark_execute_call()` (`Sys.time()`, recorded as integer nanoseconds
+  since the epoch, plus `proc.time()` elapsed at start-up). It writes
+  `r-bridge-result.json` atomically. R warnings during the workload fail the
+  attempt.
 - The orchestrator records **both** the outer process time (perf_counter_ns
   around the subprocess) and the inner workload time. The timing-boundary label
   says which one a report uses (§8.4).

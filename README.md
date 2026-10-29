@@ -38,8 +38,9 @@ verifier may leave no final status record.
 
 The Python orchestrator `lidarbench` is being built beside the R harness (see
 [design/ARCHITECTURE.md](design/ARCHITECTURE.md) and
-[MIGRATION_PLAN.md](MIGRATION_PLAN.md)). It runs campaigns with the deterministic
-`synthetic` test adapter; real LiDAR tool adapters follow.
+[MIGRATION_PLAN.md](MIGRATION_PLAN.md)). It runs campaigns with the `lidr` and
+`lasr` adapters (lidR and lasR through `Rscript`) for the mean-elevation and
+maximum-DSM workloads, and with a deterministic `synthetic` test adapter.
 
 ```sh
 uv sync                            # create .venv/ from uv.lock (install uv: https://docs.astral.sh/uv/)
@@ -70,9 +71,20 @@ by renv.
 
 `check` lists each adapter's availability (with the reason when software is
 missing or the platform is unsupported), version and declared workloads, including
-why a workload is unsupported or blocked. Only the deterministic `synthetic` test
-adapter exists so far. New tools are added as plugins; see
+why a workload is unsupported or blocked. New tools are added as plugins; see
 [design/ADAPTERS.md](design/ADAPTERS.md).
+
+The `lidr` and `lasr` adapters run each attempt as a fresh
+`Rscript --vanilla bridges/r/runner.R` process. They use the project's renv
+library and the unchanged legacy R code (`R/1_functions.R`, the calls of
+`R/0_setup.R`). R is optional for the Python package. Without R, or without the
+locked packages (`renv::restore()`), these tools are reported as unavailable,
+and their attempts are recorded as `skipped_unavailable`. R errors and R
+warnings during a workload fail the attempt. lasR inputs need `.lax` indexes
+(create them once before the campaign). The timed interval includes R start-up;
+the R workload time and the start-up overhead are reported separately. See
+[design/R_BRIDGE.md](design/R_BRIDGE.md) and
+[configs/examples/r-campaign.toml](configs/examples/r-campaign.toml).
 
 The process execution engine (`lidarbench.execution.attempt.execute_plan`) runs
 a planned command as a fresh process with timeouts, cancellation, whole-tree

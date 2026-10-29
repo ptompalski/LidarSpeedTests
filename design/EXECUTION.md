@@ -53,6 +53,7 @@ Default mode `fresh-process` with `timing_boundary = "process"`:
 | input reading, computation | adapter config files (`config_files`) |
 | output writing by the process | monitor sampler start-up and priming (`monitor_start`) |
 | one `attach` line written to the sampler's stdin | tree cleanup after exit, sampler stop, summaries |
+| | adapter interpretation of tool results (`interpretation`, only with an adapter) |
 | | output presence check (`output_check`); validation is separate |
 
 - Start: `perf_counter_ns()` immediately before `Popen`.
@@ -63,6 +64,10 @@ Default mode `fresh-process` with `timing_boundary = "process"`:
 - Both instants are stored with monotonic and wall clocks (`core/clock.py`).
 - Data still in the OS write-back cache when the process exits is not timed
   unless the tool itself calls `fsync`.
+- An adapter may report an inner workload interval through `interpret()`
+  (`ToolTiming`, ADAPTERS.md §3). `execute_plan` records it with the derived
+  start-up and shutdown overheads in `execution.json` → `interpretation.tool_timing`.
+  It is descriptive: the timed interval above is unchanged.
 
 ## 4. Status safety
 
@@ -77,7 +82,9 @@ Default mode `fresh-process` with `timing_boundary = "process"`:
 A process that exits on its own just before a timeout or cancellation is
 classified by its exit instant, not by when the engine noticed. Nothing is ever
 retried automatically. `AttemptExecution` is never `succeeded` when the process
-was not launched.
+was not launched. An adapter's `interpret()` objection (or a defective
+interpretation) makes a clean exit `failed` (`failure_phase = "interpretation"`);
+it can never make a failed process succeed.
 
 ## 5. Process-tree control
 

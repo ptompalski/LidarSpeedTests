@@ -57,6 +57,8 @@ RESULT_COLUMNS: tuple[str, ...] = (
     "elapsed_s",
     "start_wall_utc",
     "end_wall_utc",
+    "tool_workload_elapsed_ns",
+    "startup_overhead_ns",
     "monitoring_status",
     "tree_cpu_seconds",
     "tree_cpu_seconds_is_lower_bound",
@@ -121,6 +123,7 @@ def attempt_row(info: AttemptInfo, store: CampaignStore) -> dict[str, Any]:
             row["failure_reason"] = info.abandoned.get("reason")
         return row
     timing = result.get("timing") or {}
+    tool_timing = result.get("tool_timing") or {}
     process = _execution(info).get("process") or {}
     monitoring = process.get("monitoring") or {}
     scratch = result.get("scratch") or {}
@@ -139,6 +142,8 @@ def attempt_row(info: AttemptInfo, store: CampaignStore) -> dict[str, Any]:
         elapsed_s=timing.get("elapsed_s"),
         start_wall_utc=(timing.get("start") or {}).get("wall_utc"),
         end_wall_utc=(timing.get("end") or {}).get("wall_utc"),
+        tool_workload_elapsed_ns=tool_timing.get("workload_elapsed_ns"),
+        startup_overhead_ns=tool_timing.get("startup_overhead_ns"),
         monitoring_status=result.get("monitoring_status"),
         tree_cpu_seconds=_metric(monitoring, "process_tree", "cpu_seconds", "total"),
         tree_cpu_seconds_is_lower_bound=_metric(

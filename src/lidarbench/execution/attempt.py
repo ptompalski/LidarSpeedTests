@@ -8,6 +8,7 @@ Phase order (each phase records its own monotonic/wall instants)::
     process_supervision contains the timed interval (``process.start``..``process.end``:
                         fresh process startup, input reading, compute, output writing)
                         plus untimed tree cleanup and monitor stop
+    interpretation      untimed  adapter reads tool-specific results (only with an adapter)
     output_check        untimed  expected outputs present (presence only; not validation)
 
 The result is written to ``<attempt_dir>/execution.json`` with exclusive create.
@@ -26,12 +27,13 @@ from pathlib import Path
 from typing import Any
 
 from lidarbench.core.clock import Instant, now
-from lidarbench.execution.adapters.base import Invocation
+from lidarbench.execution.adapters.base import Interpretation, Invocation, ToolAdapter, ToolTiming
 from lidarbench.execution.plan import InvocationPlan, write_config_files
 from lidarbench.execution.process import (
     CancellationToken,
     ExecutionInterrupted,
     ExecutionStatus,
+    ProcessOutcome,
     ProcessResult,
     ThreadBudget,
     run_process,
@@ -81,6 +83,13 @@ class AttemptExecution:
     failure_reason: str | None = None
     warnings: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
+    interpretation: dict[str, Any] | None = None
+    """Adapter interpretation record (``None`` when no adapter interpreted the run)."""
+
+    @property
+    def tool_timing(self) -> dict[str, Any] | None:
+        """Tool-reported inner interval with startup/shutdown overhead, if any."""
+        return (self.interpretation or {}).get("tool_timing")
 
     @property
     def execution_status(self) -> ExecutionStatus:
@@ -113,6 +122,7 @@ class AttemptExecution:
             "separate verdicts",
             "warnings": list(self.warnings),
             "metadata": dict(self.metadata),
+            "interpretation": self.interpretation,
             "process": self.process.to_record() if self.process else None,
         }
 
@@ -169,6 +179,74 @@ def _check_outputs(plan: InvocationPlan) -> list[dict[str, Any]]:
     return records
 
 
+def _timing_record(timing: ToolTiming, process: ProcessResult) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "clock": timing.clock,
+        "boundary": timing.boundary,
+        "start_wall_ns": timing.start_wall_ns,
+        "end_wall_ns": timing.end_wall_ns,
+        "workload_elapsed_ns": timing.end_wall_ns - timing.start_wall_ns,
+        "marks": dict(timing.marks),
+        "outer_timing_boundary": process.timing_boundary,
+        "outer_elapsed_ns": process.elapsed_ns,
+        "startup_overhead_ns": None,
+        "shutdown_overhead_ns": None,
+        "within_outer_interval": None,
+        "note": (
+            "Inner interval reported by the tool's own wall clock. The benchmark's timed "
+            "interval is the outer process interval (fresh-process mode); startup overhead "
+            "is the wall time from process launch to the tool's workload start (process "
+            "creation, runtime and library start-up, input setup), shutdown overhead from "
+            "workload end to process exit."
+        ),
+    }
+    if process.start is not None and process.end is not None:
+        startup = timing.start_wall_ns - process.start.wall_ns
+        shutdown = process.end.wall_ns - timing.end_wall_ns
+        record.update(
+            startup_overhead_ns=startup,
+            shutdown_overhead_ns=shutdown,
+            within_outer_interval=startup >= 0 and shutdown >= 0,
+        )
+    return record
+
+
+def _interpret(
+    adapter: ToolAdapter, invocation: Invocation, process: ProcessResult
+) -> tuple[dict[str, Any], str | None, list[str]]:
+    """Run the adapter's interpretation; returns (record, failure_reason, warnings).
+
+    Any defect (exception, wrong type, non-JSON details) is a failure: an
+    unreadable interpretation never lets an attempt count as succeeded.
+    """
+    try:
+        result = adapter.interpret(invocation, process)
+        if result is None:
+            return {"adapter_id": adapter.adapter_id, "provided": False}, None, []
+        if not isinstance(result, Interpretation):
+            raise TypeError(f"interpret returned {type(result).__name__}, not Interpretation")
+        details = json.loads(json.dumps(dict(result.details), allow_nan=False))
+        warnings = [str(w) for w in result.warnings]
+        timing = _timing_record(result.tool_timing, process) if result.tool_timing else None
+    except Exception as exc:
+        reason = f"adapter interpretation failed: {type(exc).__name__}: {exc}"
+        return {"adapter_id": adapter.adapter_id, "provided": False, "error": reason}, reason, []
+    if timing is not None and timing["within_outer_interval"] is False:
+        warnings.append(
+            "tool-reported workload interval lies partly outside the outer process interval "
+            "(clock adjustment or misreported times); startup/shutdown overhead is unreliable"
+        )
+    record = {
+        "adapter_id": adapter.adapter_id,
+        "provided": True,
+        "failure_reason": result.failure_reason,
+        "warnings": warnings,
+        "tool_timing": timing,
+        "details": details,
+    }
+    return record, result.failure_reason, warnings
+
+
 def execute_plan(
     plan: InvocationPlan,
     invocation: Invocation,
@@ -181,6 +259,7 @@ def execute_plan(
     thread_budget: ThreadBudget | None = None,
     terminate_grace_s: float = 5.0,
     run: Callable[..., ProcessResult] = run_process,
+    adapter: ToolAdapter | None = None,
 ) -> AttemptExecution:
     """Run a ready plan in ``attempt_dir`` and write ``execution.json``.
 
@@ -196,15 +275,21 @@ def execute_plan(
             run with monitoring recorded as ``unavailable`` (``False``).
         thread_budget: Configured budget; defaults to ``invocation.threads``.
         terminate_grace_s: POSIX grace between ``SIGTERM`` and ``SIGKILL``.
+        adapter: The adapter that planned the attempt. When given, its
+            :meth:`~ToolAdapter.interpret` runs (untimed) after a process that
+            exited by itself; an objection fails the attempt (phase
+            ``interpretation``), it can never turn a failure into a success.
 
     Raises:
-        ValueError: The plan is not ready or does not match the invocation.
+        ValueError: The plan is not ready or does not match the invocation or adapter.
         FileExistsError: ``attempt_dir`` already holds an execution record or logs.
     """
     if not plan.ready or plan.command is None:
         raise ValueError(f"plan is not ready ({plan.status}): {plan.reason}")
     if plan.workload_id != invocation.workload_id:
         raise ValueError("plan and invocation describe different workloads")
+    if adapter is not None and adapter.adapter_id != plan.adapter_id:
+        raise ValueError("plan was made by a different adapter")
     attempt_dir = Path(attempt_dir)
     record_path = attempt_dir / EXECUTION_RECORD
     for name in (EXECUTION_RECORD, STDOUT_LOG, STDERR_LOG, MONITOR_DIR):
@@ -301,6 +386,25 @@ def execute_plan(
             process, monitoring=unavailable_summary(f"monitor start failed: {monitor_error}")
         )
 
+    interpretation: dict[str, Any] | None = None
+    failure_phase: str | None = None
+    failure_reason: str | None = None
+    if adapter is not None and process.outcome is ProcessOutcome.EXITED:
+        with phases.run("interpretation"):
+            interpretation, objection, extra = _interpret(adapter, invocation, process)
+        warnings.extend(extra)
+        if objection is not None:
+            # A failed process keeps its own status; the reason explains it.
+            failure_phase = "interpretation" if process.succeeded else "process"
+            failure_reason = objection
+
     with phases.run("output_check"):
         outputs = _check_outputs(plan)
-    return finish(process=process, inputs=tuple(inputs), outputs=tuple(outputs))
+    return finish(
+        process=process,
+        inputs=tuple(inputs),
+        outputs=tuple(outputs),
+        failure_phase=failure_phase,
+        failure_reason=failure_reason,
+        interpretation=interpretation,
+    )

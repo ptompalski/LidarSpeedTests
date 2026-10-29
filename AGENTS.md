@@ -116,11 +116,14 @@ A missing `completed.json` means the attempt is incomplete; resumption skips it 
 
 ### 5. R Bridge Protocol
 
-- Orchestrator writes `invocation.json` with task call, inputs, outputs, cores, thread policy, CRS, flags.
-- `bridges/r/runner.R` activates renv, runs the call, times **only the workload**, writes `result.json`.
-- Orchestrator records both outer (perf_counter_ns around subprocess) and inner (R Sys.time()) times.
-- The timing-boundary label in the report says which one is used.
-- Bridge code sources (does not copy) functions from `R/1_functions.R` to avoid divergence.
+Normative description: [design/R_BRIDGE.md](design/R_BRIDGE.md). lidR and lasR are separate adapters (`lidr`, `lasr`) on `execution/adapters/rscript.py:RBridgeAdapter`.
+
+- The adapter writes `<work_dir>/r-invocation.json` (`lidarbench.r-bridge-invocation/1`): pinned task call, inputs, output dir, threads, buffer, optional EPSG, required packages.
+- `Rscript --vanilla bridges/r/runner.R --project … --renv on|off --invocation … --result …` activates renv, sources `R/1_functions.R` (never copied), extracts the call from `R/0_setup.R` without running it, refuses a call that differs from the adapter's pinned call, sets threads via `benchmark_with_resources()`, times **only the workload** via `benchmark_execute_call()`, and writes `r-bridge-result.json` atomically.
+- `interpret()` reads that record. R errors, **any R warning during the workload** (exit 3), missing/inconsistent records and version drift fail the attempt; nothing is converted to success.
+- Orchestrator records both outer (perf_counter_ns around subprocess, the timed interval) and inner (R Sys.time()) times plus start-up overhead (`tool_timing`). The timing-boundary label in the report says which one is used.
+- lasR inputs must have `.lax` indexes (lasR would otherwise write them into the protected input tree).
+- Changing a pinned call needs a new workload version; the bridge and adapter must change together.
 
 ### 6. Configuration and Validation
 
@@ -221,5 +224,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 - 2026-10-28: Initial version for Phase 1 (Package Bootstrap).
 - 2026-10-28: Config validation uses strict stdlib dataclasses instead of Pydantic (Task 5; ARCHITECTURE.md D1).
 - 2026-10-28: Validation framework and workload contracts (Task 6; design/VALIDATION.md).
+- 2026-10-28: lidR/lasR adapters through the R bridge and the adapter `interpret()` hook (Task 7; design/R_BRIDGE.md).
 
 **Last reviewed**: 2026-10-28

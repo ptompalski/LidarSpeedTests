@@ -30,9 +30,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from lidarbench.core.platform import PlatformInfo
+
+if TYPE_CHECKING:
+    from lidarbench.execution.process import ProcessResult
 
 ADAPTER_SCHEMA = "lidarbench.adapter/1"
 
@@ -261,6 +264,54 @@ class ArtifactSpec:
     description: str = ""
 
 
+@dataclass(frozen=True)
+class ToolTiming:
+    """Workload interval reported by the tool itself (an *inner* boundary).
+
+    Wall-clock nanoseconds since the Unix epoch, as read by the tool's own clock
+    (for example R ``Sys.time()``). The benchmark's timed interval stays the
+    orchestrator's outer process interval; this only describes how much of it
+    the tool attributes to the workload.
+    """
+
+    start_wall_ns: int
+    end_wall_ns: int
+    clock: str
+    boundary: str
+    """What the interval contains, for example ``"evaluation of the task call"``."""
+    marks: Mapping[str, int] = field(default_factory=dict)
+    """Optional named wall-clock instants (for example ``packages_loaded``)."""
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("start_wall_ns", self.start_wall_ns),
+            ("end_wall_ns", self.end_wall_ns),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{name} must be an integer")
+        if self.end_wall_ns < self.start_wall_ns:
+            raise ValueError("end_wall_ns must be >= start_wall_ns")
+        for name, value in self.marks.items():
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"mark {name!r} must be an integer")
+
+
+@dataclass(frozen=True)
+class Interpretation:
+    """Tool-specific reading of a finished process (see :meth:`ToolAdapter.interpret`).
+
+    Interpretation can only make an attempt *fail*: a process that did not exit
+    cleanly is never turned into a success.
+    """
+
+    failure_reason: str | None = None
+    """Why the run must not count as succeeded (``None``: no objection)."""
+    warnings: tuple[str, ...] = ()
+    tool_timing: ToolTiming | None = None
+    details: Mapping[str, Any] = field(default_factory=dict)
+    """JSON-ready tool facts recorded with the attempt (versions, applied settings)."""
+
+
 def argv_value(value: ParameterValue | os.PathLike[str]) -> str:
     """Convert a value to a single argv element without shell quoting.
 
@@ -344,6 +395,17 @@ class ToolAdapter(ABC):
     def invocation_metadata(self, invocation: Invocation) -> Mapping[str, MetadataValue]:
         """Tool-specific facts to record with the attempt (default: none)."""
         return {}
+
+    def interpret(self, invocation: Invocation, process: ProcessResult) -> Interpretation | None:
+        """Read tool-specific results after the process exited (untimed).
+
+        Called by the orchestrator only for processes that exited by themselves
+        (any exit code), before ``work_dir`` is cleaned up. Use it to read a
+        tool's own result record or logs, report warnings and an inner workload
+        interval, and reject runs whose exit code hides a failure. The default
+        returns ``None`` (exit code alone decides).
+        """
+        return None
 
     def support_for(self, workload_id: str, threads: int = 1) -> WorkloadSupport:
         """Resolve support for one workload and thread count.

@@ -21,6 +21,7 @@ tool-neutral. Adding an adapter never requires editing the core.
 | 5 | Which environment variables and threading model? | `CommandSpec.env`, `WorkloadSupport.threading` |
 | 6 | Which outputs are expected; which tool facts to record? | `expected_outputs(Invocation)`, `invocation_metadata(Invocation)`, `ToolIdentity.details` |
 | 7 | Why is something unavailable or unsupported? | `Availability.reason/detail`, `WorkloadSupport.reason`, `UnsupportedCombinationError` |
+| 8 | Did the finished run really succeed, and what did the tool report? (optional) | `interpret(Invocation, ProcessResult) -> Interpretation` |
 
 Adapters **must not**:
 
@@ -48,7 +49,9 @@ registry.discover()                          entry points "lidarbench.adapters"
        ├─ expected_outputs(invocation)
        └─ invocation_metadata(invocation)
 plan_invocation() validates all of the above ─▶ InvocationPlan(status="ready")
-runner: write config files, launch argv (shell=False), time, monitor, validate
+runner: write config files, launch argv (shell=False), time, monitor
+       └─ interpret(invocation, process)     untimed, after a self-exited process
+runner: output check, validate
 ```
 
 `plan_invocation()` is the single entry point the runner uses. Missing software,
@@ -135,6 +138,23 @@ unchanged, without quoting. Never build a command string.
 shortest round-trip `repr`. Booleans are rejected because their spelling is
 tool-specific. `base.thread_cap_env(n)` gives the standard BLAS/OpenMP thread caps.
 
+### Interpretation (optional, `interpret()`)
+
+`execute_plan(..., adapter=adapter)` calls `interpret(invocation, process)`
+after the timed interval, only for processes that exited by themselves (any
+exit code), and before `work_dir` is cleaned up. The default returns `None`,
+so the exit code alone decides. An `Interpretation` has:
+
+| Field | Effect |
+|---|---|
+| `failure_reason` | Non-`None` fails a clean exit (`failure_phase = "interpretation"`). For a failed process it becomes the explanation (`failure_phase = "process"`). It can never make a failure succeed. |
+| `warnings` | Appended to the attempt warnings. |
+| `tool_timing: ToolTiming` | Inner workload interval from the tool's own wall clock (`start_wall_ns`, `end_wall_ns`, `clock`, `boundary`, `marks`). The orchestrator derives `workload_elapsed_ns`, `startup_overhead_ns` and `shutdown_overhead_ns` against the outer process interval. The timed interval stays the outer one. |
+| `details` | JSON-ready tool facts recorded in `execution.json`. |
+
+If `interpret()` raises, returns the wrong type or returns details that are not
+JSON, the attempt fails (`adapter interpretation failed: ...`). Fail closed.
+
 ### ArtifactSpec
 
 `path` (absolute, inside `output_dir`), `kind` (`raster`, `point_cloud`,
@@ -214,14 +234,20 @@ or blocked workloads. Plugin load failures are listed. `--json` emits a
 shape. Unavailable software is reported, not treated as an error; the exit code
 is 0. An unknown `--adapter` ID exits with 2.
 
-## 8. Not yet implemented
+## 8. R adapters (`lidr`, `lasr`)
 
-- Real adapters (`cli`, `lastools`, `rscript`, `pylib`, `pdal`). The modules exist
-  as placeholders and are not registered.
-- `interpret(ProcessResult)` (tool-specific success rules such as LAStools
-  `ERROR`/`FATAL` log parsing) arrives with the LAStools adapter. Process
-  execution ([EXECUTION.md](EXECUTION.md)) currently treats only a clean exit 0
-  as success.
-- Per-tool configuration (installation paths from the machine config) arrives with
-  configuration loading. Adapter constructors currently take optional overrides only.
-- Workload specs and equivalence data (`workloads/workloads-v1/*.toml`); see Phase 4.
+lidR and lasR run through the R bridge (`Rscript --vanilla bridges/r/runner.R`).
+They reuse the legacy harness unchanged and pin the exact legacy calls. They
+use `interpret()` to read the bridge's result record. R warnings during the
+workload, R errors, missing records and version drift all fail the attempt.
+They also report R's inner workload interval. See [R_BRIDGE.md](R_BRIDGE.md).
+
+## 9. Not yet implemented
+
+- Real adapters `cli`, `lastools`, `pylib` and `pdal`. The modules exist as
+  placeholders and are not registered.
+- LAStools-specific `interpret()` rules (`ERROR`/`FATAL` log parsing, cutoff
+  exception) arrive with the LAStools adapter.
+- Machine-level tool configuration (installation paths outside campaign
+  configurations). Adapter options currently come from `[[tools]] options`.
+- Equivalence data covers only the `workloads-v1` contracts in `workloads/`.

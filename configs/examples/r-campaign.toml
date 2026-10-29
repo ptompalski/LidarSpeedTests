@@ -1,0 +1,62 @@
+# Example campaign: lidR and lasR through the R bridge (design/R_BRIDGE.md).
+#
+#   Rscript -e 'renv::restore()'                       # once, in the repository root
+#   uv run lidarbench check --adapter lidr --adapter lasr
+#   lidarbench run configs/examples/r-campaign.toml --dry-run
+#   lidarbench run configs/examples/r-campaign.toml
+#
+# lasR writes .lax spatial indexes next to unindexed inputs, which would modify
+# the protected dataset; the bridge refuses such inputs. Index the tiles once
+# before creating the campaign, for example in the repository root:
+#   Rscript -e 'source("renv/activate.R"); lasR::exec(lasR::write_lax(),
+#               on = list.files("/path/to/input-tiles", "[.]la[sz]$", full.names = TRUE))'
+schema = "lidarbench.campaign-config/1"
+campaign_id = "r-tools-example-001"
+description = "lidR and lasR, mean metric and maximum DSM"
+workspace = "/path/to/lidarbench-workspace"
+validation_mode = "performance-only"
+cpu_counts = [1, 4]
+timeout_s = 7200
+
+[scheduling]
+seed = 20261028
+repetitions = 3
+warmups = 1
+tool_order = "balanced"
+cooldown_s = 10.0
+cache_policy = "uncontrolled-warm"
+
+[monitoring]
+enabled = true
+backend = "psutil"
+interval_s = 0.5
+required = true
+
+[scratch]
+roots = { local = "/path/to/benchmark-scratch" }
+retain = "never"
+
+[integrity]
+record_output_digests = true
+verify_inputs_at_end = true
+
+[[datasets]]
+id = "tiles"
+path = "/path/to/input-tiles"
+include = ["*.laz"]             # .lax indexes are part of the dataset, not inputs
+
+[[workloads]]
+id = "pixel_metrics_1a"         # mean original Z, 20 m (workloads-v1)
+parameters = { epsg = 2959 }    # optional declared horizontal CRS of the inputs
+
+[[workloads]]
+id = "generate_DSM1"            # maximum original Z, 1 m (workloads-v1)
+parameters = { epsg = 2959 }
+
+[[tools]]
+id = "lidr"
+# options = { rscript = "/usr/bin/Rscript", project = "/path/to/LidarSpeedTests",
+#             renv = true, require_locked_versions = true, probe_timeout_s = 600.0 }
+
+[[tools]]
+id = "lasr"

@@ -144,6 +144,14 @@ Every `result.json` has separate verdict fields: `execution_status`,
 plus a note that execution success does not imply numerical validity.
 Comparability is decided at report time (ARCHITECTURE.md §8).
 
+The runner passes the planning adapter to `execute_plan()`, so its optional
+`interpret()` hook runs after the process (untimed, ADAPTERS.md §3). If the
+adapter reports an inner workload interval (for example the R bridge,
+[R_BRIDGE.md](R_BRIDGE.md) §7), `result.json` has `tool_timing` with
+`workload_elapsed_ns`, `startup_overhead_ns`, `shutdown_overhead_ns` and the
+marks. Otherwise `tool_timing` is `null`. `timing` remains the outer
+fresh-process interval.
+
 ## 6. Resume, retries and interruption
 
 Per measurement row, using only published, verified attempts:
@@ -198,7 +206,9 @@ users' runs on the same machine are not detected.
 `lidarbench export` verifies the campaign and writes one row per attempt with
 a fixed column order (`lidarbench.results-table/1`, see
 `campaign/results.py:RESULT_COLUMNS`): entry fields, attempt reason,
-statuses, timing (`timing_boundary`, `elapsed_ns`), monitoring summaries,
+statuses, timing (`timing_boundary`, `elapsed_ns`; tool-reported
+`tool_workload_elapsed_ns` and `startup_overhead_ns`, empty when the tool
+reports no inner interval), monitoring summaries,
 structural/numerical status, output counts, `record_state`
 (`completed`/`abandoned`/`incomplete`) and `superseded`. Nothing is filtered or
 aggregated. CSV uses empty cells for null. Parquet needs the optional
@@ -219,14 +229,17 @@ aggregated. CSV uses empty cells for null. Parquet needs the optional
 | Interrupted attempts | block compilation until handled | published `interrupted`, or tombstoned `abandoned`; counted in results |
 | Locks | directory lock in reports path | workspace + per-user machine lock with owner, stale detection, explicit release |
 | Scratch orphans | in-memory ownership only | on-disk marker; explicit marker-proven cleanup |
-| Timing | `Sys.time()` around in-process R call | `perf_counter_ns` around a fresh process (`timing_boundary = process`) |
+| Timing | `Sys.time()` around in-process R call | `perf_counter_ns` around a fresh process (`timing_boundary = process`); the R bridge also reports the legacy inner interval and start-up overhead (`tool_timing`) |
+| R warnings during a workload | diagnostics of a successful run | attempt fails (R bridge exit 3) |
 
 ## 9. Limitations
 
 - Validators are not implemented yet: `structural_status`/`numerical_status`
   stay `not_run`/`unverified`, and resume eligibility is an execution criterion.
 - Identity covers the lidarbench package and adapter modules, not
-  `workloads/` TOML (Phase 4).
+  `workloads/` TOML (Phase 4). The R bridge files (`bridges/r/*.R`,
+  `R/1_functions.R`, `R/0_setup.R`) and `renv.lock` are covered through the
+  R tools' executables and identity details.
 - Stat fingerprints miss in-place edits that keep size and mtime until the next
   full rehash.
 - Windows scratch directories rely on the root's inherited ACL; no explicit ACL
