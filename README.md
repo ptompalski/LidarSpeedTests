@@ -38,14 +38,29 @@ verifier may leave no final status record.
 
 The Python orchestrator `lidarbench` is being built beside the R harness (see
 [design/ARCHITECTURE.md](design/ARCHITECTURE.md) and
-[MIGRATION_PLAN.md](MIGRATION_PLAN.md)); it does not run campaigns yet.
+[MIGRATION_PLAN.md](MIGRATION_PLAN.md)). It runs campaigns with the deterministic
+`synthetic` test adapter; real LiDAR tool adapters follow.
 
 ```sh
 uv sync                            # create .venv/ from uv.lock (install uv: https://docs.astral.sh/uv/)
 uv run lidarbench check            # OS facts and detected tool adapters
 uv run lidarbench check --json     # the same as a lidarbench.check/1 JSON document
+uv run lidarbench run CONFIG.toml --dry-run   # schedule, resume decisions, planned commands
+uv run lidarbench run CONFIG.toml             # create or resume a campaign and execute it
+uv run lidarbench export WORKSPACE/campaigns/ID --format csv -o results.csv
 uv run pytest tests/python         # Python test suite
 ```
+
+`lidarbench run` freezes a campaign (configuration, workloads, tool binaries,
+input hashes, hardware/OS, code digests and a seeded `schedule-v2`) in
+`campaign.json` and refuses to resume when any of it changes. It then runs the
+schedule one attempt at a time and records every attempt write-once. Resume
+skips completed entries, retries interrupted ones, and retries failures only
+with `--retry-failed`. Each attempt records execution status separately from
+structural and numerical validation, so execution success alone never means
+the results are numerically valid. Inputs are hashed once per run, never
+inside a timed attempt. See [design/CAMPAIGNS.md](design/CAMPAIGNS.md) and
+[configs/examples/synthetic-campaign.toml](configs/examples/synthetic-campaign.toml).
 
 [uv](https://docs.astral.sh/uv/) manages the Python environment: `uv.lock` pins
 every Python dependency, the way `renv.lock` pins the R packages. Plain

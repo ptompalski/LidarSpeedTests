@@ -125,7 +125,7 @@ A missing `completed.json` means the attempt is incomplete; resumption skips it 
 ### 6. Configuration and Validation
 
 - Campaign configuration is TOML (human-editable, version-controlled).
-- Schema validation uses Pydantic; invalid configs fail at preflight with clear error messages.
+- Schema validation uses stdlib frozen dataclasses with explicit checks (no Pydantic or other validation library; ARCHITECTURE.md D1). Unknown keys are errors, values are never coerced (`"3"` is not `3`), every default is resolved, and each error names the offending key (for example `scheduling.cache_policy`). See `src/lidarbench/config/campaign.py`.
 - Dataset provenance (archive hash, policy version, per-tile receipts) is recorded and verified.
 - Frozen opt-in policies (extent discrepancies, LAStools cutoff exception, diagnostic lasR) are part of campaign identity.
 
@@ -217,5 +217,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 
 **Document history**:
 - 2026-10-28: Initial version for Phase 1 (Package Bootstrap).
+- 2026-10-28: Config validation uses strict stdlib dataclasses instead of Pydantic (Task 5; ARCHITECTURE.md D1).
 
 **Last reviewed**: 2026-10-28

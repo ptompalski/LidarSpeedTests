@@ -1,7 +1,7 @@
 # LidarSpeedTests 2.0 — Migration Plan
 
 **Status**: In progress  
-**Version**: Task 1 (Python package bootstrap) ✅ **DONE**; Task 3 (tool adapter interface) ✅ **DONE**  
+**Version**: Task 1 (Python package bootstrap) ✅ **DONE**; Task 3 (tool adapter interface) ✅ **DONE**; Task 4 (process execution) ✅ **DONE**; Task 5 (campaign management) ✅ **DONE**  
 **Branch**: `feature/cross-platform-benchmark`  
 **Related**: [ARCHITECTURE.md](design/ARCHITECTURE.md), [AGENTS.md](AGENTS.md)
 
@@ -126,19 +126,39 @@ Task 4 acceptance criteria:
 
 **Objective**: Run a campaign with scheduling, resumption and attempt tracking.
 
+**Progress — Task 5 (campaign management) ✅ DONE**: `lidarbench run` / `resume`
+with selection filters and `--dry-run`, TOML campaign configuration, frozen
+content-based identity (code, config, workloads, tools with executable hashes,
+dataset file hashes, environment, schedule) verified in full once per
+invocation and cheaply before each entry, deterministic `schedule-v2`
+(SplitMix64, balanced or randomized tool order, recorded seed), sequential
+execution with cooldowns and an explicit `uncontrolled-warm` cache policy,
+write-once attempts with receipts, tombstones and explicit retries, guarded
+run-owned scratch, workspace + machine locks, and JSONL/CSV/Parquet export.
+Core store/lock/scratch pieces of Phase 2 were implemented as part of this task.
+See [design/CAMPAIGNS.md](design/CAMPAIGNS.md).
+
+Task 5 acceptance criteria:
+- [x] Deterministic schedules (golden tests, balance property tests, recorded seed).
+- [x] Safe interruption and resumption (published `interrupted` attempts, tombstones after crashes, no overwrites).
+- [x] Complete provenance (frozen identity components, per-run verification records, append-only events).
+- [x] Immutable attempt histories (write-once files, digest chain, read-only after publish).
+- [x] Execution success never implies numerical validity (separate `structural_status` / `numerical_status`).
+- [ ] Validators producing structural/numerical verdicts (Phase 6).
+
 **Key tasks**:
-- Campaign creation and identity freezing.
-- Scheduling: warm-up runs, then measurements; per-task base permutation + rotation.
-- Attempt lifecycle: started → invocation → execution → validation → result → completed.
-- Resume logic: checks identity, skips completed attempts, retries failed ones.
-- Resource monitoring via psutil backend (process-tree sampling in separate process).
+- [x] Campaign creation and identity freezing.
+- [x] Scheduling: warm-up runs, then measurements; per-task base permutation + rotation.
+- [x] Attempt lifecycle: started → invocation → execution → result → completed (validation in Phase 6).
+- [x] Resume logic: checks identity, skips completed attempts, retries interrupted ones; failed ones with `--retry-failed`.
+- [x] Resource monitoring via psutil backend (process-tree sampling in separate process).
 - Tool-specific monitoring backends (stub for future distributed/hardware monitors).
 
 **Acceptance Criteria**:
-- Campaign runs on a single machine, one tool at a time.
-- Scheduling matches R harness behavior (with seeded RNG).
-- Resumption restarts only from failures.
-- Monitoring samples are recorded with checksums.
+- [x] Campaign runs on a single machine, one tool at a time.
+- [x] Scheduling matches R harness structure (with seeded, portable RNG; not bit-identical to R).
+- [x] Resumption restarts only from incomplete entries (failures on explicit request).
+- [x] Monitoring samples are recorded with checksums.
 
 ### Phase 6: Validation and Reporting
 
@@ -165,7 +185,7 @@ Task 4 acceptance criteria:
 **Key tasks**:
 - Preflight: check configuration, stage inputs, verify tools, dry-run workloads.
 - Doctor: probe environment, check capabilities, diagnose missing dependencies.
-- Configuration validation (TOML/YAML with Pydantic).
+- Configuration validation (TOML; strict stdlib dataclasses, no coercion).
 - Dataset readiness checks.
 - Tool availability and version reporting.
 
@@ -202,7 +222,7 @@ Task 4 acceptance criteria:
 
 ## Key Architectural Decisions
 
-1. **Python for orchestration, any language for tools**: The core is Python stdlib + Pydantic/psutil. Tools run as subprocesses. R code runs via Rscript. No in-process execution.
+1. **Python for orchestration, any language for tools**: The core is Python stdlib + psutil. Tools run as subprocesses. R code runs via Rscript. No in-process execution.
 
 2. **Language-neutral records**: JSON, JSON Lines and CSV with explicit schemas. Any language can read them.
 

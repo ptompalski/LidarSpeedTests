@@ -12,9 +12,13 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     Currently includes:
     - version: display version information
     - check: display operating system facts and adapter capabilities
+    - run / resume: create or resume a campaign and execute its schedule
+    - export: write a verified results table (JSONL, CSV or Parquet)
+    - lock: show or explicitly release a stale lock
+    - scratch: list or explicitly delete orphaned run-owned scratch
     - help: display help (implicit)
 
-    Additional commands (init, preflight, run, resume, etc.) are placeholders
+    Additional commands (init, preflight, report, doctor) are placeholders
     and will be implemented in later phases.
     """
     subparsers = parser.add_subparsers(dest="command", help="command to run")
@@ -37,6 +41,19 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
         help="only report this adapter (repeatable)",
     )
 
+    scratch = subparsers.add_parser(
+        "scratch",
+        help="list or explicitly delete orphaned run-owned scratch directories",
+        description=(
+            "Lists scratch directories left by crashed runs of a campaign. With --clean "
+            "--confirm, deletes those whose ownership marker matches and whose attempt "
+            "already has a receipt or tombstone."
+        ),
+    )
+    scratch.add_argument("config", help="campaign configuration (TOML)")
+    scratch.add_argument("--clean", action="store_true", help="delete proven orphans")
+    scratch.add_argument("--confirm", action="store_true", help="required with --clean")
+
     # Placeholder commands (not yet implemented; --help works but execution warns)
     subparsers.add_parser(
         "init",
@@ -48,14 +65,41 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
         help="[PLACEHOLDER] validate configuration and check tool availability",
     )
 
-    subparsers.add_parser(
-        "run",
-        help="[PLACEHOLDER] execute a campaign",
-    )
+    for name, text in (
+        ("run", "create or resume a campaign and execute its frozen schedule"),
+        ("resume", "resume an existing campaign (never creates one)"),
+    ):
+        run = subparsers.add_parser(name, help=text, description=text)
+        _add_run_arguments(run)
 
-    subparsers.add_parser(
-        "resume",
-        help="[PLACEHOLDER] resume a previous campaign",
+    export = subparsers.add_parser(
+        "export",
+        help="write a verified per-attempt results table",
+        description="Verify a campaign and write one row per attempt.",
+    )
+    export.add_argument("campaign", help="campaign directory (<workspace>/campaigns/<id>)")
+    export.add_argument(
+        "--format", default="jsonl", choices=("jsonl", "csv", "parquet"), help="output format"
+    )
+    export.add_argument("-o", "--output", help="new output file (default: stdout)")
+
+    lock = subparsers.add_parser(
+        "lock",
+        help="show or explicitly release a workspace or machine lock",
+        description=(
+            "Locks are never removed automatically. 'release' removes a lock only if "
+            "its owner process no longer exists (or with --force when it cannot be verified)."
+        ),
+    )
+    lock.add_argument("action", choices=("status", "release"))
+    lock.add_argument(
+        "target",
+        nargs="?",
+        help="workspace directory or lock file (default: this user's machine lock)",
+    )
+    lock.add_argument("--confirm", action="store_true", help="required to release")
+    lock.add_argument(
+        "--force", action="store_true", help="also release a lock that cannot be verified"
     )
 
     subparsers.add_parser(
@@ -66,6 +110,37 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     subparsers.add_parser(
         "doctor",
         help="[PLACEHOLDER] diagnose environment and configuration",
+    )
+
+
+def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("config", help="campaign configuration (TOML)")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show the schedule, resume decisions and planned commands; write nothing",
+    )
+    parser.add_argument("--json", action="store_true", help="print the summary as JSON")
+    select = parser.add_argument_group(
+        "selection (restricts which frozen schedule rows run now; never changes identity)"
+    )
+    select.add_argument("--workload", action="append", metavar="NAME", help="repeatable")
+    select.add_argument("--dataset", action="append", metavar="ID", help="repeatable")
+    select.add_argument("--tool", action="append", metavar="ID", help="repeatable")
+    select.add_argument("--cpus", action="append", type=int, metavar="N", help="repeatable")
+    select.add_argument(
+        "--phase", action="append", choices=("warmup", "measurement"), help="repeatable"
+    )
+    select.add_argument("--limit", type=int, metavar="N", help="dispatch at most N entries")
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="retry entries whose attempts failed or timed out (new attempts; old ones kept)",
+    )
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="allow creating a campaign from an uncommitted lidarbench checkout (recorded)",
     )
 
 
@@ -112,8 +187,42 @@ def main(args: list[str] | None = None) -> int:
 
         return run_check(as_json=parsed.json, adapter_ids=parsed.adapter)
 
-    # Placeholder commands
-    if parsed.command in ("init", "preflight", "run", "resume", "report", "doctor"):
+    if parsed.command in ("run", "resume"):
+        from lidarbench.campaign.commands import run_command
+
+        return run_command(
+            parsed.config,
+            dry_run=parsed.dry_run,
+            as_json=parsed.json,
+            workloads=parsed.workload,
+            datasets=parsed.dataset,
+            tools=parsed.tool,
+            cpus=parsed.cpus,
+            phases=parsed.phase,
+            limit=parsed.limit,
+            retry_failed=parsed.retry_failed,
+            allow_dirty=parsed.allow_dirty,
+            require_existing=parsed.command == "resume",
+        )
+
+    if parsed.command == "export":
+        from lidarbench.campaign.commands import export_command
+
+        return export_command(parsed.campaign, fmt=parsed.format, output=parsed.output)
+
+    if parsed.command == "lock":
+        from lidarbench.campaign.commands import lock_command
+
+        return lock_command(
+            parsed.action, parsed.target, confirm=parsed.confirm, force=parsed.force
+        )
+
+    if parsed.command == "scratch":
+        from lidarbench.campaign.commands import scratch_command
+
+        return scratch_command(parsed.config, clean=parsed.clean, confirm=parsed.confirm)
+
+    if parsed.command in ("init", "preflight", "report", "doctor"):
         print(
             f"Error: '{parsed.command}' command is not yet implemented.",
             file=sys.stderr,

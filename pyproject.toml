@@ -24,9 +24,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "pydantic>=2.5.0",
-    "pydantic-settings>=2.0.0",
-    "pyyaml>=6.0",
     "psutil>=5.9.0",
 ]
 
@@ -40,7 +37,6 @@ dev = [
     "ruff>=0.1.0",
     "black>=23.0.0",
     "mypy>=1.7.0",
-    "types-pyyaml>=6.0.0",
     "types-psutil>=5.9.0",
 ]
 
@@ -113,7 +109,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["lidarbench"]
-known-third-party = ["pydantic", "yaml", "psutil"]
+known-third-party = ["psutil"]
 
 [tool.black]
 line-length = 100

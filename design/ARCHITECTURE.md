@@ -515,6 +515,14 @@ comparable.
 
 ## 9. Key mechanisms
 
+Campaign identity, scheduling, immutable attempts, resume, scratch and locks
+(§9.1–§9.3, §9.5, §9.6) are implemented; [CAMPAIGNS.md](CAMPAIGNS.md) is the
+normative description, including deliberate differences from this sketch (warm-ups
+rerun only for units with pending measurements; pre-launch infrastructure
+failures retried automatically; CLI selection restricts dispatch without
+changing identity; per-entry checks hash the small code files and fingerprint
+inputs and executables).
+
 ### 9.1 Campaign identity
 
 - **Frozen identity** = canonical JSON (sorted keys, UTF-8, `\n`, no floats
@@ -759,7 +767,7 @@ The 2.0 design avoids the problem in three ways:
 
 | ID | Decision | Alternatives considered | Status |
 |---|---|---|---|
-| D1 | Python ≥ 3.11 orchestrator; core dependencies: stdlib + `psutil` only | pydantic/attrs (heavier), numpy (unneeded) | proposed |
+| D1 | Python ≥ 3.11 orchestrator; core dependencies: stdlib + `psutil` only; config validation with strict stdlib dataclasses (no coercion, so frozen identity never depends on a validation library's version) | pydantic/attrs (heavier, lax coercion by default), numpy (unneeded) | **accepted** (2026-10-28) |
 | D2 | Every benchmarked workload runs in a child process | in-process R/Python (as legacy R) | proposed |
 | D3 | JSON/JSONL/CSV records with SHA-256; canonical JSON for identity | RDS, Parquet (needs pyarrow), SQLite (single-writer but less transparent) | proposed |
 | D4 | Content-addressed identity; git revision recorded but not live-checked | live HEAD check (legacy) | proposed |

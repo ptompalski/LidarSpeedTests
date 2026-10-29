@@ -146,6 +146,10 @@ class CancellationToken:
         for listener in listeners:
             listener.set()
 
+    def wait(self, timeout_s: float | None = None) -> bool:
+        """Block until cancelled or ``timeout_s`` elapses; return :attr:`cancelled`."""
+        return self._event.wait(timeout_s)
+
     def _subscribe(self, event: threading.Event) -> None:
         with self._lock:
             self._listeners.append(event)

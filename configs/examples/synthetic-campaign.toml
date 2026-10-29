@@ -1,0 +1,60 @@
+# Example campaign using only the deterministic synthetic test adapter.
+# It runs no LiDAR software and produces no benchmark evidence.
+#
+#   mkdir -p data scratch && printf abc > data/tile1.laz
+#   lidarbench run configs/examples/synthetic-campaign.toml --dry-run
+#   lidarbench run configs/examples/synthetic-campaign.toml
+#
+# Relative paths resolve against this file's directory. Scratch roots must not
+# be inside the repository, a dataset, the workspace, home or the working
+# directory, so point them at a dedicated directory.
+schema = "lidarbench.campaign-config/1"
+campaign_id = "synthetic-example-001"   # new definitions/tools/inputs need a new ID
+description = "Synthetic smoke campaign"
+workspace = "/path/to/lidarbench-workspace"
+validation_mode = "performance-only"    # or "numerical"; frozen in identity
+cpu_counts = [1]
+# timeout_s = 3600                      # default per-attempt timeout (none if omitted)
+
+[scheduling]
+seed = 20261020                 # recorded; same seed + same selection = same schedule
+repetitions = 3
+warmups = 1                     # rerun on resume for units with pending measurements
+tool_order = "balanced"         # "balanced" (rotated Latin square) or "randomized"
+cooldown_s = 5.0                # pause after each launched attempt (interruptible)
+cache_policy = "uncontrolled-warm"  # the only policy: caches are recorded as uncontrolled
+
+[monitoring]
+enabled = true
+backend = "psutil"
+interval_s = 0.5
+required = true                 # do not launch if the monitor cannot start
+
+[scratch]
+roots = { local = "/path/to/benchmark-scratch" }
+retain = "never"                # "never", "on-failure" or "always"
+
+[integrity]
+record_output_digests = true    # SHA-256 of outputs after each attempt (untimed)
+verify_inputs_at_end = true     # full input rehash when a run finishes
+
+[[datasets]]
+id = "tiny"
+path = "/path/to/input-tiles"
+include = ["*.laz", "*.las"]    # inputs passed to tools; every file is hashed
+# scratch = "local"             # required when several scratch roots exist
+
+[[workloads]]
+id = "synthetic.hashchain"
+parameters = { iterations = 200000 }
+# name = "hashchain-200k"       # unique label when one workload id is used twice
+# datasets = ["tiny"]           # default: all datasets
+# timeout_s = 600
+
+[[workloads]]
+id = "synthetic.checksum"
+
+[[tools]]
+id = "synthetic"
+# adapter = "synthetic"         # default: same as id
+# options = { python = "/usr/bin/python3" }   # adapter constructor options
