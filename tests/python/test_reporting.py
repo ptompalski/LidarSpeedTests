@@ -269,3 +269,65 @@ def test_inconsistent_validation_report_is_never_included(campaign: Path, tmp_pa
     assert _unit(dataset, "synthetic.checksum", 1, "synth-b")["n_included"] == 0
     problems = [r for r in dataset.table("issues").rows if r["kind"] == "invalid_validation_record"]
     assert len(problems) == 3 and "differs" in problems[0]["detail"]  # incl. the warm-up
+
+
+EXTENT_REASON = (
+    "west.tif: accepted outward raster extension of at most one cell per edge with the full "
+    "core present (accept_known_extent_discrepancies): extent [...]"
+)
+
+
+@pytest.fixture(scope="module")
+def tolerant_campaign(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return make_campaign(
+        tmp_path_factory.mktemp("tolerant"), extra='[validation]\ncomparability = "edge-tolerant"'
+    )
+
+
+@pytest.mark.parametrize(
+    ("options", "note"),
+    [
+        ({"boundary": 6}, "6 point(s) are owned by a different cell"),
+        (
+            {"numerical": "accepted_exception", "numerical_reasons": [EXTENT_REASON]},
+            "accepted extent exception",
+        ),
+    ],
+)
+def test_edge_tolerant_policy_compares_declared_edge_differences(
+    campaign, tolerant_campaign, tmp_path, options, note
+):
+    tolerant = _validated(
+        tolerant_campaign, tmp_path / "t" / "test-campaign", {"synth-b": dict(options)}
+    )
+    dataset = build_campaign_dataset(tolerant, ReportPolicy("validated", 0.0))
+    pair = dataset.table("comparisons").rows[0]
+    assert pair["comparable"] is True and pair["speedup_a_vs_b_median"] is not None
+    assert pair["comparability_policy"] == "edge-tolerant"
+    assert note in pair["accepted_differences"] and "edge-tolerant" in pair["accepted_differences"]
+    assert any("edge-tolerant (frozen in the campaign)" in n for n in dataset.notes)
+    # The same verdicts in a strict campaign are refused.
+    strict = _validated(campaign, tmp_path / "s" / "test-campaign", {"synth-b": dict(options)})
+    refused = build_campaign_dataset(strict, ReportPolicy("validated", 0.0))
+    row = refused.table("comparisons").rows[0]
+    assert row["comparable"] is False and row["comparability_policy"] == "strict"
+    assert row["speedup_a_vs_b_median"] is None
+
+
+@pytest.mark.parametrize(
+    ("options", "reason"),
+    [
+        ({"numerical": "accepted_exception"}, "numerical status is accepted_exception"),
+        ({"boundary": None}, "cell ownership agreement with the contract was not established"),
+        ({"equivalence": "non_comparable"}, "declared equivalence is non_comparable"),
+    ],
+)
+def test_edge_tolerant_policy_still_refuses_other_differences(
+    tolerant_campaign, tmp_path, options, reason
+):
+    copy = _validated(
+        tolerant_campaign, tmp_path / "t" / "test-campaign", {"synth-b": dict(options)}
+    )
+    pair = build_campaign_dataset(copy, ReportPolicy("validated", 0.0)).table("comparisons").rows[0]
+    assert pair["comparable"] is False and pair["speedup_a_vs_b_median"] is None
+    assert reason in pair["reasons"]

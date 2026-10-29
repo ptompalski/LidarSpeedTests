@@ -113,6 +113,7 @@ def test_pilot_example_config_is_valid():
     assert config.scheduling.tool_order == "balanced"
     assert config.validation_mode == "numerical"
     assert config.validation.accept_known_extent_discrepancies is True
+    assert config.validation.comparability == "edge-tolerant"
 
 
 def test_validation_table_and_cpu_affinity(base):
@@ -132,6 +133,7 @@ def test_validation_table_and_cpu_affinity(base):
         ({"extra": "[validation]\nunknown = 1"}, "validation"),
         ({"extra": '[validation]\naccept_known_extent_discrepancies = "yes"'}, "validation.accept"),
         ({"scheduling": 'cpu_affinity = "all"'}, "scheduling.cpu_affinity"),
+        ({"extra": '[validation]\ncomparability = "loose"'}, "validation.comparability"),
     ):
         with pytest.raises(ConfigError, match=key):
             load_config(write_config(base, **kwargs))

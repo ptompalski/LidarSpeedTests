@@ -81,6 +81,7 @@ _WINDOWS_RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$", 
 VALIDATION_MODES = ("numerical", "performance-only")
 TOOL_ORDERS = ("balanced", "randomized")
 CPU_AFFINITY_MODES = ("pinned", "none")
+COMPARABILITY_POLICIES = ("strict", "edge-tolerant")
 CACHE_POLICIES = ("uncontrolled-warm",)
 SCRATCH_RETENTION = ("never", "on-failure", "always")
 DEFAULT_SEED = 20261020
@@ -207,6 +208,8 @@ class ValidationConfig:
     """Workload contract suite directory; ``None`` = the checkout's default suite."""
     accept_known_extent_discrepancies: bool = False
     reuse_identical_outputs: bool = True
+    comparability: str = "strict"
+    """Frozen comparability policy: ``strict`` or ``edge-tolerant`` (ARCHITECTURE.md §8.3)."""
 
     def suite_dir(self) -> Path:
         """The effective suite directory."""
@@ -222,6 +225,7 @@ class ValidationConfig:
             "suite": os.fspath(self.suite_dir()),
             "accept_known_extent_discrepancies": self.accept_known_extent_discrepancies,
             "reuse_identical_outputs": self.reuse_identical_outputs,
+            "comparability": self.comparability,
         }
 
 
@@ -592,7 +596,12 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
     val_raw = _table(
         top.get("validation", {}),
         "validation",
-        {"suite", "accept_known_extent_discrepancies", "reuse_identical_outputs"},
+        {
+            "suite",
+            "accept_known_extent_discrepancies",
+            "reuse_identical_outputs",
+            "comparability",
+        },
     )
     validation = ValidationConfig(
         suite=_path(val_raw["suite"], "validation.suite", base_dir) if "suite" in val_raw else None,
@@ -602,6 +611,11 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
         ),
         reuse_identical_outputs=_bool(
             val_raw.get("reuse_identical_outputs", True), "validation.reuse_identical_outputs"
+        ),
+        comparability=_choice(
+            val_raw.get("comparability", "strict"),
+            "validation.comparability",
+            COMPARABILITY_POLICIES,
         ),
     )
 

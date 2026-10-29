@@ -24,6 +24,7 @@ from lidarbench.validation.policies import Policies
 from lidarbench.validation.status import (
     AttemptVerdicts,
     Comparability,
+    ComparabilityPolicy,
     Level,
     LevelVerdict,
     Outcome,
@@ -35,6 +36,7 @@ __all__ = [
     "REPORT_SCHEMA",
     "AttemptVerdicts",
     "Comparability",
+    "ComparabilityPolicy",
     "ComparisonSubject",
     "GateResult",
     "Level",

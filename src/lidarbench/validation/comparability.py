@@ -12,7 +12,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from lidarbench.validation.status import AttemptVerdicts, Comparability, ReportMode
+from lidarbench.validation.status import (
+    AttemptVerdicts,
+    Comparability,
+    ComparabilityPolicy,
+    ReportMode,
+)
 
 
 class NotComparableError(ValueError):
@@ -45,23 +50,42 @@ class GateResult:
 
     comparable: bool
     reasons: tuple[str, ...]
+    notes: tuple[str, ...] = ()
+    """Differences accepted under the comparability policy (labels for the comparison)."""
+    policy: str = ComparabilityPolicy.STRICT.value
 
     def to_record(self) -> dict[str, Any]:
         """JSON-serializable form."""
-        return {"comparable": self.comparable, "reasons": list(self.reasons)}
+        return {
+            "comparable": self.comparable,
+            "reasons": list(self.reasons),
+            "notes": list(self.notes),
+            "policy": self.policy,
+        }
 
 
 def comparison_gate(
-    a: ComparisonSubject, b: ComparisonSubject, report_mode: ReportMode | str
+    a: ComparisonSubject,
+    b: ComparisonSubject,
+    report_mode: ReportMode | str,
+    policy: ComparabilityPolicy | str = ComparabilityPolicy.STRICT,
 ) -> GateResult:
-    """Check every condition for comparing ``a`` with ``b`` directly."""
+    """Check every condition for comparing ``a`` with ``b`` directly.
+
+    ``policy`` is the campaign's frozen comparability policy; under
+    ``edge-tolerant`` the accepted edge differences are returned as ``notes``.
+    """
+    policy = ComparabilityPolicy(policy)
     reasons: list[str] = []
+    notes: list[str] = []
     if ReportMode(report_mode) is not ReportMode.VALIDATED:
         reasons.append("cross-tool comparisons require a validated report")
     for subject in (a, b):
-        cls, why = subject.verdicts.comparability()
+        cls, why = subject.verdicts.comparability(policy)
         if cls is not Comparability.COMPARABLE:
             reasons.append(f"{subject.tool}: {cls.value} ({'; '.join(why)})")
+        else:
+            notes.extend(f"{subject.tool}: {w}" for w in why)
     if a.tool == b.tool:
         reasons.append("both attempts use the same tool")
     pairs = (
@@ -76,14 +100,17 @@ def comparison_gate(
     for label, left, right in pairs:
         if left != right:
             reasons.append(f"different {label}: {left!r} != {right!r}")
-    return GateResult(not reasons, tuple(reasons))
+    return GateResult(not reasons, tuple(reasons), tuple(notes), policy.value)
 
 
 def require_comparable(
-    a: ComparisonSubject, b: ComparisonSubject, report_mode: ReportMode | str
+    a: ComparisonSubject,
+    b: ComparisonSubject,
+    report_mode: ReportMode | str,
+    policy: ComparabilityPolicy | str = ComparabilityPolicy.STRICT,
 ) -> None:
     """Raise :class:`NotComparableError` unless the gate passes."""
-    result = comparison_gate(a, b, report_mode)
+    result = comparison_gate(a, b, report_mode, policy)
     if not result.comparable:
         raise NotComparableError(result.reasons)
 
@@ -94,9 +121,10 @@ def speedup(
     b: ComparisonSubject,
     b_seconds: float,
     report_mode: ReportMode | str,
+    policy: ComparabilityPolicy | str = ComparabilityPolicy.STRICT,
 ) -> float:
     """``b_seconds / a_seconds`` (how many times faster ``a`` is), gate permitting."""
-    require_comparable(a, b, report_mode)
+    require_comparable(a, b, report_mode, policy)
     if not (a_seconds > 0 and b_seconds > 0):
         raise ValueError("durations must be positive")
     return b_seconds / a_seconds

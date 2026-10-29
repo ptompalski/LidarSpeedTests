@@ -236,3 +236,40 @@ def test_gate_refuses_ratios(b, mode, fragment):
         require_comparable(a, b, mode)
     with pytest.raises(NotComparableError):
         speedup(a, 1.0, b, 2.0, mode)
+
+
+def test_edge_tolerant_policy_accepts_only_declared_edge_differences():
+    from lidarbench.config.campaign import COMPARABILITY_POLICIES as CONFIG_POLICIES
+    from lidarbench.validation.status import COMPARABILITY_POLICIES, ComparabilityPolicy
+
+    assert CONFIG_POLICIES == COMPARABILITY_POLICIES
+    tolerant = ComparabilityPolicy.EDGE_TOLERANT
+    passed = LevelVerdict.of(Status.PASSED)
+    base = {
+        "execution_status": "succeeded",
+        "artifacts": passed,
+        "structural": passed,
+        "equivalence": "matched_definition",
+    }
+    edges = AttemptVerdicts(**base, numerical=passed, boundary_difference_points=6)
+    assert edges.comparability()[0] is Comparability.DESCRIPTIVE_ONLY
+    cls, notes = edges.comparability(tolerant)
+    assert cls is Comparability.COMPARABLE and "6 point(s)" in notes[0]
+    extent = AttemptVerdicts(
+        **base,
+        numerical=LevelVerdict.of(
+            Status.ACCEPTED_EXCEPTION, "a.tif: ... (accept_known_extent_discrepancies): ..."
+        ),
+        boundary_difference_points=0,
+    )
+    assert extent.comparability(tolerant)[0] is Comparability.COMPARABLE
+    other = AttemptVerdicts(
+        **base,
+        numerical=LevelVerdict.of(Status.ACCEPTED_EXCEPTION, "some other exception"),
+        boundary_difference_points=0,
+    )
+    assert other.comparability(tolerant)[0] is Comparability.DESCRIPTIVE_ONLY
+    unverified = AttemptVerdicts(**base, numerical=LevelVerdict.of(Status.UNVERIFIED, "x"))
+    assert unverified.comparability(tolerant)[0] is Comparability.DESCRIPTIVE_ONLY
+    exact = AttemptVerdicts(**base, numerical=passed, boundary_difference_points=0)
+    assert exact.comparability(tolerant) == (Comparability.COMPARABLE, ())

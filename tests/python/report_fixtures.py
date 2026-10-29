@@ -37,7 +37,7 @@ TOOLS = (
 )
 
 
-def make_campaign(tmp_path: Path, monitoring: str = "enabled = false") -> Path:
+def make_campaign(tmp_path: Path, monitoring: str = "enabled = false", extra: str = "") -> Path:
     """Run the synthetic campaign and return its directory."""
     base = write_layout(tmp_path)
     config = write_config(
@@ -47,6 +47,7 @@ def make_campaign(tmp_path: Path, monitoring: str = "enabled = false") -> Path:
         cpu_counts="[1, 2]",
         scheduling="repetitions = 2\nwarmups = 1\ncooldown_s = 0",
         monitoring=monitoring,
+        extra=extra,
     )
     summary = make_runner(config, base).run()
     assert summary.exit_code == 0
@@ -69,13 +70,16 @@ def verdict_record(
     boundary: int | None = 0,
     equivalence: str = "matched_definition",
     validation_mode: str = "numerical",
+    numerical_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
     """A synthetic ``verdicts`` record (levels before numerical pass)."""
+    if numerical_reasons is None:
+        numerical_reasons = [] if numerical == "passed" else ["x"]
     return {
         "execution_status": execution_status,
         "artifacts": {"status": "passed", "reasons": []},
         "structural": {"status": "passed", "reasons": []},
-        "numerical": {"status": numerical, "reasons": [] if numerical == "passed" else ["x"]},
+        "numerical": {"status": numerical, "reasons": numerical_reasons},
         "implementation_status": "runnable",
         "equivalence": equivalence,
         "boundary_difference_points": boundary,

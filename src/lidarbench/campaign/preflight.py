@@ -923,7 +923,8 @@ class _Preflight:
             "validation.suite",
             "ok",
             f"suite {suite.name} ({len(suite.contracts)} contract(s)), "
-            f"validation_mode = {cfg.validation_mode}",
+            f"validation_mode = {cfg.validation_mode}, "
+            f"comparability = {cfg.validation.comparability}",
             settings,
         )
         with_contract = []

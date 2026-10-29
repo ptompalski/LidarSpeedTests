@@ -46,6 +46,10 @@ retain = "on-failure"
 # (accepted_exception, never "passed"). Part of the campaign identity.
 accept_known_extent_discrepancies = true
 reuse_identical_outputs = true
+# Compare tools whose validated outputs differ from the contract only at the edges
+# (declared boundary-point ownership, accepted outward extent); "strict" (default)
+# requires identical cell ownership. Part of the campaign identity.
+comparability = "edge-tolerant"
 
 [integrity]
 record_output_digests = true

@@ -304,8 +304,10 @@ COMPARISON_COLUMNS = (
     "mean_a_seconds",
     "mean_b_seconds",
     "comparable",
+    "comparability_policy",
     "speedup_a_vs_b_median",
     "speedup_a_vs_b_mean",
+    "accepted_differences",
     "reasons",
 )
 
@@ -632,6 +634,10 @@ class _Builder:
         self.notes: list[str] = []
         c = store.components
         self.config: dict[str, Any] = c["config"]
+        # Frozen campaign policy; campaigns created before the policy existed are strict.
+        self.comparability_policy = str(
+            (self.config.get("validation") or {}).get("comparability") or "strict"
+        )
         self.tool_records: dict[str, dict[str, Any]] = {t["id"]: t for t in c["tools"]["tools"]}
         self.dataset_records: dict[str, dict[str, Any]] = {
             d["id"]: d for d in c["datasets"]["datasets"]
@@ -695,7 +701,7 @@ class _Builder:
             derived[info.attempt_id] = d
             comparability: tuple[str | None, tuple[str, ...]] = (None, ())
             if d.verdicts is not None:
-                cls, reasons = d.verdicts.comparability()
+                cls, reasons = d.verdicts.comparability(self.comparability_policy)
                 comparability = (cls.value, reasons)
             elapsed = row["elapsed_s"]
             attempts.add(
@@ -951,7 +957,8 @@ class _Builder:
                 d
                 for d in ds
                 if d.verdicts is None
-                or d.verdicts.comparability()[0] is not Comparability.COMPARABLE
+                or d.verdicts.comparability(self.comparability_policy)[0]
+                is not Comparability.COMPARABLE
             ),
             ds[0],
         )
@@ -992,15 +999,20 @@ class _Builder:
                     ra, rb = self.included[ua], self.included[ub]
                     sa, extra_a = self._subject(ua, ra)
                     sb, extra_b = self._subject(ub, rb)
-                    gate = comparison_gate(sa, sb, self.policy.mode)
+                    policy = self.comparability_policy
+                    gate = comparison_gate(sa, sb, self.policy.mode, policy)
                     reasons = list(gate.reasons) + extra_a + extra_b
                     ta, tb = describe(r["elapsed_s"] for r in ra), describe(
                         r["elapsed_s"] for r in rb
                     )
                     ratio_median = ratio_mean = None
                     if not reasons:
-                        ratio_median = speedup(sa, ta["median"], sb, tb["median"], self.policy.mode)
-                        ratio_mean = speedup(sa, ta["mean"], sb, tb["mean"], self.policy.mode)
+                        ratio_median = speedup(
+                            sa, ta["median"], sb, tb["median"], self.policy.mode, policy
+                        )
+                        ratio_mean = speedup(
+                            sa, ta["mean"], sb, tb["mean"], self.policy.mode, policy
+                        )
                     table.add(
                         workload=workload,
                         workload_id=ra[0]["workload_id"],
@@ -1017,8 +1029,10 @@ class _Builder:
                         mean_a_seconds=ta["mean"],
                         mean_b_seconds=tb["mean"],
                         comparable=not reasons,
+                        comparability_policy=policy,
                         speedup_a_vs_b_median=ratio_median,
                         speedup_a_vs_b_mean=ratio_mean,
+                        accepted_differences="; ".join(gate.notes) or None,
                         reasons="; ".join(reasons) or None,
                     )
 
@@ -1310,8 +1324,8 @@ class _Builder:
         if self.suite is not None:
             notes.append(
                 f"Declared comparability labels come from workload suite {self.suite.name!r} "
-                "at report time (contracts are not yet part of campaign identity); validated "
-                "comparisons use only the contract recorded in each validation report."
+                "at report time; validated comparisons use only the contract recorded in each "
+                "validation report (and frozen in the campaign identity)."
             )
         else:
             notes.append("No workload suite was loaded: declared comparability labels are empty.")
@@ -1320,6 +1334,20 @@ class _Builder:
         unavailable = [t for t in self.tool_order if not self.tool_records[t].get("available")]
         if unavailable:
             notes.append("Unavailable tools (recorded as skips): " + ", ".join(unavailable) + ".")
+        if self.comparability_policy == "edge-tolerant":
+            notes.append(
+                "Comparability policy edge-tolerant (frozen in the campaign): tools whose "
+                "validated outputs differ from the contract only at the edges (a declared cell "
+                "convention that owns some boundary points differently, or an outward extent "
+                "accepted under accept_known_extent_discrepancies) are compared; every owned "
+                "cell value still matched the independent reference. Accepted differences are "
+                "listed per comparison (accepted_differences)."
+            )
+        else:
+            notes.append(
+                "Comparability policy strict: only tools that own every point exactly like the "
+                "contract partition and pass numerically are compared."
+            )
         notes.append(
             "Speedups are computed only within this campaign (one machine, one frozen "
             "identity); results of different campaigns are never combined into ratios."

@@ -112,6 +112,31 @@ class ReportMode(StrEnum):
     PERFORMANCE_ONLY = "performance-only"
 
 
+class ComparabilityPolicy(StrEnum):
+    """Frozen campaign policy for attempt-level comparability (ARCHITECTURE.md §8.3).
+
+    ``strict``: numerical ``passed`` and the tool owns every point exactly like
+    the contract partition (``boundary_difference_points == 0``).
+
+    ``edge-tolerant``: also accepts outputs that differ from the contract only at
+    the edges, when those differences are declared and measured: a declared cell
+    convention that owns some boundary points differently (counted per attempt)
+    and/or an outward extent accepted under ``accept_known_extent_discrepancies``
+    (numerical ``accepted_exception``). Every owned cell value and the NoData mask
+    must still match the independent reference under the tool's declared
+    convention within tolerance; undeclared conventions (numerical
+    ``unverified``) stay descriptive.
+    """
+
+    STRICT = "strict"
+    EDGE_TOLERANT = "edge-tolerant"
+
+
+COMPARABILITY_POLICIES = tuple(p.value for p in ComparabilityPolicy)
+EXTENT_POLICY_MARKER = "accept_known_extent_discrepancies"
+"""Named in every numerical reason produced by the extent policy (``structural.py``)."""
+
+
 @dataclass(frozen=True)
 class LevelVerdict:
     """Status of one level plus human-readable reasons."""
@@ -212,32 +237,51 @@ class AttemptVerdicts:
             return Outcome.ACCEPTED_EXCEPTION
         return Outcome.UNVERIFIED
 
-    def comparability(self) -> tuple[Comparability, tuple[str, ...]]:
-        """Attempt-level comparability class and the reasons for it."""
+    def comparability(
+        self, policy: ComparabilityPolicy | str = ComparabilityPolicy.STRICT
+    ) -> tuple[Comparability, tuple[str, ...]]:
+        """Attempt-level comparability class and its reasons.
+
+        For a comparable attempt under ``edge-tolerant`` the reasons list the
+        accepted edge differences (they are labels, not objections).
+        """
+        tolerant = ComparabilityPolicy(policy) is ComparabilityPolicy.EDGE_TOLERANT
         outcome = self.outcome
         if outcome not in (Outcome.VALIDATED, Outcome.ACCEPTED_EXCEPTION, Outcome.UNVERIFIED):
             return Comparability.EXCLUDED, (f"outcome is {outcome.value}",)
         if self.implementation_status == "diagnostic_only":
             return Comparability.DIAGNOSTIC_ONLY, ("implementation is diagnostic_only",)
         reasons: list[str] = []
+        accepted: list[str] = []
         if self.implementation_status != "runnable":
             reasons.append(f"implementation status is {self.implementation_status}")
         if self.equivalence != "matched_definition":
             reasons.append(f"declared equivalence is {self.equivalence}")
-        if self.numerical.status is not Status.PASSED:
+        if (
+            tolerant
+            and self.numerical.status is Status.ACCEPTED_EXCEPTION
+            and any(EXTENT_POLICY_MARKER in r for r in self.numerical.reasons)
+        ):
+            accepted.append(
+                "accepted extent exception ("
+                + next(r for r in self.numerical.reasons if EXTENT_POLICY_MARKER in r)
+                + ")"
+            )
+        elif self.numerical.status is not Status.PASSED:
             reasons.append(f"numerical status is {self.numerical.status.value}")
         if self.boundary_difference_points is None:
             reasons.append("cell ownership agreement with the contract was not established")
         elif self.boundary_difference_points > 0:
-            reasons.append(
+            text = (
                 f"{self.boundary_difference_points} point(s) are owned by a different cell "
                 "than under the contract convention"
             )
+            (accepted if tolerant else reasons).append(text)
         if self.validation_mode != "numerical":
             reasons.append(f"validation mode is {self.validation_mode}")
         if reasons:
             return Comparability.DESCRIPTIVE_ONLY, tuple(reasons)
-        return Comparability.COMPARABLE, ()
+        return Comparability.COMPARABLE, tuple(f"edge-tolerant: {a}" for a in accepted)
 
     def report_inclusion(self, mode: ReportMode | str) -> tuple[bool, str]:
         """Whether a report in ``mode`` may include this timing, and its label.
