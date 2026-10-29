@@ -95,6 +95,8 @@ SUPPORTED_SYSTEMS = ("Linux", "Windows", "Darwin")
 MINIMUM_VERSION = (2, 5, 0)
 """First release with ``writers.gdal`` ``binmode`` (PDAL commit e243a67, #3840)."""
 REQUIRED_STAGES = ("readers.las", "filters.merge", "writers.gdal")
+READER_THREADS = 1
+"""``readers.las`` ``threads`` per pipeline; concurrency comes from concurrent pipelines."""
 REQUIRED_GDAL_OPTIONS = (
     "binmode",
     "data_type",
@@ -144,7 +146,7 @@ WORKLOADS: Mapping[str, PdalWorkload] = MappingProxyType(
         "generate_DSM1": PdalWorkload("generate_DSM1", "max", 1.0),
     }
 )
-"""Implemented workloads (workloads-v2 contracts, ``[implementations.pdal]``)."""
+"""Implemented workloads (workloads-v2 and later contracts, ``[implementations.pdal]``)."""
 
 _NO_CONTRACT = "not implemented for PDAL: no workloads-v2 contract for this workload yet"
 OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
@@ -338,13 +340,27 @@ def build_pipeline(
     grid: TileGrid,
     output_type: str,
     epsg: int | None = None,
+    reader_threads: int | None = READER_THREADS,
 ) -> dict[str, Any]:
-    """The PDAL pipeline document for one tile."""
+    """The PDAL pipeline document for one tile.
+
+    ``reader_threads`` sets ``readers.las`` ``threads`` (its decompression pool,
+    default 7 in PDAL) so a pipeline stays within its share of the thread budget;
+    ``None`` omits the option (PDAL builds without it).
+    """
+    reader: dict[str, Any] = {} if reader_threads is None else {"threads": reader_threads}
     stages: list[dict[str, Any]] = [
-        {"type": "readers.las", "filename": os.fspath(tile), "tag": "tile"}
+        {"type": "readers.las", "filename": os.fspath(tile), "tag": "tile", **reader}
     ]
     for i, path in enumerate(neighbours, start=1):
-        stages.append({"type": "readers.las", "filename": os.fspath(path), "tag": f"neighbour_{i}"})
+        stages.append(
+            {
+                "type": "readers.las",
+                "filename": os.fspath(path),
+                "tag": f"neighbour_{i}",
+                **reader,
+            }
+        )
     writer: dict[str, Any] = {
         "type": "writers.gdal",
         "filename": os.fspath(output),
@@ -483,6 +499,7 @@ class PdalAdapter(ToolAdapter):
         self._version: str | None = None
         self._full_version: str | None = None
         self._python: Path | None = None
+        self._reader_threads: int | None = READER_THREADS
         self._headers: dict[tuple[Path, ...], dict[Path, tuple[float, float, float, float]]] = {}
 
     # -- probe and identity -------------------------------------------------------
@@ -547,8 +564,13 @@ class PdalAdapter(ToolAdapter):
                 ),
                 "writers.gdal",
             )
+            reader_options = parse_stage_options(
+                run_query(path, ["--options", "readers.las", "--showjson"], self.version_timeout_s),
+                "readers.las",
+            )
         except ProbeError as exc:
             return Availability.unavailable(UnavailableReason.PROBE_FAILED, f"{path}: {exc}")
+        self._reader_threads = READER_THREADS if "threads" in reader_options else None
         missing = [o for o in REQUIRED_GDAL_OPTIONS if o not in options]
         if missing:
             return Availability.unavailable(
@@ -590,6 +612,11 @@ class PdalAdapter(ToolAdapter):
                 "nodata": NODATA,
                 "data_type": DATA_TYPE,
                 "required_stages": ",".join(REQUIRED_STAGES),
+                "reader_threads": (
+                    self._reader_threads
+                    if self._reader_threads is not None
+                    else "not set (readers.las has no threads option)"
+                ),
             },
         )
 
@@ -690,6 +717,7 @@ class PdalAdapter(ToolAdapter):
                 grid,
                 workload.output_type,
                 epsg,
+                self._reader_threads,
             )
             out.append((tile, f"pipeline-{index:04d}.json", document))
         return out
@@ -772,6 +800,7 @@ class PdalAdapter(ToolAdapter):
             "epsg": self._epsg(invocation),
             "execution_mode": self.execution_mode,
             "concurrency": invocation.threads,
+            "reader_threads": self._reader_threads,
             "threading_model": str(ThreadingModel.CONCURRENT_FILES),
             "pipelines": len(pipelines),
             "neighbour_reads": neighbour_reads,

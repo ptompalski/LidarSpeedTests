@@ -37,6 +37,22 @@ from lidarbench.monitoring.base import ERRORS_COLUMN, MACHINE_COLUMNS, TREE_COLU
 _IO_SUPPORTED = hasattr(psutil.Process, "io_counters")
 
 
+def _session_of(pid: int) -> int | None:
+    """Session id of ``pid`` on POSIX (``None`` on Windows or if it cannot be read).
+
+    Tools run as session leaders (``start_new_session``). Their helpers may be
+    reparented away from the tree (for example R ``parallelly`` workers started
+    through a shell) but stay in the session, so they are still sampled.
+    """
+    if sys.platform == "win32":
+        return None
+    try:
+        sid = os.getsid(pid)
+    except OSError:
+        return None
+    return sid
+
+
 def _now() -> tuple[int, int]:
     perf = time.perf_counter_ns()
     return perf, time.time_ns()
@@ -97,6 +113,8 @@ class Sampler:
         self._tree_start: tuple[int, int] | None = None
         self._root: psutil.Process | None = None
         self._root_error: str | None = None
+        self._session: int | None = None
+        self._launched: float | None = None
         self._procs: dict[tuple[int, float], _Tracked] = {}
         self._denied: set[str] = set()
 
@@ -115,9 +133,32 @@ class Sampler:
             if root.ppid() != parent_pid:
                 raise psutil.NoSuchProcess(pid, msg="pid belongs to another process")
             self._root = root
+            sid = _session_of(pid)
+            self._session = sid if sid == pid else None
+            self._launched = root.create_time()
         except psutil.Error as exc:
             self._root_error = f"root process {pid} not observable: {type(exc).__name__}"
+        self.capabilities["membership"] = (
+            "descendants of the root plus every process of its session"
+            if self._session is not None
+            else "descendants of the root"
+        )
         self._poll_tree()
+
+    def _session_members(self) -> list[psutil.Process]:
+        """Processes of the root's session (POSIX), including ones reparented away from it."""
+        if self._session is None:
+            return []
+        members = []
+        for proc in psutil.process_iter():
+            try:
+                if _session_of(proc.pid) == self._session and (
+                    self._launched is None or proc.create_time() >= self._launched - 1.0
+                ):
+                    members.append(proc)
+            except (OSError, psutil.Error):
+                continue
+        return members
 
     def _discover(self) -> list[psutil.Process]:
         found: dict[int, psutil.Process] = {}
@@ -129,6 +170,8 @@ class Sampler:
                         found[child.pid] = child
             except psutil.Error:
                 pass
+        for proc in self._session_members():
+            found.setdefault(proc.pid, proc)
         for tracked in self._procs.values():
             if tracked.alive:
                 found.setdefault(tracked.proc.pid, tracked.proc)

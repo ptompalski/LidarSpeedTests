@@ -48,6 +48,7 @@ test adapter.
 uv sync                            # create .venv/ from uv.lock (install uv: https://docs.astral.sh/uv/)
 uv run lidarbench check            # OS facts and detected tool adapters
 uv run lidarbench check --json     # the same as a lidarbench.check/1 JSON document
+uv run lidarbench preflight CONFIG.toml       # read-only readiness check (--json, --hash)
 uv run lidarbench run CONFIG.toml --dry-run   # schedule, resume decisions, planned commands
 uv run lidarbench run CONFIG.toml             # create or resume a campaign and execute it
 uv run lidarbench export WORKSPACE/campaigns/ID --format csv -o results.csv

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -101,25 +101,66 @@ class Population:
 
 
 class PopulationLoader:
-    """Decodes input files on demand (small LRU cache) and assembles populations."""
+    """Decodes input files on demand and assembles buffered populations.
 
-    def __init__(self, manifest: Manifest, buffer: float, cache_size: int = 9) -> None:
+    Decoding dominates validation cost, so two caches bound it: a small LRU of
+    fully decoded tiles and a larger cache of *edge strips* (the points within
+    ``buffer`` of a tile's own header edges). A neighbour whose interior does
+    not overlap the tile contributes only points inside its edge strip, so a
+    neighbour is decoded in full at most once while its strip stays cached.
+
+    ``known_digests`` (file path -> SHA-256) are digests already verified by the
+    caller (for example the campaign identity, re-checked by stat fingerprints);
+    they replace hashing the inputs before and after decoding, and
+    :meth:`changed_inputs` then leaves change detection to the caller.
+    """
+
+    def __init__(
+        self,
+        manifest: Manifest,
+        buffer: float,
+        cache_size: int = 9,
+        known_digests: Mapping[str, str] | None = None,
+        strip_cache_size: int = 512,
+    ) -> None:
         self.manifest = manifest
         self.buffer = buffer
         self.cache_size = cache_size
+        self.strip_cache_size = strip_cache_size
+        self.known_digests = dict(known_digests or {})
         self._cache: OrderedDict[str, PointData] = OrderedDict()
+        self._strips: OrderedDict[str, tuple[Any, Any, Any]] = OrderedDict()
         self.digests: dict[str, str] = {}
+        self.trusted: set[str] = set()
+        self.decoded_files = 0
+        self.decoded_points = 0
+
+    def digest(self, tile: Tile) -> str:
+        """SHA-256 of a tile's bytes (trusted digest when the caller supplied one)."""
+        if tile.stem not in self.digests:
+            known = self.known_digests.get(str(tile.path))
+            if known is not None:
+                self.digests[tile.stem] = known
+                self.trusted.add(tile.stem)
+            else:
+                self.digests[tile.stem] = sha256_file(tile.path)
+        return self.digests[tile.stem]
+
+    def population_key(self, stem: str) -> tuple[tuple[str, str], ...]:
+        """Content key of a tile's population: (stem, SHA-256) of every contributing file."""
+        return tuple((t.stem, self.digest(t)) for t in self.neighbours(stem))
 
     def _decoded(self, tile: Tile) -> PointData:
         if tile.stem in self._cache:
             self._cache.move_to_end(tile.stem)
             return self._cache[tile.stem]
-        if tile.stem not in self.digests:
-            self.digests[tile.stem] = sha256_file(tile.path)
+        self.digest(tile)
         try:
             data = read_points(tile.path)
         except (ReadError, LasHeaderError) as exc:
             raise InputError(str(exc)) from exc
+        self.decoded_files += 1
+        self.decoded_points += int(data.x.shape[0])
         name = tile.path.name
         header = tile.header
         if not header.compressed and header.version < (1, 4):
@@ -153,6 +194,33 @@ class PopulationLoader:
             self._cache.popitem(last=False)
         return data
 
+    def _strip(self, tile: Tile) -> tuple[Any, Any, Any]:
+        """Points of ``tile`` within ``buffer`` of its own header edges (inclusive)."""
+        if tile.stem in self._strips:
+            self._strips.move_to_end(tile.stem)
+            return self._strips[tile.stem]
+        data = self._decoded(tile)
+        min_x, min_y, max_x, max_y = tile.bounds
+        b = self.buffer
+        keep = (
+            (data.x <= min_x + b)
+            | (data.x >= max_x - b)
+            | (data.y <= min_y + b)
+            | (data.y >= max_y - b)
+        )
+        strip = (data.x[keep], data.y[keep], data.z[keep])
+        self._strips[tile.stem] = strip
+        while len(self._strips) > self.strip_cache_size:
+            self._strips.popitem(last=False)
+        return strip
+
+    @staticmethod
+    def _separated(a: Tile, b: Tile) -> bool:
+        """Whether the interiors of two tiles' header rectangles do not overlap."""
+        a0, a1, a2, a3 = a.bounds
+        b0, b1, b2, b3 = b.bounds
+        return a2 <= b0 or b2 <= a0 or a3 <= b1 or b3 <= a1
+
     def neighbours(self, stem: str) -> list[Tile]:
         """The tile itself first, then every tile within the buffer (stable order)."""
         tile = self.manifest.tiles[stem]
@@ -171,25 +239,32 @@ class PopulationLoader:
         min_x, min_y, max_x, max_y = tile.bounds
         xs, ys, zs, sources = [], [], [], []
         for source in self.neighbours(stem):
-            data = self._decoded(source)
-            keep = (
-                (data.x >= min_x - b)
-                & (data.x <= max_x + b)
-                & (data.y >= min_y - b)
-                & (data.y <= max_y + b)
-            )
-            xs.append(data.x[keep])
-            ys.append(data.y[keep])
-            zs.append(data.z[keep])
+            if source.stem != stem and self._separated(tile, source):
+                # The buffered rectangle meets a separated neighbour only within
+                # ``buffer`` of that neighbour's own edges.
+                sx, sy, sz = self._strip(source)
+            else:
+                data = self._decoded(source)
+                sx, sy, sz = data.x, data.y, data.z
+            keep = (sx >= min_x - b) & (sx <= max_x + b) & (sy >= min_y - b) & (sy <= max_y + b)
+            xs.append(sx[keep])
+            ys.append(sy[keep])
+            zs.append(sz[keep])
             sources.append(source.stem)
         return Population(
             np.concatenate(xs), np.concatenate(ys), np.concatenate(zs), tuple(sources)
         )
 
     def changed_inputs(self) -> list[str]:
-        """Inputs whose bytes changed since they were first hashed."""
+        """Inputs whose bytes changed since they were first hashed.
+
+        Inputs with caller-supplied (trusted) digests are not re-hashed here; the
+        caller is responsible for detecting their changes.
+        """
         changed = []
         for stem, sha in self.digests.items():
+            if stem in self.trusted:
+                continue
             path = self.manifest.tiles[stem].path
             try:
                 now = sha256_file(path)

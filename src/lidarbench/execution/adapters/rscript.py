@@ -91,7 +91,8 @@ LEGACY_THREAD_VARIABLES = (
 
 INNER_BOUNDARY = (
     "legacy benchmark_execute_call(): evaluation of the task call only (catalog setup, "
-    "package loading and thread/worker setup are outside)"
+    "package loading, preloading of namespaces the call would load lazily (sf, terra, ...) "
+    "and thread/worker setup are outside)"
 )
 SUPPORTED_PARAMETERS = ("epsg",)
 LAS_SUFFIXES = (".las", ".laz")

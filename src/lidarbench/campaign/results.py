@@ -64,10 +64,18 @@ RESULT_COLUMNS: tuple[str, ...] = (
     "tree_cpu_seconds",
     "tree_cpu_seconds_is_lower_bound",
     "tree_peak_rss_bytes",
+    "process_cpu_seconds",
+    "measured_parallelism",
+    "cpu_budget_exceeded",
+    "cpu_affinity",
     "machine_cpu_percent_mean",
     "machine_memory_used_peak_bytes",
+    "artifacts_status",
     "structural_status",
     "numerical_status",
+    "validation_outcome",
+    "validation_reused_from",
+    "validation_duration_ns",
     "validation_mode",
     "missing_required_outputs",
     "output_files",
@@ -158,6 +166,10 @@ def attempt_row(info: AttemptInfo, store: CampaignStore) -> dict[str, Any]:
         ),
         structural_status=result.get("structural_status"),
         numerical_status=result.get("numerical_status"),
+        artifacts_status=result.get("artifacts_status"),
+        validation_outcome=(result.get("validation") or {}).get("outcome"),
+        validation_reused_from=(result.get("validation") or {}).get("reused_from"),
+        validation_duration_ns=(result.get("validation") or {}).get("duration_ns"),
         validation_mode=result.get("validation_mode"),
         missing_required_outputs=len(result.get("missing_required_outputs") or []),
         output_files=len(outputs),
@@ -167,7 +179,50 @@ def attempt_row(info: AttemptInfo, store: CampaignStore) -> dict[str, Any]:
         threading_model=(result.get("threads") or {}).get("threading_model"),
         scratch_cleanup_complete=cleanup.get("complete") if cleanup else None,
     )
+    row.update(cpu_usage(process, row["tree_cpu_seconds"], entry.get("cpus")))
     return row
+
+
+BUDGET_TOLERANCE = 1.10
+BUDGET_SLACK_S = 0.1
+
+
+def cpu_usage(process: dict[str, Any], sampled_cpu: Any, cpus: Any) -> dict[str, Any]:
+    """Exact CPU time, measured parallelism and the budget-overrun flag of one attempt.
+
+    ``process_cpu_seconds`` is the larger of the OS accounting of waited-for
+    descendants (``rusage``, exact for them) and the sampled process-tree total
+    (which also sees session members that were reparented away from the tree).
+    An attempt exceeds its budget when that CPU time is above
+    ``cpus * elapsed * 1.10 + 0.1 s``.
+    """
+    accounting = process.get("process_accounting") or {}
+    user, system = accounting.get("cpu_user_seconds"), accounting.get("cpu_system_seconds")
+    exact = (
+        float(user) + float(system)
+        if isinstance(user, int | float) and isinstance(system, int | float)
+        else None
+    )
+    candidates = [v for v in (exact, sampled_cpu) if isinstance(v, int | float)]
+    cpu = max(candidates) if candidates else None
+    elapsed = process.get("elapsed_s")
+    parallelism = (
+        cpu / float(elapsed)
+        if cpu is not None and isinstance(elapsed, int | float) and elapsed > 0
+        else None
+    )
+    exceeded = None
+    if cpu is not None and isinstance(elapsed, int | float) and isinstance(cpus, int):
+        exceeded = cpu > cpus * float(elapsed) * BUDGET_TOLERANCE + BUDGET_SLACK_S
+    affinity = process.get("cpu_affinity") or {}
+    return {
+        "process_cpu_seconds": cpu,
+        "measured_parallelism": parallelism,
+        "cpu_budget_exceeded": exceeded,
+        "cpu_affinity": (
+            " ".join(str(c) for c in affinity.get("cpus") or []) or affinity.get("status")
+        ),
+    }
 
 
 def collect_rows(campaign_path: Path) -> list[dict[str, Any]]:

@@ -8,7 +8,8 @@
 # the Python adapter), the catalog is configured by prepare_input(), threads by
 # benchmark_with_resources() and the call is run and timed by
 # benchmark_execute_call(). The inner interval is that function's start/finish
-# time. A result record (lidarbench.r-bridge-result/1) is always attempted.
+# time; namespaces the call would load lazily (sf, terra, ...) are preloaded
+# before it. A result record (lidarbench.r-bridge-result/1) is always attempted.
 #
 # Exit status: 0 succeeded; 1 R error (preparation, resources or workload);
 # 2 invalid invocation or definition mismatch; 3 R warning during the workload;
@@ -30,6 +31,10 @@ local({
       quit(save = "no", status = 2L)
     }
   )
+
+  # Measured in a fresh process: namespaces loaded during the first pinned call
+  # (design/R_BRIDGE.md §7). lidR already loads sf and terra with its imports.
+  bridge_preload_namespaces <- list(lasR = c("sf", "terra"), lidR = c("sf", "terra", "glue"))
 
   phase <- "invocation"
   marks <- list(bridge_start = bridge_wall_ns(bridge_start))
@@ -109,6 +114,20 @@ local({
     suppressPackageStartupMessages(library(tool, character.only = TRUE))
     record$packages <- lapply(stats::setNames(required, required), bridge_package_version)
     mark("packages_loaded")
+
+    # Namespaces the pinned calls would otherwise load lazily inside the inner
+    # interval (lasR::exec() loads sf and terra with GDAL/PROJ/GEOS, ~5 s).
+    # The legacy harness paid this once per session, before its timed calls.
+    # Version null: not installed, skipped.
+    preload <- bridge_preload_namespaces[[tool]]
+    record$preloaded_namespaces <- lapply(stats::setNames(preload, preload), function(name) {
+      if (suppressPackageStartupMessages(requireNamespace(name, quietly = TRUE))) {
+        as.character(getNamespaceVersion(name))
+      } else {
+        NA_character_
+      }
+    })
+    mark("namespaces_preloaded")
 
     phase <- "invocation"
     harness <- new.env(parent = globalenv())
@@ -226,7 +245,12 @@ local({
         record$threads <<- applied
         mark("resources_ready")
         phase <<- "workload"
-        on.exit(phase <<- "teardown")
+        namespaces_before <- loadedNamespaces()
+        on.exit({
+          record$workload_loaded_namespaces <<- I(sort(setdiff(loadedNamespaces(),
+                                                               namespaces_before)))
+          phase <<- "teardown"
+        })
         harness$benchmark_execute_call(call, tool, context)
       }
     )

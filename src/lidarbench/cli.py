@@ -13,6 +13,7 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     - version: display version information
     - check: display operating system facts and adapter capabilities
     - run / resume: create or resume a campaign and execute its schedule
+    - preflight: read-only readiness check of a campaign configuration
     - export: write a verified results table (JSONL, CSV or Parquet)
     - lock: show or explicitly release a stale lock
     - scratch: list or explicitly delete orphaned run-owned scratch
@@ -21,7 +22,7 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     - report: prepare a report (tables + Quarto site) from an existing campaign
     - help: display help (implicit)
 
-    Additional commands (init, preflight, doctor) are placeholders
+    Additional commands (init, doctor) are placeholders
     and will be implemented in later phases.
     """
     subparsers = parser.add_subparsers(dest="command", help="command to run")
@@ -63,9 +64,24 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
         help="[PLACEHOLDER] initialize a new campaign workspace",
     )
 
-    subparsers.add_parser(
+    preflight = subparsers.add_parser(
         "preflight",
-        help="[PLACEHOLDER] validate configuration and check tool availability",
+        help="read-only readiness check of a campaign configuration",
+        description=(
+            "Checks configuration, workspace, locks, scratch roots, datasets, tools, planned "
+            "commands, CPU/memory, validation and reporting readiness without writing, "
+            "locking or running any benchmarked tool. Exit 0: ready (warnings allowed); "
+            "1: at least one error; 2: usage error."
+        ),
+    )
+    preflight.add_argument("config", help="campaign configuration (TOML)")
+    preflight.add_argument(
+        "--hash",
+        action="store_true",
+        help="hash every input file (SHA-256) and compare with the manifest / frozen campaign",
+    )
+    preflight.add_argument(
+        "--json", action="store_true", help="print a lidarbench.preflight/1 record"
     )
 
     for name, text in (
@@ -121,7 +137,7 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
         "--input", action="append", metavar="FILE", help="input tile (repeatable)"
     )
     validate.add_argument("--input-dir", metavar="DIR", help="all *.las/*.laz tiles in DIR")
-    validate.add_argument("--suite", help="workload suite directory (default: workloads-v2)")
+    validate.add_argument("--suite", help="workload suite directory (default: workloads-v3)")
     validate.add_argument("--epsg", type=int, help="declared horizontal CRS of the inputs")
     validate.add_argument("--mode", default="numerical", choices=("numerical", "performance-only"))
     validate.add_argument(
@@ -243,6 +259,11 @@ def main(args: list[str] | None = None) -> int:
             require_existing=parsed.command == "resume",
         )
 
+    if parsed.command == "preflight":
+        from lidarbench.campaign.commands import preflight_command
+
+        return preflight_command(parsed.config, full_hash=parsed.hash, as_json=parsed.json)
+
     if parsed.command == "export":
         from lidarbench.campaign.commands import export_command
 
@@ -289,7 +310,7 @@ def main(args: list[str] | None = None) -> int:
         return report_command_from_args(parsed)
 
     # Placeholder commands
-    if parsed.command in ("init", "preflight", "doctor"):
+    if parsed.command in ("init", "doctor"):
         print(
             f"Error: '{parsed.command}' command is not yet implemented.",
             file=sys.stderr,

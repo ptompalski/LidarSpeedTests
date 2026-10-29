@@ -787,7 +787,9 @@ def test_campaign_runs_lastools_through_the_common_schema(tmp_path, bin_dir, mon
         assert row["tool_adapter"] == "lastools" and row["tool_version"] == FAKE_BUILD
         assert row["timing_boundary"] == "process" and row["elapsed_ns"] > 0
         assert row["threading_model"] == "native_threads"
-        assert row["numerical_status"] == "unverified"
+        # The fake lascanopy/lasgrid write placeholder bytes, not GeoTIFFs: the runner's
+        # validation fails them at the artifacts level, so later levels never run.
+        assert (row["structural_status"], row["numerical_status"]) == ("not_run", "not_run")
         assert row["missing_required_outputs"] == 0
         if row["workload_id"] == "pixel_metrics_1a":
             assert row["exit_code"] == 1 and row["accepted_exception"] == CUTOFF_EXCEPTION

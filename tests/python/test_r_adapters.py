@@ -133,7 +133,15 @@ def _record(adapter: RBridgeAdapter, workload: str = "pixel_metrics_1a", **overr
             "end_wall_ns": 8_000_000_000,
             "elapsed_s": 5.0,
         },
-        "timing": {"clock": "R Sys.time()", "bridge_start": 1_500_000_000, "flag": True},
+        "timing": {
+            "clock": "R Sys.time()",
+            "bridge_start": 1_500_000_000,
+            "packages_loaded": 2_000_000_000,
+            "namespaces_preloaded": 2_500_000_000,
+            "flag": True,
+        },
+        "preloaded_namespaces": {"sf": "1.0-21", "terra": "1.8-60"},
+        "workload_loaded_namespaces": [],
     }
     record.update(overrides)
     return record
@@ -427,7 +435,13 @@ def test_interpret_success(cls, layout, project, tmp_path):
     result = adapter.interpret(_invocation(layout), _process(tmp_path))
     assert result.failure_reason is None and result.warnings == ()
     assert result.tool_timing.start_wall_ns == 3_000_000_000
-    assert result.tool_timing.marks == {"bridge_start": 1_500_000_000}
+    assert result.tool_timing.marks == {
+        "bridge_start": 1_500_000_000,
+        "packages_loaded": 2_000_000_000,
+        "namespaces_preloaded": 2_500_000_000,
+    }
+    assert "preloading of namespaces" in result.tool_timing.boundary
+    assert "sf, terra" in result.tool_timing.boundary
     assert result.details["bridge_record"]["tool"] == cls.r_package
 
 
@@ -532,6 +546,9 @@ def test_execute_plan_success_records_interpretation(cls, layout, project, tmp_p
     # Parts use the wall clock, the outer interval the monotonic clock.
     assert abs(parts - timing["outer_elapsed_ns"]) < 50_000_000
     assert timing["outer_timing_boundary"] == "process"
+    marks = timing["marks"]
+    assert marks["packages_loaded"] <= marks["namespaces_preloaded"] <= timing["start_wall_ns"]
+    assert {"sf", "terra"} <= set(seen["preloaded_namespaces"])
     assert [p["name"] for p in record["phases"]][-2:] == ["interpretation", "output_check"]
 
 

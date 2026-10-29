@@ -15,6 +15,7 @@ Environment variables read by the launched script:
 FAKE_PDAL_VERSION    version printed by ``--version`` (default ``2.6.3``)
 FAKE_PDAL_OPTIONS    ``ok`` | ``nobinmode`` | ``broken`` (``--options`` output)
 FAKE_PDAL_DRIVERS    ``ok`` | ``nomerge``
+FAKE_PDAL_READER_THREADS ``absent``: ``readers.las`` lists no ``threads`` option
 FAKE_PDAL_MODE       ``ok`` | ``fail`` (exit 1, ``PDAL:`` error) | ``warning`` (exit 0
                      with a warning line) | ``error0`` (exit 0 with an error line) |
                      ``nooutput`` (exit 0, no raster) | ``nometadata`` | ``failsecond``
@@ -61,6 +62,13 @@ if args == ["--options", "writers.gdal", "--showjson"]:
     if mode == "nobinmode":
         names.remove("binmode")
     print(json.dumps(["writers.gdal", [{"name": n, "description": ""} for n in names]]))
+    sys.exit(0)
+if args == ["--options", "readers.las", "--showjson"]:
+    names = ["filename", "spatialreference", "extra_dims", "compression", "ignore_vlr",
+             "start", "nosrs", "threads", "use_eb_vlr"]
+    if os.environ.get("FAKE_PDAL_READER_THREADS") == "absent":
+        names.remove("threads")
+    print(json.dumps(["readers.las", [{"name": n, "description": ""} for n in names]]))
     sys.exit(0)
 if not args or args[0] != "pipeline":
     print("PDAL: unknown command", file=sys.stderr)

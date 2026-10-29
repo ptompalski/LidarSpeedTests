@@ -174,7 +174,13 @@ def test_campaign_runs_both_tools_with_common_schema(campaign, adapters):
     for row in rows:
         assert row["execution_status"] == "succeeded" and row["exit_code"] == 0
         assert row["timing_boundary"] == "process"
-        assert row["numerical_status"] == "unverified"
+        # Validation runs in the runner: lidR passes structure (performance-only mode, so
+        # numerical stays unverified); lasR's known one-cell outward extent fails the strict
+        # structural level because this campaign does not enable the extent policy.
+        if row["tool"] == "lidr":
+            assert (row["structural_status"], row["numerical_status"]) == ("passed", "unverified")
+        else:
+            assert (row["structural_status"], row["numerical_status"]) == ("failed", "not_run")
         assert row["output_files"] >= 2 and row["missing_required_outputs"] == 0
         assert 0 < row["tool_workload_elapsed_ns"] < row["elapsed_ns"]
         assert 0 < row["startup_overhead_ns"] < row["elapsed_ns"]
@@ -211,6 +217,16 @@ def test_bridge_records_versions_threads_and_inner_timing(campaign, adapters):
         assert timing["startup_overhead_ns"] > timing["marks"]["packages_loaded"] - (
             timing["marks"]["bridge_start"]
         )
+        # Lazily loaded namespaces (sf/terra: GDAL, PROJ, GEOS) stay outside the
+        # inner interval.
+        marks = timing["marks"]
+        assert marks["packages_loaded"] <= marks["namespaces_preloaded"]
+        assert marks["namespaces_preloaded"] <= timing["start_wall_ns"]
+        preloaded = record["preloaded_namespaces"]
+        for name in ("sf", "terra"):
+            assert preloaded[name] == record["loaded_namespaces"][name]
+        assert not {"sf", "terra"} & set(record["workload_loaded_namespaces"])
+        assert "sf, terra" in timing["boundary"]
 
 
 def _validate(result, invocation, policies=None):

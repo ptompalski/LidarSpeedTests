@@ -144,6 +144,37 @@ class TreeController(ABC):
         self.warnings: list[str] = []
         self.root_pid: int | None = None
         self._tracked: dict[tuple[int, float], psutil.Process] = {}
+        self.cpu_set: tuple[int, ...] | None = None
+        self.affinity: dict[str, Any] = {"status": "not_requested", "cpus": None}
+
+    def request_affinity(self, cpus: tuple[int, ...]) -> None:
+        """Pin the tree to ``cpus`` (applied at launch; the outcome is in :attr:`affinity`)."""
+        self.cpu_set = tuple(cpus)
+        self.affinity = {"status": "requested", "cpus": list(cpus), "method": None}
+
+    def _pin_after_launch(self, pid: int, method: str) -> None:
+        """Set the affinity of a launched (ideally still suspended) root process."""
+        if self.cpu_set is None:
+            return
+        try:
+            getattr(psutil.Process(pid), "cpu_affinity")(list(self.cpu_set))  # noqa: B009
+            self.affinity.update(status="applied", method=method)
+        except (AttributeError, psutil.Error, OSError, ValueError) as exc:
+            self.affinity.update(status="failed", method=method, error=str(exc))
+            self.warnings.append(f"CPU affinity not applied: {exc}")
+
+    def verify_affinity(self, pid: int) -> None:
+        """Record the affinity the OS reports for the root (if it is still running)."""
+        if self.cpu_set is None or self.affinity.get("status") != "applied":
+            return
+        try:
+            actual = sorted(getattr(psutil.Process(pid), "cpu_affinity")())  # noqa: B009
+        except (AttributeError, psutil.Error, OSError):
+            return
+        self.affinity["verified"] = actual == sorted(self.cpu_set)
+        if actual != sorted(self.cpu_set):
+            self.affinity["observed"] = actual
+            self.warnings.append(f"CPU affinity {actual} differs from requested {self.cpu_set}")
 
     def popen_kwargs(self) -> dict[str, Any]:
         """Extra keyword arguments for :class:`subprocess.Popen`."""
@@ -211,7 +242,29 @@ if sys.platform != "win32":
         strategy = "posix-session"
 
         def popen_kwargs(self) -> dict[str, Any]:
-            return {"start_new_session": True}
+            kwargs: dict[str, Any] = {"start_new_session": True}
+            if self.cpu_set is None:
+                return kwargs
+            if sys.platform == "linux":
+                cpus = set(self.cpu_set)
+
+                def pin() -> None:
+                    os.sched_setaffinity(0, cpus)
+
+                # Applied in the child before exec, so every descendant inherits it.
+                kwargs["preexec_fn"] = pin
+                self.affinity.update(status="applied", method="sched_setaffinity before exec")
+            else:
+                self.affinity.update(
+                    status="unsupported",
+                    method=None,
+                    error=f"no CPU affinity API on {sys.platform}",
+                )
+                self.warnings.append(
+                    f"CPU affinity is not supported on {sys.platform}; the thread budget is "
+                    "requested but not enforced"
+                )
+            return kwargs
 
         def reap(self, proc: subprocess.Popen[bytes]) -> ReapResult:
             _, status, usage = os.wait4(proc.pid, 0)
@@ -315,6 +368,12 @@ class PsutilTreeController(TreeController):
     """Fallback: terminate whatever a psutil snapshot can see."""
 
     strategy = "psutil-tree"
+
+    def after_launch(self, proc: subprocess.Popen[bytes]) -> None:
+        super().after_launch(proc)
+        self._pin_after_launch(
+            proc.pid, "set after launch (children started earlier are not pinned)"
+        )
 
     def reap(self, proc: subprocess.Popen[bytes]) -> ReapResult:
         returncode = proc.wait()
@@ -483,6 +542,8 @@ if sys.platform == "win32":
                         f"{_win_error('AssignProcessToJobObject')}; "
                         "falling back to psutil tree termination"
                     )
+                # Still suspended: children created later inherit the affinity.
+                self._pin_after_launch(proc.pid, "SetProcessAffinityMask while suspended")
                 status = _ntdll.NtResumeProcess(handle)
                 if status != 0:
                     raise LaunchSetupError(f"NtResumeProcess failed: NTSTATUS {status:#x}")

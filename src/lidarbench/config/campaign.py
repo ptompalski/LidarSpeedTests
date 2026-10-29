@@ -80,6 +80,7 @@ _WINDOWS_RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$", 
 
 VALIDATION_MODES = ("numerical", "performance-only")
 TOOL_ORDERS = ("balanced", "randomized")
+CPU_AFFINITY_MODES = ("pinned", "none")
 CACHE_POLICIES = ("uncontrolled-warm",)
 SCRATCH_RETENTION = ("never", "on-failure", "always")
 DEFAULT_SEED = 20261020
@@ -181,6 +182,7 @@ class SchedulingConfig:
     tool_order: str = "balanced"
     cooldown_s: float = 5.0
     cache_policy: str = "uncontrolled-warm"
+    cpu_affinity: str = "pinned"
 
     def to_record(self) -> dict[str, Any]:
         """JSON-ready representation, including the cache-policy statement."""
@@ -192,7 +194,34 @@ class SchedulingConfig:
             "cooldown_s": self.cooldown_s,
             "cache_policy": self.cache_policy,
             "cache_policy_description": CACHE_POLICY_DESCRIPTIONS[self.cache_policy],
+            "cpu_affinity": self.cpu_affinity,
             "execution": "sequential: one attempt at a time; parallelism only inside a tool",
+        }
+
+
+@dataclass(frozen=True)
+class ValidationConfig:
+    """How the runner validates outputs (``design/VALIDATION.md``)."""
+
+    suite: Path | None = None
+    """Workload contract suite directory; ``None`` = the checkout's default suite."""
+    accept_known_extent_discrepancies: bool = False
+    reuse_identical_outputs: bool = True
+
+    def suite_dir(self) -> Path:
+        """The effective suite directory."""
+        if self.suite is not None:
+            return self.suite
+        from lidarbench.workloads.contract import default_suite_dir
+
+        return default_suite_dir()
+
+    def to_record(self) -> dict[str, Any]:
+        """JSON-ready representation."""
+        return {
+            "suite": os.fspath(self.suite_dir()),
+            "accept_known_extent_discrepancies": self.accept_known_extent_discrepancies,
+            "reuse_identical_outputs": self.reuse_identical_outputs,
         }
 
 
@@ -364,6 +393,7 @@ class CampaignConfig:
     monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
     scratch: ScratchConfig = field(default_factory=ScratchConfig)
     integrity: IntegrityConfig = field(default_factory=IntegrityConfig)
+    validation: ValidationConfig = field(default_factory=ValidationConfig)
     validation_mode: str = "numerical"
     timeout_s: float | None = None
     description: str = ""
@@ -413,6 +443,7 @@ class CampaignConfig:
             "monitoring": self.monitoring.to_record(),
             "scratch": self.scratch.to_record(),
             "integrity": self.integrity.to_record(),
+            "validation": self.validation.to_record(),
             "datasets": [d.to_record() for d in self.datasets],
             "workloads": [w.to_record() for w in self.workloads],
             "tools": [t.to_record() for t in self.tools],
@@ -431,6 +462,7 @@ _TOP_KEYS = {
     "monitoring",
     "scratch",
     "integrity",
+    "validation",
     "data",
     "datasets",
     "workloads",
@@ -489,7 +521,15 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
     sched_raw = _table(
         top.get("scheduling", {}),
         "scheduling",
-        {"seed", "repetitions", "warmups", "tool_order", "cooldown_s", "cache_policy"},
+        {
+            "seed",
+            "repetitions",
+            "warmups",
+            "tool_order",
+            "cooldown_s",
+            "cache_policy",
+            "cpu_affinity",
+        },
     )
     scheduling = SchedulingConfig(
         seed=_int(sched_raw.get("seed", DEFAULT_SEED), "scheduling.seed", 0, MAX_SEED),
@@ -504,6 +544,9 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
             "scheduling.cache_policy",
             CACHE_POLICIES,
             "; cold-cache control is not implemented, so no cold-cache policy can be claimed",
+        ),
+        cpu_affinity=_choice(
+            sched_raw.get("cpu_affinity", "pinned"), "scheduling.cpu_affinity", CPU_AFFINITY_MODES
         ),
     )
 
@@ -543,6 +586,22 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
         ),
         verify_inputs_at_end=_bool(
             integ_raw.get("verify_inputs_at_end", True), "integrity.verify_inputs_at_end"
+        ),
+    )
+
+    val_raw = _table(
+        top.get("validation", {}),
+        "validation",
+        {"suite", "accept_known_extent_discrepancies", "reuse_identical_outputs"},
+    )
+    validation = ValidationConfig(
+        suite=_path(val_raw["suite"], "validation.suite", base_dir) if "suite" in val_raw else None,
+        accept_known_extent_discrepancies=_bool(
+            val_raw.get("accept_known_extent_discrepancies", False),
+            "validation.accept_known_extent_discrepancies",
+        ),
+        reuse_identical_outputs=_bool(
+            val_raw.get("reuse_identical_outputs", True), "validation.reuse_identical_outputs"
         ),
     )
 
@@ -666,6 +725,7 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
         monitoring=monitoring,
         scratch=scratch,
         integrity=integrity,
+        validation=validation,
         validation_mode=validation_mode,
         timeout_s=timeout_s,
         description=description,

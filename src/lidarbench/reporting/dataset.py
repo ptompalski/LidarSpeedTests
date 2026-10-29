@@ -254,6 +254,10 @@ SUMMARY_COLUMNS = (
     "tree_cpu_seconds_mean",
     "tree_cpu_seconds_sd",
     "tree_cpu_seconds_is_lower_bound",
+    "process_cpu_seconds_mean",
+    "process_cpu_seconds_sd",
+    "measured_parallelism_mean",
+    "n_cpu_budget_exceeded",
     "tree_peak_rss_bytes_mean",
     "tree_peak_rss_bytes_max",
     "machine_cpu_percent_mean",
@@ -275,6 +279,9 @@ REPETITION_COLUMNS = (
     "startup_overhead_s",
     "monitoring_status",
     "tree_cpu_seconds",
+    "process_cpu_seconds",
+    "measured_parallelism",
+    "cpu_budget_exceeded",
     "tree_peak_rss_bytes",
     "machine_cpu_percent_mean",
     "machine_memory_used_peak_bytes",
@@ -443,6 +450,7 @@ ISSUE_KINDS = {
     "missing_timing": "succeeded but no timing recorded",
     "monitoring_partial": "monitoring covered only part of the timed interval",
     "monitoring_missing": "no resource measurements for an included attempt",
+    "cpu_budget_exceeded": "measured CPU time exceeds the configured CPU budget",
 }
 
 
@@ -787,6 +795,9 @@ class _Builder:
                     startup_overhead_s=_ns_to_s(r["startup_overhead_ns"]),
                     monitoring_status=r["monitoring_status"],
                     tree_cpu_seconds=r["tree_cpu_seconds"],
+                    process_cpu_seconds=r["process_cpu_seconds"],
+                    measured_parallelism=r["measured_parallelism"],
+                    cpu_budget_exceeded=r["cpu_budget_exceeded"],
                     tree_peak_rss_bytes=r["tree_peak_rss_bytes"],
                     machine_cpu_percent_mean=r["machine_cpu_percent_mean"],
                     machine_memory_used_peak_bytes=r["machine_memory_used_peak_bytes"],
@@ -801,6 +812,7 @@ class _Builder:
             timing = describe(r["elapsed_s"] for r in included)
             monitored = [r for r in included if r["monitoring_status"] == "available"]
             cpu = describe(r["tree_cpu_seconds"] for r in monitored)
+            exact_cpu = describe(r["process_cpu_seconds"] for r in included)
             machine_cpu = describe(r["machine_cpu_percent_mean"] for r in monitored)
             rss = [r["tree_peak_rss_bytes"] for r in monitored]
             evidence = _weakest(tiers)
@@ -889,6 +901,10 @@ class _Builder:
                     if monitored
                     else None
                 ),
+                process_cpu_seconds_mean=exact_cpu["mean"],
+                process_cpu_seconds_sd=exact_cpu["sd"],
+                measured_parallelism_mean=mean_or_none(r["measured_parallelism"] for r in included),
+                n_cpu_budget_exceeded=sum(1 for r in included if r["cpu_budget_exceeded"]),
                 tree_peak_rss_bytes_mean=mean_or_none(rss),
                 tree_peak_rss_bytes_max=max_or_none(rss),
                 machine_cpu_percent_mean=machine_cpu["mean"],
@@ -1162,6 +1178,14 @@ class _Builder:
                 else "monitoring_missing"
             )
             out.append((kind, f"monitoring_status={row['monitoring_status']}"))
+        if row["report_included"] and row["cpu_budget_exceeded"]:
+            out.append(
+                (
+                    "cpu_budget_exceeded",
+                    f"{row['process_cpu_seconds']:.3f} CPU-s in {row['elapsed_s']:.3f} s "
+                    f"(parallelism {row['measured_parallelism']:.2f} > {row['cpus']} CPUs)",
+                )
+            )
         return out
 
     # descriptive tables -----------------------------------------------------------

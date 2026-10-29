@@ -76,6 +76,7 @@ from lidarbench.campaign.store import (
     campaign_dir,
     timestamp,
 )
+from lidarbench.campaign.validation import AttemptValidation, CampaignValidator
 from lidarbench.config.campaign import (
     CACHE_POLICY_DESCRIPTIONS,
     CampaignConfig,
@@ -107,6 +108,7 @@ from lidarbench.core.scratch import (
 from lidarbench.core.store import iter_files, new_sortable_id, publish_json
 from lidarbench.execution.adapters.base import Invocation
 from lidarbench.execution.adapters.registry import AdapterRegistry
+from lidarbench.execution.affinity import select_cpus
 from lidarbench.execution.attempt import AttemptExecution, execute_plan
 from lidarbench.execution.plan import AdapterContractError, InvocationPlan, plan_invocation
 from lidarbench.execution.process import (
@@ -120,8 +122,9 @@ from lidarbench.monitoring.base import MonitorBackend
 
 MONITOR_ENTRY_POINT_GROUP = "lidarbench.monitors"
 NUMERICAL_NOTE = (
-    "Execution success does not imply numerical validity. No structural or numerical "
-    "validator has produced a verdict for this attempt."
+    "Execution success does not imply numerical validity. Structural and numerical "
+    "verdicts come only from the attempt's validation report (validation/report.json), "
+    "when one was produced."
 )
 
 
@@ -461,6 +464,8 @@ class CampaignRunner:
         self._report = report or (lambda line: print(line, file=sys.stderr, flush=True))
         self._handle_signals = handle_signals
         self._warnings: list[str] = []
+        self._validator: CampaignValidator | None = None
+        self._cpu_sets: dict[int, tuple[tuple[int, ...] | None, str]] = {}
         self._protected: list[Path] | None = None
         self.store = CampaignStore(campaign_dir(config.workspace, config.campaign_id))
 
@@ -756,17 +761,27 @@ class CampaignRunner:
                     entry_key=info.entry_key,
                 )
                 self._warn(f"attempt {info.attempt_id} ({info.entry_key}) was incomplete")
+        published = store.attempts()
+        retained = {
+            info.attempt_id
+            for info in published
+            if ((info.result or {}).get("scratch") or {}).get("retained")
+        }
         for root in cfg.scratch.roots.values():
             for orphan in find_owned_scratch(root, cfg.campaign_id):
+                if orphan.get("attempt_id") in retained:
+                    store.log("retained_scratch", run_id=run_id, **orphan)
+                    continue
                 store.log("orphan_scratch", run_id=run_id, **orphan)
                 self._warn(
                     f"orphaned run-owned scratch {orphan['path']} (attempt "
                     f"{orphan['attempt_id']}); not deleted automatically"
                 )
+        self._validator = CampaignValidator(cfg, identity, published)
 
         summary.decisions = decide(
             store.schedule,
-            store.attempts(),
+            published,
             self.options.selection,
             self.options.retry_failed,
         )
@@ -911,9 +926,22 @@ class CampaignRunner:
                     state.warnings.append("inputs changed during the attempt: " + "; ".join(after))
                     state.stop_reason = "inputs_changed"
                 state.outputs = self._inventory(scratch.output_dir)
+                self._validate(state, attempt_id, attempt_dir, entry, workload, tool, scratch)
+                if not after:
+                    late = guard.input_problems(dataset.id)
+                    if late:
+                        state.input_check_after = late
+                        state.warnings.append(
+                            "inputs changed during validation: " + "; ".join(late)
+                        )
+                        state.stop_reason = "inputs_changed"
         finally:
             if scratch is not None:
-                state.scratch = self._dispose_scratch(scratch, state.status)
+                state.scratch = self._dispose_scratch(
+                    scratch,
+                    state.status,
+                    state.validation is not None and state.validation.failed,
+                )
         result = self._result(run_id, decision, started, workload, tool, attempt_dir, state)
         result_sha = store.seal_attempt(attempt_dir, result)
         store.log(
@@ -975,7 +1003,7 @@ class CampaignRunner:
                 cancel=self.cancel,
                 monitor_backend=backend,
                 monitor_required=cfg.monitoring.required,
-                thread_budget=ThreadBudget(entry.cpus, state.threading_model),
+                thread_budget=self._budget(entry.cpus, state.threading_model),
                 adapter=tool.adapter,
             )
         except ExecutionInterrupted as exc:
@@ -993,6 +1021,51 @@ class CampaignRunner:
         if state.status == "interrupted":
             state.stop_reason = "interrupted"
 
+    def _budget(self, cpus: int, threading_model: str | None) -> ThreadBudget:
+        """The attempt's thread budget, pinned to CPUs when ``cpu_affinity = "pinned"``."""
+        if self.config.scheduling.cpu_affinity != "pinned":
+            return ThreadBudget(cpus, threading_model, None, "cpu_affinity = none")
+        if cpus not in self._cpu_sets:
+            self._cpu_sets[cpus] = select_cpus(cpus)
+        cpu_set, detail = self._cpu_sets[cpus]
+        return ThreadBudget(cpus, threading_model, cpu_set, detail)
+
+    def _validate(
+        self,
+        state: _AttemptState,
+        attempt_id: str,
+        attempt_dir: Path,
+        entry: ScheduleEntry,
+        workload: WorkloadConfig,
+        tool: ResolvedTool,
+        scratch: ScratchDir,
+    ) -> None:
+        """Validate the outputs before scratch disposal (untimed; never fails the run)."""
+        if self._validator is None or state.status != "succeeded":
+            return
+        self._report("    validating outputs (untimed)")
+        try:
+            state.validation = self._validator.validate(
+                attempt_id=attempt_id,
+                attempt_dir=attempt_dir,
+                workload=workload,
+                tool=tool,
+                dataset_id=entry.dataset,
+                output_dir=scratch.output_dir,
+                execution_status=state.status,
+                outputs=state.outputs,
+            )
+        except Exception as exc:
+            reason = f"validation error: {type(exc).__name__}: {exc}"
+            state.validation_error = reason
+            state.warnings.append(reason)
+            self._warn(f"{entry.entry_key}: {reason}")
+            return
+        if state.validation is not None and state.validation.summary.get("outcome"):
+            s = state.validation.summary
+            reused = f", reused from {s['reused_from']}" if s.get("reused_from") else ""
+            self._report(f"    -> validation {s['outcome']}{reused}")
+
     def _inventory(self, output_dir: Path) -> list[dict[str, Any]]:
         if not output_dir.is_dir():
             return []
@@ -1009,12 +1082,16 @@ class CampaignRunner:
             )
         return items
 
-    def _dispose_scratch(self, scratch: ScratchDir, status: str) -> dict[str, Any]:
+    def _dispose_scratch(
+        self, scratch: ScratchDir, status: str, validation_failed: bool = False
+    ) -> dict[str, Any]:
         retain = self.config.scratch.retain
         keep = retain == "always" or (
             retain == "on-failure"
-            and status not in ("succeeded",)
-            and not status.startswith("skipped")
+            and (
+                validation_failed
+                or (status not in ("succeeded",) and not status.startswith("skipped"))
+            )
         )
         if keep:
             release_ownership(scratch)
@@ -1055,6 +1132,13 @@ class CampaignRunner:
             monitoring_status = "not_run"
         plan = state.plan
         numerical = "unverified" if cfg.validation_mode == "performance-only" else "not_run"
+        statuses = {"structural_status": "not_run", "numerical_status": numerical}
+        validation: dict[str, Any] | None = None
+        if state.validation is not None:
+            validation = state.validation.summary
+            statuses.update(state.validation.statuses)
+        elif state.validation_error is not None:
+            validation = {"outcome": None, "report": None, "error": state.validation_error}
         return {
             "schema": RESULT_SCHEMA,
             "campaign_id": self.store.campaign_id,
@@ -1083,11 +1167,22 @@ class CampaignRunner:
             "timing": timing,
             "tool_timing": state.execution.tool_timing if state.execution else None,
             "monitoring_status": monitoring_status,
-            "structural_status": "not_run",
-            "numerical_status": numerical,
+            "artifacts_status": statuses.get("artifacts_status", "not_run"),
+            "structural_status": statuses["structural_status"],
+            "numerical_status": statuses["numerical_status"],
             "validation_mode": cfg.validation_mode,
+            "validation": validation,
             "validation_note": NUMERICAL_NOTE,
-            "threads": {"requested": decision.entry.cpus, "threading_model": state.threading_model},
+            "threads": {
+                "requested": decision.entry.cpus,
+                "threading_model": state.threading_model,
+                "cpu_affinity": cfg.scheduling.cpu_affinity,
+                "pinned_cpus": (
+                    list(process.cpu_affinity.get("cpus") or [])
+                    if process is not None and process.cpu_affinity.get("status") == "applied"
+                    else None
+                ),
+            },
             "execution_policy": "sequential; one attempt at a time on this machine",
             "cache_policy": cfg.scheduling.cache_policy,
             "cache_policy_description": CACHE_POLICY_DESCRIPTIONS[cfg.scheduling.cache_policy],
@@ -1120,6 +1215,8 @@ class _AttemptState:
     scratch: dict[str, Any] | None = None
     input_check_after: Any = None
     stop_reason: str | None = None
+    validation: AttemptValidation | None = None
+    validation_error: str | None = None
 
     def fail(self, phase: str, reason: str) -> None:
         self.status, self.failure_phase, self.failure_reason = "failed", phase, reason

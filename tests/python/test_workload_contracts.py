@@ -27,7 +27,7 @@ def _data(name: str = "pixel_metrics_1a") -> dict:
 
 def test_suite_defines_the_two_initial_workloads():
     suite = load_suite(SUITE)
-    assert suite.name == "workloads-v2"
+    assert suite.name == "workloads-v3"
     assert sorted(suite.contracts) == ["generate_DSM1", "pixel_metrics_1a"]
     mean = suite.get("pixel_metrics_1a")
     assert (mean.statistic, mean.raster.resolution, mean.raster.bands) == (
@@ -167,3 +167,18 @@ def test_suite_errors(tmp_path: Path):
         load_contract(bad)
     with pytest.raises(ContractError, match="defines no contract"):
         load_suite(SUITE).get("normalization")
+
+
+def test_v3_differs_from_v2_only_by_tfw_sidecars():
+    """workloads-v3 = workloads-v2 + LAStools ``.tfw`` world files as ignored sidecars."""
+    v2 = load_suite(default_suite_dir("workloads-v2"))
+    v3 = load_suite(default_suite_dir("workloads-v3"))
+    assert sorted(v2.contracts) == sorted(v3.contracts)
+    for workload_id, old in v2.contracts.items():
+        new = v3.get(workload_id)
+        assert new.ignored_sidecars == (*old.ignored_sidecars, "*.tfw")
+        assert new.equivalence_group == f"workloads-v3/{workload_id}"
+        assert new.implementations == old.implementations
+        assert new.raster == old.raster and new.tolerance == old.tolerance
+        assert new.digest != old.digest
+        assert new.is_ignored_sidecar("298000_5093000_avg.tfw")

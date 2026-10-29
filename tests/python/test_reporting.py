@@ -176,7 +176,7 @@ def test_environment_tools_datasets_and_declared_labels(campaign: Path):
     assert tools["synth-b"]["adapter"] == "synthetic" and tools["scripted"]["version"] == "1.0"
     assert dataset.table("datasets").rows[0]["input_count"] == 2
     assert len(dataset.table("implementations").rows) == 9
-    assert dataset.campaign and dataset.campaign["workload_suite"]["name"] == "workloads-v2"
+    assert dataset.campaign and dataset.campaign["workload_suite"]["name"] == "workloads-v3"
     # Synthetic workloads have no contract in the suite: no declared label is invented.
     assert all(r["declared_comparability"] is None for r in dataset.table("summary").rows)
 

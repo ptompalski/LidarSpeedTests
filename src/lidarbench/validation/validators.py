@@ -10,6 +10,7 @@ validators without changing the pipeline.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from importlib.metadata import entry_points
@@ -71,12 +72,106 @@ class ReferenceValidator(Protocol):
         ...
 
 
+class ReferenceCache:
+    """Byte-bounded LRU of per-tile references, shared across validations.
+
+    A reference is a deterministic function of the contract (statistic, grid
+    rules), the cell convention, the expected grid and the exact bytes of every
+    contributing input file, so it is keyed by those and reused across attempts,
+    repetitions, CPU counts and tools that share a convention.
+    """
+
+    def __init__(self, max_bytes: int = 1 << 30) -> None:
+        self.max_bytes = max_bytes
+        self._items: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
+        self._sizes: dict[tuple[Any, ...], int] = {}
+        self.bytes = 0
+        self.hits = 0
+        self.misses = 0
+
+    def get(self, key: tuple[Any, ...]) -> Any:
+        """Cached value or ``None``."""
+        if key in self._items:
+            self._items.move_to_end(key)
+            self.hits += 1
+            return self._items[key]
+        self.misses += 1
+        return None
+
+    def put(self, key: tuple[Any, ...], value: Any, nbytes: int) -> None:
+        """Insert ``value`` and evict least recently used entries above the budget."""
+        if nbytes > self.max_bytes:
+            return
+        if key in self._items:
+            self.bytes -= self._sizes.pop(key)
+            del self._items[key]
+        self._items[key] = value
+        self._sizes[key] = nbytes
+        self.bytes += nbytes
+        while self.bytes > self.max_bytes and self._items:
+            old, _ = self._items.popitem(last=False)
+            self.bytes -= self._sizes.pop(old)
+
+
+@dataclass
+class TileReference:
+    """References of one tile population under several cell conventions."""
+
+    population_points: int
+    population_sources: tuple[str, ...]
+    references: dict[str, Any]
+    owned_points: dict[str, int]
+    boundaries: dict[str, int]
+    """Points owned by a different cell than under the contract convention, per convention."""
+
+    @property
+    def nbytes(self) -> int:
+        """Approximate memory use."""
+        return sum(int(r.nbytes) for r in self.references.values())
+
+
+def tile_reference(
+    population: Any, grid: Any, contract: WorkloadContract, conventions: Iterable[str]
+) -> TileReference:
+    """Compute the contract-convention reference plus one per extra declared convention."""
+    from lidarbench.validation.grid import assign_cells, ownership_differences
+    from lidarbench.validation.reference import cell_statistic
+
+    base = contract.raster.cell_ownership
+    contract_cells = assign_cells(population.x, population.y, grid, base)
+    out = TileReference(
+        population.count,
+        tuple(population.sources),
+        {base: cell_statistic(population.z, contract_cells, grid, contract.statistic)},
+        {base: int((contract_cells >= 0).sum())},
+        {base: 0},
+    )
+    for convention in sorted(set(conventions) - {base}):
+        cells = assign_cells(population.x, population.y, grid, convention)
+        out.references[convention] = cell_statistic(population.z, cells, grid, contract.statistic)
+        out.owned_points[convention] = int((cells >= 0).sum())
+        out.boundaries[convention] = ownership_differences(cells, contract_cells)
+    return out
+
+
+def declared_conventions(contract: WorkloadContract) -> set[str]:
+    """Every declared cell convention of the contract and its implementations."""
+    found = {contract.raster.cell_ownership}
+    found.update(
+        impl.cell_ownership for impl in contract.implementations.values() if impl.ownership_declared
+    )
+    return found
+
+
 class CellStatisticValidator:
     """Independent per-cell mean/max of original Z on the contract grid."""
 
     name = "cell-statistic"
     version = "1"
     level = "numerical"
+
+    def __init__(self, cache: ReferenceCache | None = None) -> None:
+        self.cache = cache
 
     def applicable(self, contract: WorkloadContract) -> bool:
         """Contracts with ``reference.method = "cell_statistic"``."""
@@ -101,31 +196,37 @@ class CellStatisticValidator:
         """See :class:`ReferenceValidator`."""
         import numpy as np
 
-        from lidarbench.validation.grid import assign_cells, ownership_differences
         from lidarbench.validation.population import InputError
-        from lidarbench.validation.reference import cell_statistic, compare_band
+        from lidarbench.validation.reference import compare_band
 
         grid = structure.expected_grid
+        declared = implementation.ownership_declared
+        base = contract.raster.cell_ownership
+        convention = implementation.cell_ownership if declared else base
         try:
-            population = loader.population(artifact.tile)
+            entry: TileReference | None = None
+            key: tuple[Any, ...] | None = None
+            if self.cache is not None:
+                key = (
+                    contract.digest,
+                    (grid.resolution, grid.col0, grid.row0, grid.ncols, grid.nrows),
+                    loader.population_key(artifact.tile),
+                )
+                entry = self.cache.get(key)
+            cache_state = "disabled" if self.cache is None else "hit"
+            if entry is None:
+                population = loader.population(artifact.tile)
+                wanted = declared_conventions(contract) if self.cache else {base, convention}
+                entry = tile_reference(population, grid, contract, wanted)
+                if self.cache is not None and key is not None:
+                    self.cache.put(key, entry, entry.nbytes)
+                    cache_state = "miss"
         except InputError as exc:
             return ArtifactNumerical(Status.FAILED, [f"input cannot support a reference: {exc}"])
         statistic = contract.statistic
-        contract_cells = assign_cells(
-            population.x, population.y, grid, contract.raster.cell_ownership
-        )
-        contract_ref = cell_statistic(population.z, contract_cells, grid, statistic)
-        declared = implementation.ownership_declared
-        boundary: int | None = None
-        reference = contract_ref
-        if declared and implementation.cell_ownership != contract.raster.cell_ownership:
-            tool_cells = assign_cells(
-                population.x, population.y, grid, implementation.cell_ownership
-            )
-            boundary = ownership_differences(tool_cells, contract_cells)
-            reference = cell_statistic(population.z, tool_cells, grid, statistic)
-        elif declared:
-            boundary = 0
+        contract_ref = entry.references[base]
+        reference = entry.references[convention]
+        boundary: int | None = entry.boundaries[convention] if declared else None
 
         dtype = np.dtype(raster.dtypes[0])
         nodata = raster.nodata[0]
@@ -142,12 +243,11 @@ class CellStatisticValidator:
                 "method": f"{self.name}/{self.version}",
                 "statistic": statistic,
                 "accumulation": "float64",
-                "convention": (
-                    implementation.cell_ownership if declared else (contract.raster.cell_ownership)
-                ),
-                "population_points": population.count,
-                "population_sources": list(population.sources),
-                "owned_points": int((contract_cells >= 0).sum()),
+                "convention": convention,
+                "population_points": entry.population_points,
+                "population_sources": list(entry.population_sources),
+                "owned_points": entry.owned_points[base],
+                "cache": cache_state,
             },
             "tolerance": {
                 "absolute": contract.tolerance.absolute,

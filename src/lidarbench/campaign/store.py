@@ -341,6 +341,11 @@ class CampaignStore:
         abandoned = self._read_optional(path / ABANDONED)
         if not (path / COMPLETED).exists():
             state = "abandoned" if abandoned is not None else "incomplete"
+            for rel, sha in ((abandoned or {}).get("files_sha256") or {}).items():
+                if sha is not None and self._sha_or_none(path / rel) != sha:
+                    raise CampaignIntegrityError(
+                        f"{path}: abandoned attempt file {rel} changed after its tombstone"
+                    )
             return AttemptInfo(attempt_id, path, state, started, None, abandoned)
         if started is None:
             raise CampaignIntegrityError(f"{path}: receipt without {STARTED}")
@@ -414,7 +419,23 @@ class CampaignStore:
         return path
 
     def tombstone(self, info: AttemptInfo, run_id: str, reason: str) -> dict[str, Any]:
-        """Write ``abandoned.json`` into an incomplete attempt (never edits other files)."""
+        """Write ``abandoned.json`` into an incomplete attempt.
+
+        The tombstone records the SHA-256 of every file the attempt left, and those
+        files are then made read-only like other published records. Their content
+        is never changed.
+        """
+        files = sorted(
+            p.relative_to(info.path).as_posix()
+            for p in iter_files(info.path)
+            if PENDING_MARKER not in p.name
+        )
+        digests: dict[str, str | None] = {}
+        for rel in files:
+            try:
+                digests[rel] = sha256_file(info.path / rel)
+            except OSError:
+                digests[rel] = None
         record = {
             "schema": ABANDONED_SCHEMA,
             "attempt_id": info.attempt_id,
@@ -424,14 +445,17 @@ class CampaignStore:
             "reason": reason,
             "detected_at": timestamp(),
             "detected_by_run": run_id,
-            "files_present": sorted(
-                p.relative_to(info.path).as_posix()
-                for p in iter_files(info.path)
-                if PENDING_MARKER not in p.name
-            ),
+            "files_present": files,
+            "files_sha256": digests,
         }
         publish_json(info.path / ABANDONED, record)
         make_read_only(info.path / ABANDONED)
+        for rel, sha in digests.items():
+            if sha is not None:
+                try:
+                    make_read_only(info.path / rel)
+                except OSError:
+                    pass
         return record
 
     @staticmethod

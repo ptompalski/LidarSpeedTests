@@ -41,6 +41,7 @@ import psutil
 
 from lidarbench.core.clock import Instant, now
 from lidarbench.execution.adapters.base import THREAD_CAP_VARIABLES, CommandSpec
+from lidarbench.execution.guardian import Guardian, shared_guardian
 from lidarbench.execution.plan import validate_command_spec
 from lidarbench.execution.process_tree import (
     LaunchSetupError,
@@ -188,14 +189,25 @@ def cancel_on_signals(token: CancellationToken) -> Iterator[CancellationToken]:
 
 @dataclass(frozen=True)
 class ThreadBudget:
-    """The *configured* thread budget of an attempt (not measured utilisation)."""
+    """The configured thread budget of an attempt and, optionally, its enforcement.
+
+    ``cpu_set`` lists the logical CPUs the whole process tree is pinned to (the
+    budget is then enforced by the OS); ``None`` means the budget is only
+    requested through the tool's options and thread environment variables.
+    """
 
     requested_threads: int
     threading_model: str | None = None
+    cpu_set: tuple[int, ...] | None = None
+    cpu_set_detail: str = ""
 
     def __post_init__(self) -> None:
         if self.requested_threads < 1:
             raise ValueError("requested_threads must be >= 1")
+        if self.cpu_set is not None and (
+            not self.cpu_set or len(set(self.cpu_set)) != len(self.cpu_set)
+        ):
+            raise ValueError("cpu_set must list distinct CPUs")
 
 
 @dataclass(frozen=True)
@@ -243,8 +255,10 @@ def environment_record(
         "thread_budget": {
             "requested_threads": budget.requested_threads if budget else None,
             "threading_model": budget.threading_model if budget else None,
-            "semantics": "configured request only; measured CPU use is in monitoring and "
-            "accounting",
+            "cpu_set": list(budget.cpu_set) if budget and budget.cpu_set else None,
+            "cpu_set_detail": budget.cpu_set_detail if budget else "",
+            "semantics": "configured request; enforced by CPU affinity when cpu_set is given "
+            "(see cpu_affinity); measured CPU use is in monitoring and accounting",
         },
         "host": {
             "logical_cpus": psutil.cpu_count(logical=True),
@@ -281,6 +295,7 @@ class ProcessResult:
     process_group: Mapping[str, Any] = field(default_factory=dict)
     accounting: Mapping[str, Any] | None = None
     monitoring: Mapping[str, Any] = field(default_factory=dict)
+    cpu_affinity: Mapping[str, Any] = field(default_factory=dict)
     execution_mode: str = EXECUTION_MODE_FRESH_PROCESS
     timing_boundary: str = TIMING_BOUNDARY_PROCESS
 
@@ -382,6 +397,7 @@ class ProcessResult:
             "cleanup_complete": self.cleanup_complete,
             "process_group": dict(self.process_group),
             "process_accounting": dict(self.accounting) if self.accounting else None,
+            "cpu_affinity": dict(self.cpu_affinity),
             "environment": dict(self.environment),
             "monitoring": dict(self.monitoring),
         }
@@ -481,6 +497,8 @@ def run_process(
     environment = environment_record(command.env, child_env, thread_budget)
     state = _Run()
     controller = controller_factory()
+    if thread_budget is not None and thread_budget.cpu_set:
+        controller.request_affinity(thread_budget.cpu_set)
     state.warnings.extend(controller.warnings)
     accounting: Mapping[str, Any] | None = None
     try:
@@ -531,6 +549,7 @@ def run_process(
         process_group=controller.details(),
         accounting=accounting,
         monitoring=monitoring,
+        cpu_affinity=dict(controller.affinity),
     )
     if state.interrupted is not None:
         raise ExecutionInterrupted(result) from state.interrupted
@@ -589,6 +608,7 @@ def _supervise(
         state.warnings.append("cancelled before launch; no process was started")
         return
 
+    guardian = _guardian_for(controller, state)
     state.start = now()
     try:
         proc = subprocess.Popen(
@@ -629,8 +649,11 @@ def _supervise(
         except LaunchSetupError as exc:
             state.exceptions.append(ExceptionRecord.from_exception("tree-setup", exc))
             state.stop_reason = "tree control setup failed"
+        if guardian is not None:
+            _guard(state, lambda: guardian.watch(proc.pid))
         reaper_thread = threading.Thread(target=reaper, name="lidarbench-reaper", daemon=True)
         reaper_thread.start()
+        controller.verify_affinity(proc.pid)
         if monitor is not None and state.stop_reason is None:
             monitor.attach(proc.pid, state.start)
         if state.stop_reason is None:
@@ -654,6 +677,26 @@ def _supervise(
     state.outcome = _classify(state, timeout_s)
     if state.outcome is ProcessOutcome.EXITED or state.termination is None:
         _shielded(state, lambda: _clean_leftovers(state, controller, reaped))
+    if guardian is not None:
+        _guard(state, lambda: guardian.release(proc.pid))
+
+
+def _guardian_for(controller: TreeController, state: _Run) -> Guardian | None:
+    """The supervisor-death guardian for POSIX session trees (``None`` elsewhere)."""
+    if controller.strategy != "posix-session":
+        return None
+    try:
+        return shared_guardian()
+    except OSError as exc:
+        state.warnings.append(f"supervisor-death guardian unavailable: {exc}")
+        return None
+
+
+def _guard(state: _Run, action: Callable[[], None]) -> None:
+    try:
+        action()
+    except OSError as exc:
+        state.warnings.append(f"supervisor-death guardian failed: {exc}")
 
 
 def _stop_tree(

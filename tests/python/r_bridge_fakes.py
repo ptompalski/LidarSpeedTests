@@ -90,6 +90,10 @@ record = {
                                                  "OPENBLAS_NUM_THREADS")},
     "invocation_seen": invocation,
 }
+packages_loaded = time.time_ns()
+preload = ["sf", "terra"] + (["glue"] if invocation["tool"] == "lidR" else [])
+record["preloaded_namespaces"] = {name: "1.0" for name in preload}
+namespaces_preloaded = time.time_ns()
 time.sleep(0.02)
 start = time.time_ns()
 if mode != "error":
@@ -99,7 +103,10 @@ time.sleep(0.02)
 end = time.time_ns()
 record["timing_workload"] = {"start_wall_ns": start, "end_wall_ns": end,
                              "elapsed_s": (end - start) / 1e9}
+record["workload_loaded_namespaces"] = []
 record["timing"] = {"clock": "R Sys.time()", "bridge_start": bridge_start,
+                    "packages_loaded": packages_loaded,
+                    "namespaces_preloaded": namespaces_preloaded,
                     "bridge_end": time.time_ns()}
 status, code, phase, diagnostic, exit_code = "succeeded", 0, "complete", None, 0
 if mode == "warning":

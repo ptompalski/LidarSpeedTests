@@ -257,3 +257,42 @@ aggregated. CSV uses empty cells for null. Parquet needs the optional
   is set.
 - Verified on Linux; Windows and macOS are type-checked (`mypy --platform`) but
   not yet run in CI.
+
+## 10. Preflight (`lidarbench preflight`)
+
+Code: [`campaign/preflight.py`](../src/lidarbench/campaign/preflight.py)
+(closes PILOT_REVIEW.md D12).
+
+```sh
+lidarbench preflight CONFIG.toml            # grouped summary, one line per check
+lidarbench preflight CONFIG.toml --json     # lidarbench.preflight/1 record
+lidarbench preflight CONFIG.toml --hash     # also SHA-256 every input file
+```
+
+A read-only readiness check to run before `lidarbench run`. It never creates
+the campaign, workspace or scratch directories, never writes into the workspace
+or datasets, never takes a lock (locks are only inspected) and runs no
+benchmarked tool beyond the adapters' `probe()`/`identify()` (as `lidarbench
+check` does). Without `--hash` no input file is hashed, so it is fast.
+
+Every check is an item `{id, group, status, message, details}` with status
+`ok`, `warning`, `error` or `skipped`:
+
+| Group | Checks |
+|---|---|
+| `config` | the configuration parses (otherwise the only item, exit 1) |
+| `code` | git provenance; a dirty checkout warns for a new campaign (`run --allow-dirty` needed) |
+| `workspace` | exists and writable, or creatable; error if it overlaps a dataset |
+| `lock` | workspace and machine lock: active → error, stale/unverifiable → warning with the `lidarbench lock release` command |
+| `dataset` | directory and inputs (`input_files()`), total bytes; LAS/LAZ headers readable with points; writable inputs or directory → warning (use a read-only copy); with a `lasr` tool every LAS/LAZ input needs a nonempty sibling `.lax` (error); manifest datasets: sizes and header facts (`data verify` quick mode), full SHA-256 only with `--hash` |
+| `scratch` | the runner's guard (`validate_scratch_root` with the same protected paths); a missing root is an error with a `mkdir` hint; free space below max(1 GiB, 2 × inputs of the root) → warning |
+| `tool` | adapter resolved with its options; version, or unavailability (warning: its entries become recorded skips); unknown adapter/options → error |
+| `plan` | per tool × workload: `plan_invocation` for every dataset × CPU count with a dummy scratch path (as `run --dry-run`); `adapter_error` → error, `skipped_unavailable` → warning, only declared skips → skipped |
+| `campaign` | new, or existing: attempt records verified, completed measurement entries, incomplete attempts (warning: tombstoned by the next run). `campaign.identity` compares the cheap components (code, config, workloads, tools, environment, schedule) with the frozen ones, and `datasets` only with `--hash`; any difference is an error because `run` would refuse to resume |
+| `cpu` | every `cpu_counts` value ≤ CPUs available to the process (affinity mask on Linux, else `os.cpu_count()`); `cpu_affinity = "pinned"`: supported on Linux/Windows, warning on macOS; 1-min load average > 0.25 × logical CPUs or a 0.5 s CPU sample > 20 % → warning |
+| `memory` | total/available; below 2 GiB available → warning |
+| `monitoring` | configured backend loads and probes (as the runner does) |
+| `validation` | contract suite loads; per workload the contract and, per tool, its `contract_tool`, declared implementation and `declared_comparability()`; workloads without a contract are skipped (not validated); `validation_mode = "numerical"` probes the raster and point backends (missing → error) |
+| `reporting` | Quarto and Rscript discoverable (`$QUARTO`, `$LIDARBENCH_RSCRIPT`, `PATH`); missing → warning |
+
+Exit codes: `0` no error (warnings allowed), `1` at least one error, `2` usage.

@@ -1,4 +1,5 @@
-"""Command implementations for ``lidarbench run``, ``resume``, ``export``, ``lock``, ``scratch``."""
+"""Command implementations for ``lidarbench run``, ``resume``, ``preflight``, ``export``,
+``lock``, ``scratch``."""
 
 from __future__ import annotations
 
@@ -136,6 +137,34 @@ def run_command(
     else:
         _render_summary(summary, out)
     return summary.exit_code
+
+
+def preflight_command(
+    config_path: str,
+    *,
+    full_hash: bool = False,
+    as_json: bool = False,
+    out: TextIO | None = None,
+    err: TextIO | None = None,
+    **preflight_kwargs: Any,
+) -> int:
+    """Read-only readiness check of a campaign configuration.
+
+    Returns:
+        ``0`` when no check failed (warnings allowed), ``1`` otherwise.
+    """
+    from lidarbench.campaign.preflight import render_report, run_preflight
+
+    out = out or sys.stdout
+    err = err or sys.stderr
+    report = run_preflight(config_path, full_hash=full_hash, **preflight_kwargs)
+    if as_json:
+        out.write(json.dumps(report.to_record(), indent=2, sort_keys=True) + "\n")
+    else:
+        out.write(render_report(report))
+    if report.campaign_id is None:
+        err.write(f"Error: {report.items[0].message}\n")
+    return report.exit_code
 
 
 def export_command(

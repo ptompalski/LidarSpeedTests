@@ -85,6 +85,18 @@ lb_plot_repetitions <- function(reps, summary) {
   invisible(TRUE)
 }
 
+LB_TIMING_LABEL <- "Process wall time mean (s; outer fresh-process interval)"
+
+lb_relabel_legacy_plot <- function(f) {
+  # The legacy figure labels its axis "Workload time mean", which described the
+  # in-session R interval; lidarbench times the outer fresh process. Only the
+  # label string is replaced; the legacy drawing code is used unchanged.
+  text <- deparse(body(f), width.cutoff = 500L)
+  text <- gsub("Workload time mean (seconds)", LB_TIMING_LABEL, text, fixed = TRUE)
+  body(f) <- parse(text = text)[[1]]
+  f
+}
+
 lb_plot_mean_sd <- function(summary, file) {
   # Reuses the legacy campaign figure (R/reporting.R) when it was staged.
   data <- summary[is.finite(summary$mean_seconds), , drop = FALSE]
@@ -93,13 +105,15 @@ lb_plot_mean_sd <- function(summary, file) {
   if (!file.exists("R/reporting.R")) return(invisible(FALSE))
   env <- new.env()
   sys.source("R/reporting.R", env)
+  plot_fn <- lb_relabel_legacy_plot(env$benchmark_report_plot)
   data$task_id <- data$workload
   data$run_id <- paste0(data$dataset, " / ", data$cpus, " CPU")
   dir.create("figures", showWarnings = FALSE)
   path <- file.path("figures", file)
-  if (isTRUE(env$benchmark_report_plot(data, "timing", path))) {
-    cat("![Mean ± sample SD of included repetitions (legacy campaign figure)](", path, ")\n\n",
-        sep = "")
+  if (isTRUE(plot_fn(data, "timing", path))) {
+    cat("![Mean ± sample SD of the outer fresh-process time (timing_boundary = process) ",
+        "of included repetitions; tool-reported inner times are in the tables ",
+        "(legacy campaign figure)](", path, ")\n\n", sep = "")
   }
   invisible(TRUE)
 }
@@ -131,7 +145,8 @@ lb_plot_resources <- function(reps) {
   data$unit <- lb_unit_label(data)
   data$panel <- paste(data$workload, data$dataset, sep = " · ")
   data$peak_rss_gib <- data$tree_peak_rss_bytes / 1024^3
-  for (spec in list(c("tree_cpu_seconds", "Process-tree CPU time per repetition (s)"),
+  for (spec in list(c("process_cpu_seconds",
+                      "CPU time per repetition (s; max of OS rusage and sampled tree)"),
                     c("peak_rss_gib", "Process-tree peak RSS per repetition (GiB)"))) {
     values <- data[is.finite(data[[spec[1]]]), , drop = FALSE]
     if (!nrow(values)) next

@@ -112,3 +112,25 @@ def test_pilot_example_config_is_valid():
     assert (config.scheduling.warmups, config.scheduling.repetitions) == (1, 3)
     assert config.scheduling.tool_order == "balanced"
     assert config.validation_mode == "performance-only"
+
+
+def test_validation_table_and_cpu_affinity(base):
+    config = load_config(
+        write_config(
+            base,
+            extra='[validation]\nsuite = "suites/v9"\naccept_known_extent_discrepancies = true\n'
+            "reuse_identical_outputs = false",
+        )
+    )
+    assert config.validation.suite == base / "suites" / "v9"
+    assert config.validation.accept_known_extent_discrepancies is True
+    assert config.validation.reuse_identical_outputs is False
+    assert config.scheduling.cpu_affinity == "pinned"
+    assert config.to_record()["validation"]["suite"].endswith("v9")
+    for kwargs, key in (
+        ({"extra": "[validation]\nunknown = 1"}, "validation"),
+        ({"extra": '[validation]\naccept_known_extent_discrepancies = "yes"'}, "validation.accept"),
+        ({"scheduling": 'cpu_affinity = "all"'}, "scheduling.cpu_affinity"),
+    ):
+        with pytest.raises(ConfigError, match=key):
+            load_config(write_config(base, **kwargs))

@@ -319,6 +319,10 @@ class TestInterruptionAndRetry:
         after = tree_digest(incomplete[0])
         after.pop("abandoned.json")
         assert after == snapshot
+        assert tomb["files_sha256"] == {
+            rel: sha for rel, sha in snapshot.items() if rel in tomb["files_present"]
+        }
+        assert all(not os.access(incomplete[0] / rel, os.W_OK) for rel in tomb["files_sha256"])
         rows = collect_rows(path)
         states = sorted((r["record_state"], r["execution_status"], r["superseded"]) for r in rows)
         assert states == [
@@ -326,6 +330,12 @@ class TestInterruptionAndRetry:
             ("completed", "succeeded", False),
             ("completed", "succeeded", False),
         ]
+        # Tampering with an abandoned attempt after its tombstone is detected.
+        victim = incomplete[0] / "started.json"
+        victim.chmod(0o644)
+        victim.write_text(victim.read_text(encoding="utf-8") + " ", encoding="utf-8")
+        with pytest.raises(CampaignIntegrityError, match="changed after its tombstone"):
+            collect_rows(path)
 
     def test_failures_and_timeouts_need_explicit_retry(self, base):
         config = write_config(
@@ -474,3 +484,41 @@ def test_monitored_run_records_monitoring(base):
     assert any(name.startswith("monitor/") for name in result["files"])
     row = collect_rows(summary.campaign_path)[0]
     assert row["machine_memory_used_peak_bytes"]
+
+
+class TestRetainedScratchAndIdentity:
+    def test_retained_failure_scratch_is_logged_not_warned_as_orphan(self, base):
+        config = write_config(
+            base,
+            workloads='[[workloads]]\nid = "scripted.fail"\n',
+            tools=SCRIPTED,
+            scheduling="repetitions = 1\nwarmups = 0\ncooldown_s = 0",
+        )
+        config.write_text(
+            config.read_text(encoding="utf-8").replace(
+                'roots = { local = "scratch" }',
+                'roots = { local = "scratch" }\nretain = "on-failure"',
+            ),
+            encoding="utf-8",
+        )
+        first = make_runner(config, base).run()
+        assert first.statuses == {"failed": 1}
+        again = make_runner(config, base).run()
+        assert not any("orphaned" in w for w in again.warnings)
+        events = read_jsonl(again.campaign_path / "events.jsonl").records
+        assert any(e["event"] == "retained_scratch" for e in events)
+
+    def test_identity_freezes_contracts_and_validation_settings(self, base):
+        config = write_config(base)
+        summary = make_runner(config, base).run()
+        workloads = json.loads(
+            (summary.campaign_path / "identity" / "workloads.json").read_text(encoding="utf-8")
+        )
+        # Synthetic workloads have no contract in the suite: recorded explicitly as null.
+        assert all(w["contract"] is None for w in workloads["workloads"])
+        frozen = json.loads(
+            (summary.campaign_path / "identity" / "config.json").read_text(encoding="utf-8")
+        )
+        assert frozen["validation"]["suite"].endswith("workloads-v3")
+        assert frozen["validation"]["accept_known_extent_discrepancies"] is False
+        assert frozen["scheduling"]["cpu_affinity"] == "pinned"

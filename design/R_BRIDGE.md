@@ -73,13 +73,16 @@ Written atomically (`.partial` + rename) in every case the R process survives:
 `exit_code`, `diagnostic`, `warnings` (`[{phase, message}]`), `r` (version,
 platform, `startup_elapsed_s` from `proc.time()`, BLAS, LAPACK), `renv`
 (enabled, version, library paths), `packages` (required package versions),
+`preloaded_namespaces` (namespaces preloaded before the workload and their
+versions, `null` if not installed; §7), `workload_loaded_namespaces`
+(namespaces first loaded during the workload; expected empty),
 `loaded_namespaces` (every loaded namespace and its version at the end),
 `legacy` (files, task, call, legacy execution status), `catalog` (applied
 buffer/chunking/CRS), `threads` (the thread state after setup: lidR threads,
 `future` plan and workers, lasR strategy and cores, data.table threads,
 thread variables), `timing_workload` (inner start/end in wall-clock ns),
 `timing` (marks: `bridge_start`, `environment_ready`, `packages_loaded`,
-`legacy_sourced`, `prepared`, `resources_ready`, `teardown_done`,
+`namespaces_preloaded`, `legacy_sourced`, `prepared`, `resources_ready`, `teardown_done`,
 `bridge_end`) and `outputs`.
 
 ### Exit status
@@ -184,7 +187,7 @@ checkout containing the package), `renv` (default `true`),
 
 The benchmark's timed interval is unchanged. It is the outer fresh process
 (`timing_boundary = "process"`), which includes R start-up, renv activation,
-package loading, sourcing the legacy files, catalog setup, worker start-up, the
+package loading, namespace preloading, sourcing the legacy files, catalog setup, worker start-up, the
 workload, worker shutdown and writing the result record. The bridge also
 reports the legacy **inner** interval (`benchmark_execute_call()` start/finish).
 `execute_plan()` derives the following, each recorded in
@@ -197,6 +200,33 @@ reports the legacy **inner** interval (`benchmark_execute_call()` start/finish).
 - `within_outer_interval`: whether the inner interval lies inside the outer one.
   If it does not, the attempt gets a warning, because wall-clock adjustment
   makes the overheads unreliable.
+
+**Namespace preloading.** In a fresh process the first pinned call loads some
+namespaces lazily, which the legacy harness paid once per session, before
+its timed calls. The bridge therefore loads them in the untimed packages
+phase (mark `namespaces_preloaded`, after `packages_loaded`), with
+`requireNamespace()` and startup messages suppressed. The pinned call and its
+outputs are unchanged (byte-identical rasters on the pilot tiles).
+
+| Tool | Preloaded | Measured lazy load in the first call |
+|---|---|---|
+| lasR | `sf`, `terra` (with their imports `units`, `classInt`, `DBI`, `e1071`, …) | ~4.8 s (GDAL/PROJ/GEOS); inner pm1a 7.8 → 3.0 s, DSM1 17.5 → 12.5 s at 1 CPU |
+| lidR | `sf`, `terra` (already imported by lidR), `glue` | ~0.04 s; no measurable effect |
+
+The bridge records the namespaces first loaded during the workload as
+`workload_loaded_namespaces`; a nonempty list shows that the preload list
+needs updating. lidR worker processes (2+ CPUs) load their namespaces inside
+the inner interval, as in the legacy harness, which also started new workers
+for every call.
+
+At 1 CPU, lidR's first call in a fresh process is still ~1.5–2 s slower than
+later calls (pilot inputs: 6.6–7.3 s vs ~4.5–4.9 s; legacy 4.69 s). This is
+not namespace loading. It is mostly garbage collection while R's heap grows
+from its start-up size (`gc.time()`: 2.6 s in the first call, 1.0 s and 0.5 s
+in the next two). With a large initial heap (`R_VSIZE=4G R_NSIZE=20M`) the
+first call takes 4.8 s and GC 0.08 s; the remaining ~0.4 s is first-use cost
+(lazy-loaded function bodies, `future` globals search). The bridge does not
+tune the heap, so this cost stays inside the inner interval.
 
 The results table has the columns `tool_workload_elapsed_ns` and
 `startup_overhead_ns`. The two boundaries are never mixed. Reports state which

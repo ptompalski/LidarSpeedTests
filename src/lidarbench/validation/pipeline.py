@@ -10,7 +10,7 @@ check can never produce a validated result (see :mod:`.status`).
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -198,8 +198,20 @@ def _verdicts(
 def validate_outputs(
     request: ValidationRequest,
     validators: Sequence[ReferenceValidator] | None = None,
+    *,
+    known_digests: Mapping[str, str] | None = None,
+    reference_cache: Any = None,
 ) -> ValidationReport:
-    """Validate the outputs of one attempt against its workload contract."""
+    """Validate the outputs of one attempt against its workload contract.
+
+    Args:
+        request: What to validate.
+        validators: Reference validators (default: discovered plugins).
+        known_digests: Input path -> SHA-256 already verified by the caller (the
+            campaign identity); inputs are then not re-hashed here.
+        reference_cache: Optional :class:`~.validators.ReferenceCache` shared
+            across calls; given to validators that accept a ``cache``.
+    """
     started_wall = time.time_ns()
     started = time.perf_counter_ns()
     contract = request.contract
@@ -209,6 +221,10 @@ def validate_outputs(
         validators, load_errors = discover_validators()
     else:
         load_errors = []
+    if reference_cache is not None:
+        for v in validators:
+            if hasattr(v, "cache"):
+                v.cache = reference_cache
     backends: dict[str, Any] = {"raster": raster_backend.to_record(), "load_errors": load_errors}
     report = ValidationReport(
         request=request,
@@ -378,7 +394,7 @@ def validate_outputs(
                 LevelVerdict.of(Status.UNAVAILABLE, status.detail),
             )
         )
-    loader = PopulationLoader(manifest, contract.buffer)
+    loader = PopulationLoader(manifest, contract.buffer, known_digests=known_digests)
     statuses: list[Status] = []
     reasons: list[str] = []
     boundaries: list[int | None] = []
@@ -396,6 +412,15 @@ def validate_outputs(
         reasons.append(f"inputs changed during validation: {changed}")
     report.input_digests = {
         manifest.tiles[stem].path.name: sha for stem, sha in loader.digests.items()
+    }
+    backends["decoding"] = {
+        "decoded_files": loader.decoded_files,
+        "decoded_points": loader.decoded_points,
+        "input_digests": (
+            "trusted from the caller (campaign identity)"
+            if loader.trusted and len(loader.trusted) == len(loader.digests)
+            else "hashed before decoding and re-checked after validation"
+        ),
     }
     boundary = None if any(b is None for b in boundaries) else sum(b or 0 for b in boundaries)
     return finish(

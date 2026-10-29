@@ -368,10 +368,35 @@ def resolve_tool(
     return ResolvedTool(tool, adapter, availability, record, fingerprints)
 
 
+def contract_records(config: CampaignConfig) -> dict[str, dict[str, Any] | None]:
+    """Workload id -> frozen contract reference (``None`` if the suite defines none).
+
+    A suite that cannot be loaded yields an ``error`` entry per workload, so
+    identity records why no contract applies.
+    """
+    from lidarbench.workloads.contract import ContractError, load_suite
+
+    suite_dir = config.validation.suite_dir()
+    try:
+        suite = load_suite(suite_dir)
+    except ContractError as exc:
+        return {w.id: {"error": str(exc)} for w in config.workloads}
+    out: dict[str, dict[str, Any] | None] = {}
+    for workload in config.workloads:
+        contract = suite.contracts.get(workload.id)
+        out[workload.id] = (
+            None
+            if contract is None
+            else {"suite": suite.name, "key": contract.key, "digest": contract.digest}
+        )
+    return out
+
+
 def workloads_component(
     config: CampaignConfig, tools: Mapping[str, ResolvedTool]
 ) -> dict[str, Any]:
-    """Selected workloads and each tool's declared implementation of them."""
+    """Selected workloads, their contracts and each tool's declared implementation."""
+    contracts = contract_records(config)
     out = []
     for workload in config.workloads:
         implementations: dict[str, Any] = {}
@@ -399,6 +424,7 @@ def workloads_component(
                 **workload.to_record(),
                 "datasets": list(config.workload_datasets(workload)),
                 "effective_timeout_s": config.timeout_for(workload),
+                "contract": contracts.get(workload.id),
                 "implementations": implementations,
             }
         )

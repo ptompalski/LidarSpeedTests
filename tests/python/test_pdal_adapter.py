@@ -154,7 +154,8 @@ def test_workloads_match_the_v2_contracts(workload_id):
 
 def test_v2_suite_keeps_the_v1_definitions():
     v1 = load_suite(default_suite_dir("workloads-v1"))
-    for workload_id, contract in SUITE.contracts.items():
+    v2 = load_suite(default_suite_dir("workloads-v2"))
+    for workload_id, contract in v2.contracts.items():
         old, new = dict(v1.get(workload_id).record), dict(contract.record)
         for record in (old, new):
             record.pop("suite")
@@ -321,9 +322,27 @@ def test_pipeline_document():
         "gdaldriver": "GTiff",
         "override_srs": "EPSG:2959",
     }
+    # Each readers.las gets one decompression thread (PDAL's default pool is 7), so
+    # concurrency comes only from concurrent pipelines (the thread budget).
+    assert all(s["threads"] == 1 for s in stages if s["type"] == "readers.las")
+    legacy = build_pipeline(tile, [other], Path("/o.tif"), grid, "max", reader_threads=None)
+    assert all("threads" not in s for s in legacy["pipeline"])
 
 
-def test_windows_paths_survive_json_unchanged():
+@needs_posix
+def test_reader_threads_follow_the_probed_options(pdal, layout, monkeypatch):
+    _scene(layout)
+    adapter = _adapter(pdal)
+    assert adapter.probe(PLATFORM).available
+    assert adapter.identify().details["reader_threads"] == 1
+    plan = plan_invocation(adapter, _invocation(layout))
+    assert plan.metadata["reader_threads"] == 1
+    monkeypatch.setenv("FAKE_PDAL_READER_THREADS", "absent")
+    old = _adapter(pdal)
+    assert old.probe(PLATFORM).available
+    assert "not set" in str(old.identify().details["reader_threads"])
+    for _, _, doc in old.pipelines(_invocation(layout)):
+        assert all("threads" not in s for s in doc["pipeline"])
     grid = TileGrid(1.0, 0, 0, 1, 1)
     tile = PureWindowsPath(r"C:\Data sets\tiles ü\a b.laz")
     out = PureWindowsPath(r"D:\out dir\a b.tif")
