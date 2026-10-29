@@ -101,3 +101,14 @@ def test_example_config_is_valid():
     config = load_config(example)
     assert config.campaign_id == "synthetic-example-001"
     assert [w.id for w in config.workloads] == ["synthetic.hashchain", "synthetic.checksum"]
+
+
+def test_pilot_example_config_is_valid():
+    example = Path(__file__).parents[2] / "configs" / "examples" / "pilot-campaign.toml"
+    config = load_config(example)
+    assert [w.id for w in config.workloads] == ["pixel_metrics_1a", "generate_DSM1"]
+    assert [t.id for t in config.tools] == ["lidr", "lasr", "lastools", "pdal"]
+    assert config.cpu_counts == (1, 2)
+    assert (config.scheduling.warmups, config.scheduling.repetitions) == (1, 3)
+    assert config.scheduling.tool_order == "balanced"
+    assert config.validation_mode == "performance-only"

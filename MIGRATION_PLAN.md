@@ -1,7 +1,7 @@
 # LidarSpeedTests 2.0 — Migration Plan
 
 **Status**: In progress  
-**Version**: Task 1 (Python package bootstrap) ✅ **DONE**; Task 3 (tool adapter interface) ✅ **DONE**; Task 4 (process execution) ✅ **DONE**; Task 5 (campaign management) ✅ **DONE**; Task 6 (validation framework) ✅ **DONE** (two workloads)  
+**Version**: Task 1 (Python package bootstrap) ✅ **DONE**; Task 3 (tool adapter interface) ✅ **DONE**; Task 4 (process execution) ✅ **DONE**; Task 5 (campaign management) ✅ **DONE**; Task 6 (validation framework) ✅ **DONE** (two workloads); Tasks 7–11 ✅ **DONE**; Task 13 (end-to-end pilot) ✅ **DONE** — not yet ready for a validated full campaign ([PILOT_REVIEW.md](design/PILOT_REVIEW.md))  
 **Branch**: `feature/cross-platform-benchmark`  
 **Related**: [ARCHITECTURE.md](design/ARCHITECTURE.md), [AGENTS.md](AGENTS.md)
 
@@ -317,6 +317,39 @@ Task 11 acceptance criteria:
 - Reports produce tables (CSV/JSON) for external analysis.
 - Known cross-tool differences can be documented without blocking reports.
 
+### Pilot — Task 13 (end-to-end pilot) ✅ DONE
+
+**Progress — Task 13**: a small controlled pilot (`pilot-t13-20261029-001`,
+[design/PILOT_REVIEW.md](design/PILOT_REVIEW.md), example
+[`configs/examples/pilot-campaign.toml`](configs/examples/pilot-campaign.toml)) ran
+lidR, lasR, LAStools 261023 and PDAL 2.10.2 on the verified two-tile Petawawa
+density-1 pair (read-only copy; same bytes as the legacy pilot `fresh-pilot-006`)
+for `pixel_metrics_1a` and `generate_DSM1` at 1 and 2 CPUs, with one warm-up and
+three measured repetitions, balanced order and psutil monitoring, on Linux.
+Validation was deliberately not run (`performance-only`); no ranking is
+published. All 64 scheduled entries succeeded. Interruption between and during
+attempts, a SIGKILL crash, stale locks, tombstones, orphaned scratch, resume,
+export and the rendered Quarto report were exercised.
+
+Task 13 acceptance criteria:
+- [x] Preflight: tool availability/versions, input digests against the registered manifest, resources and dry-run plans checked before the run.
+- [x] Scheduling, execution, output inventories, monitoring, immutable records, interruption, crash recovery, resume and Quarto reporting verified on real tools and data.
+- [x] Differences from the legacy R harness analysed (timing boundaries, start-up overhead, thread budgets, spatial semantics).
+- [x] No performance winners declared; every cross-tool pair refused by the comparability gate (no validation reports).
+- [ ] Validation exercised in a pilot (needs runner validation integration; then repeat the pilot in `numerical` mode).
+- [ ] Pilot repeated natively on Windows and macOS.
+
+Blockers found for a validated full campaign (PILOT_REVIEW.md §7, §10):
+1. The runner does not validate (no `validation/*.json`; contracts not in identity).
+2. R timing boundaries differ from the legacy boundary: the outer interval adds 2.5–16 s of R start-up; the inner interval includes a once-per-process lazy load of `sf`/`terra` (~5 s, lasR) and first-call costs (~1.7 s, lidR).
+3. PDAL exceeds its thread budget (`readers.las` default `threads = 7`); budgets are configured, never enforced.
+4. lidR multisession workers (reparented to PID 1, same session) are invisible to process-tree monitoring and `rusage`; reports show lower-bound sampled CPU.
+
+Next priorities: runner validation integration → R bridge preload/timing policy →
+PDAL reader threads → session-based monitoring and exact CPU in reports →
+orphan protection after supervisor death → `lidarbench preflight` →
+Windows/macOS pilots; then a validated pilot before any full campaign.
+
 ### Phase 7: Preflight and Doctor Commands
 
 **Objective**: Pre-run validation and diagnostic tooling.
@@ -393,7 +426,8 @@ Task 11 acceptance criteria:
 ## Success Criteria (Overall)
 
 - ✅ Phase 1: Package installs and basic CLI works.
-- [ ] Phase 5: A campaign can be executed end-to-end via Python.
+- [x] Phase 5: A campaign can be executed end-to-end via Python (Task 13 pilot, performance-only, Linux).
+- [ ] Phase 5/6: A validated end-to-end campaign (runner validation integration; PILOT_REVIEW.md §10).
 - [ ] Phase 7: Reports from Python campaigns match legacy format.
 - [ ] Phase 8: New contributors can run and extend the benchmark without R knowledge.
 

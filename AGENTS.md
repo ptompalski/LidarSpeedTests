@@ -268,5 +268,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 - 2026-10-28: PDAL adapter, `workloads-v2` suite and declared comparability classes (Task 9; design/ADAPTERS.md §10).
 - 2026-10-28: Dataset manifests, recipes, data roots and `lidarbench data` (Task 10; design/DATASETS.md).
 - 2026-10-29: Reporting dataset, `lidarbench report`, Quarto site and historical import (Task 11; design/REPORTING.md).
+- 2026-10-29: End-to-end pilot and readiness review (Task 13; design/PILOT_REVIEW.md).
 
 **Last reviewed**: 2026-10-29
