@@ -17,6 +17,7 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     - lock: show or explicitly release a stale lock
     - scratch: list or explicitly delete orphaned run-owned scratch
     - validate: validate outputs against a workload contract (outside any timing)
+    - data: list, verify, register, prepare and download datasets
     - help: display help (implicit)
 
     Additional commands (init, preflight, report, doctor) are placeholders
@@ -134,6 +135,10 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     )
     validate.add_argument("-o", "--report", help="write the JSON report to this new file")
     validate.add_argument("--json", action="store_true", help="print the full JSON report")
+
+    from lidarbench.datasets.commands import add_data_parser
+
+    add_data_parser(subparsers)
 
     subparsers.add_parser(
         "report",
@@ -272,6 +277,11 @@ def main(args: list[str] | None = None) -> int:
             report_path=parsed.report,
             as_json=parsed.json,
         )
+
+    if parsed.command == "data":
+        from lidarbench.datasets.commands import data_command
+
+        return data_command(parsed)
 
     # Placeholder commands
     if parsed.command in ("init", "preflight", "report", "doctor"):

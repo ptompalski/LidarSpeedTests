@@ -1,0 +1,140 @@
+schema = "lidarbench.dataset-recipe/1"
+id = "petawawa-fresh-v4"
+version = "fresh-petawawa-v4"
+title = "Petawawa Research Forest ALS 2012: repaired source tiles and fresh benchmark densities"
+kind = "derived"
+root = "petawawa-fresh"
+description = """
+The 100 approved Petawawa tiles (ALS_tiles.gpkg) prepared by the historical R
+CLI R/prepare_fresh_data.R under policy fresh-petawawa-v4: synthetic-flagged
+points dropped before decoding, documented return-attribute and ground
+repairs, negative Z dropped, then seeded thinning/densification to 1, 2, 5, 10,
+20 and 50 points per square metre, lassort by point source and GPS time, and
+lasindex .lax indexes. The policy text is not restated here: it is copied from
+the readiness receipt into each manifest's provenance details. Densification
+above the source density adds seeded synthetic copies (XY jitter, Z noise,
+shifted GPS time); those points are derived data, not acquisition data.
+Readiness means data QC passed, not cross-tool benchmark acceptance.
+"""
+
+[layout]
+inputs = ["*.laz"]
+indexes = ["*.lax"]
+receipts = ["*.laz.rds"]
+las_headers = "required"
+
+[license]
+name = "Open Government Licence - Canada"
+url = "https://open.canada.ca/en/open-government-licence-canada"
+attribution = "Contains information licensed under the Open Government Licence – Canada."
+redistribution = "unknown"
+notes = """
+Licence as recorded by the preparation configuration. lidarbench has not
+confirmed it against a custodian licence statement for this archive, so
+redistribution terms are treated as not established: the data are not
+redistributed or downloaded by lidarbench. Confirm with the custodian before
+publishing any copy.
+"""
+
+[source]
+citation = "Natural Resources Canada / Canadian Forest Service, Canadian Wood Fibre Centre; Petawawa Research Forest LiDAR 2012"
+url = "https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip"
+
+[declared_metadata]
+horizontal_epsg = 2959
+vertical_epsg = 5713
+xyz_units = "metre"
+confirmation = "Confirmed in the R preparation configuration (metadata_confirmation; see provenance details)"
+
+[[derived_from]]
+description = "Original archive PRF_LiDAR2012_LAS.zip as downloaded by the R CLI (download/Petawawa2012.zip)"
+dataset_id = "petawawa-als-2012/archive"
+
+[preparation]
+engine = "r-cli"
+method = "fresh-petawawa-v4"
+entry_point = "R/prepare_fresh_data.R"
+config_example = "fresh-data.example.R"
+stages = [
+  "--download",
+  "--pilot",
+  "--verify-pilot",
+  "--full",
+  "--verify-full",
+  "--upgrade-failed-pilot",
+  "--retry-failed-preparation",
+  "--resume-parallel-full",
+  "--resume-negative-z-full",
+]
+requires = [
+  "R 4.6.1 with the renv.lock library (lidR, rlas, sf, data.table, withr, fs, cli, callr)",
+  "LAStools lassort and lasindex with a confirmed licence (the stage receipts record build 260914)",
+  "curl for the resumable archive download (about 9.1 GB)",
+  "the protected inputs ALS_tiles.gpkg and R/2_data.R, R/1_functions.R, renv.lock at the recorded identities",
+]
+documentation = "design/DATASETS.md"
+
+[preparation.parameters]
+seed = 20261022
+densities_pts_per_m2 = [1, 2, 5, 10, 20, 50]
+tiles = "the 100 approved tiles of ALS_tiles.gpkg"
+pilot_tiles = ["298000_5093000", "298000_5094000"]
+stage = "full"
+
+[provenance]
+legacy_receipts = "petawawa-fresh"
+notes = [
+  "The root and stage identities were created under fresh-petawawa-v3 and moved to v4 by the documented --resume-negative-z-full transition (negative-z-transition.rds).",
+  "Repair receipts predate the policy field; the R CLI accepts them under v4 only because their audits contain no negative source Z (fresh_check_repair_policy).",
+]
+records = [
+  { path = "fresh-root.rds", description = "root identity (configuration and policy)" },
+  { path = "negative-z-transition.rds", description = "v3 to v4 negative-Z transition receipt" },
+  { path = "download/download.rds", description = "archive download receipt (URL, MD5, bytes)" },
+  { path = "full/stage-identity.rds", description = "full-stage identity (archive, tools, implementation, runtime)" },
+  { path = "full/parallel-transition.rds", description = "serial-to-parallel resume transition receipt" },
+  { path = "full/prepared/preparation.rds", description = "preparation plan and parameters" },
+  { path = "full/ready.rds", description = "readiness receipt (data-qc-passed)" },
+]
+
+[[datasets]]
+id = "petawawa-fresh-v4/repaired"
+path = "full/repaired"
+title = "Repaired source tiles (100 tiles, intermediate; not a benchmark input)"
+parameters = { part = "repaired" }
+
+[[datasets]]
+id = "petawawa-fresh-v4/tile_1000_density_1"
+path = "full/prepared/1_org/tile_1000_density_1"
+title = "100 x 1 km tiles at 1 point per square metre"
+parameters = { part = "prepared", target_density = 1 }
+
+[[datasets]]
+id = "petawawa-fresh-v4/tile_1000_density_2"
+path = "full/prepared/1_org/tile_1000_density_2"
+title = "100 x 1 km tiles at 2 points per square metre"
+parameters = { part = "prepared", target_density = 2 }
+
+[[datasets]]
+id = "petawawa-fresh-v4/tile_1000_density_5"
+path = "full/prepared/1_org/tile_1000_density_5"
+title = "100 x 1 km tiles at 5 points per square metre"
+parameters = { part = "prepared", target_density = 5 }
+
+[[datasets]]
+id = "petawawa-fresh-v4/tile_1000_density_10"
+path = "full/prepared/1_org/tile_1000_density_10"
+title = "100 x 1 km tiles at 10 points per square metre"
+parameters = { part = "prepared", target_density = 10 }
+
+[[datasets]]
+id = "petawawa-fresh-v4/tile_1000_density_20"
+path = "full/prepared/1_org/tile_1000_density_20"
+title = "100 x 1 km tiles at 20 points per square metre"
+parameters = { part = "prepared", target_density = 20 }
+
+[[datasets]]
+id = "petawawa-fresh-v4/tile_1000_density_50"
+path = "full/prepared/1_org/tile_1000_density_50"
+title = "100 x 1 km tiles at 50 points per square metre"
+parameters = { part = "prepared", target_density = 50 }

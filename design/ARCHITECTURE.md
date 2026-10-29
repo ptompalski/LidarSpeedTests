@@ -417,6 +417,11 @@ class MonitorHandle(Protocol):
 
 ### 7.5 Dataset manifest
 
+Implemented in Task 10. The normative schema, recipes, data roots, commands
+and the Petawawa provenance are in [DATASETS.md](DATASETS.md). The sketch below
+was the starting point: companions became flat entries with role `index`, and
+the root is a machine-local label.
+
 ```json
 {
   "schema": "lidarbench.dataset/1",
@@ -739,7 +744,7 @@ The R guards are ported and extended:
 | Thread policy for R tools, reference-BLAS check | **Reuse** inside `bridges/r/runner.R` | R-specific. |
 | Linux `/proc` monitor | **Replace** with the psutil backend. Summary math is **ported**. | Cross-platform requirement. |
 | `cpu_ram_usage.ps1` | **Retain as legacy** (unused) | Historical. Superseded by psutil. |
-| `R/prepare_fresh_data.R`, `R/2_data.R` (Petawawa preparation) | **Retain + wrap** (`dataset prepare` invokes the R CLI). An R exporter emits a JSON dataset manifest from existing receipts. | Mature, heavily tested and provenance-critical. It produced the current verified data. Rewriting it would invalidate the provenance chain. |
+| `R/prepare_fresh_data.R`, `R/2_data.R` (Petawawa preparation) | **Retain + wrap** (`lidarbench data prepare --run-r-stage` invokes the R CLI unchanged). The base-R exporter `bridges/r/export_petawawa_receipts.R` emits the receipts as JSON; `lidarbench data register` cross-checks them and writes the manifests (Task 10, [DATASETS.md](DATASETS.md)). | Mature, heavily tested and provenance-critical. It produced the current verified data. Rewriting it would invalidate the provenance chain. |
 | `R/6_pilot.R`, `R/3_runBenchmarks.R` | **Retain as legacy runners** until parity is proven | In active use (a full campaign was running during this review). |
 | `R/reporting.R`, `R/5_report.R`, `*.qmd` | **Retain for legacy campaigns.** **Port** the selection/exclusion/summary rules to Python reporting. | Legacy reports must remain reproducible. New reports need language-neutral inputs. |
 | `R/4_compileResults.R` legacy CSV mode | **Retain as legacy** | Historical CSVs only. |

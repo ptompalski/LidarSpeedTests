@@ -1,0 +1,351 @@
+{
+  "content_sha256": "2616aa1e48ed2a58cf9db244614fa1f20eaac7b54b91518a7f70f7971ffd32db",
+  "dataset_id": "petawawa-als-2012/archive",
+  "declared_metadata": {
+    "confirmation": "Confirmed in the R preparation configuration (metadata_confirmation)",
+    "horizontal_epsg": 2959,
+    "vertical_epsg": 5713,
+    "xyz_units": "metre"
+  },
+  "file_count": 1,
+  "files": [
+    {
+      "bytes": 9142409879,
+      "md5": "e26fafa0b41b6875784a66f2c5e604b9",
+      "path": "Petawawa2012.zip",
+      "role": "input",
+      "sha256": "f90def9138d76818f74b929cd3f7d9215315a40d79713c55e4af7f2da9ee23f9"
+    }
+  ],
+  "kind": "source",
+  "layout": {
+    "auxiliary": [],
+    "exclude": [
+      "download.rds",
+      "transfer.rds",
+      "Petawawa2012.zip.part"
+    ],
+    "indexes": [],
+    "inputs": [
+      "Petawawa2012.zip"
+    ],
+    "las_headers": "none",
+    "receipts": []
+  },
+  "license": {
+    "attribution": "Contains information licensed under the Open Government Licence – Canada.",
+    "name": "Open Government Licence - Canada",
+    "notes": "Licence as recorded by the preparation configuration; not confirmed by\nlidarbench against a custodian licence statement. Public access is\nestablished (HTTPS URL below), redistribution terms are not, so this recipe\ndeclares no lidarbench download: use the R CLI --download stage, which keeps\nits own receipt.\n",
+    "redistribution": "unknown",
+    "url": "https://open.canada.ca/en/open-government-licence-canada"
+  },
+  "location": {
+    "path": "download",
+    "root": "petawawa-fresh"
+  },
+  "provenance": {
+    "derived_from": [],
+    "details": {
+      "legacy_receipts": {
+        "checksum_note": "MD5 values are content identifiers from the R receipts, cross-checked against the registered bytes; they do not establish authenticity.",
+        "download": {
+          "authenticity": "No independent checksum supplied",
+          "bytes": 9142409879,
+          "md5": "e26fafa0b41b6875784a66f2c5e604b9",
+          "url": "https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip"
+        },
+        "export_sha256": "3484ea64eae92fab0fd78bd6952f4dc2bc88a432a1089e1f95af017e717f6206",
+        "negative_z_transition": {
+          "current_policy": "fresh-petawawa-v4",
+          "frozen_md5": [
+            "de560ec2e7029c1c436d3182543d8d06",
+            "c4ceca89c6c05c566e35267cab70c95d",
+            "1224443b1ca38d2e88d96138880a5c35",
+            "8353d9c354172ef3b167c220c3019b67",
+            "7c51dbb05d301923ed1a00e27f6013aa"
+          ],
+          "previous_policy": "fresh-petawawa-v3"
+        },
+        "parallel_transition": true,
+        "preparation": {
+          "archive_md5": "e26fafa0b41b6875784a66f2c5e604b9",
+          "crs_wkt": "PROJCRS[\"NAD83(CSRS) / UTM zone 18N\",\n    BASEGEOGCRS[\"NAD83(CSRS)\",\n        DATUM[\"NAD83 Canadian Spatial Reference System\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4617]],\n    CONVERSION[\"UTM zone 18N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-75,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"Canada between 78°W and 72°W, onshore and offshore south of 84°N - Nunavut, Ontario and Quebec.\"],\n        BBOX[43.63,-78,84,-72]],\n    ID[\"EPSG\",2959]]",
+          "densities": [
+            1,
+            2,
+            5,
+            10,
+            20,
+            50
+          ],
+          "fresh_implementation_md5": [
+            "7d35317ff3bfa3fc88a34589999dd960",
+            "b0a94be880119b1df463a011fc1b76a2",
+            "f09a5c4083edc6240bde563f3798e187",
+            "a1aae442511b39b3852947df45eeece6"
+          ],
+          "implementation_md5": [
+            "b0a94be880119b1df463a011fc1b76a2",
+            "f09a5c4083edc6240bde563f3798e187",
+            "a1aae442511b39b3852947df45eeece6",
+            "8d2293a66fa164619f91e1fdff844876"
+          ],
+          "license": "Open Government Licence - Canada; Contains information licensed under the Open Government Licence – Canada. https://open.canada.ca/en/open-government-licence-canada",
+          "method": "fresh-petawawa-v4",
+          "parameters": {
+            "density": "round(target * repaired source area); sample without replacement or add copies",
+            "negative_z": "Drop Z < 0 before all other repairs; audit filtered-input row IDs and original Z.",
+            "readiness": "Data QC only; cross-tool benchmark acceptance requires a new pilot.",
+            "repair": "Preserve XYZ precision and valid return labels; drop invalid legacy returns, duplicate XYZ (first row); then retain lowest-Z class-2 ground point per XY (first-row tie), audit removals; then repeated pulse/return (highest Z, first-row tie); raise NumberOfReturns to the pulse maximum reported count/return label. Pulse key: PointSourceID + gpstime (+ ScannerChannel if present). Do not infer pulse size from tile point counts; refuse remaining QC issues.",
+            "source_filter": "-drop_synthetic before R decoding; audit counts; row IDs refer to filtered input",
+            "synthetic": "Seeded XY jitter uniformly within +/-0.25 m, quantized on source grid; reject collisions/outside source bounds; Z noise +/-seq(0.10,0.50,0.05) m; separate GPS-time ranges per copy; classifications/flags retained; synthetic derivation explicitly labeled in preparation metadata, not acquisition data.",
+            "version": "fresh-petawawa-v4"
+          },
+          "repair_provenance": "Preserve XYZ precision and valid return labels; drop invalid legacy returns, duplicate XYZ (first row); then retain lowest-Z class-2 ground point per XY (first-row tie), audit removals; then repeated pulse/return (highest Z, first-row tie); raise NumberOfReturns to the pulse maximum reported count/return label. Pulse key: PointSourceID + gpstime (+ ScannerChannel if present). Do not infer pulse size from tile point counts; refuse remaining QC issues.",
+          "runtime": {
+            "R": "4.6.1",
+            "lidR": "4.3.3",
+            "native": {
+              "GDAL": "3.12.2",
+              "GDAL_with_GEOS": "true",
+              "GEOS": "3.14.1",
+              "PROJ": "9.7.1",
+              "USE_PROJ_H": "true",
+              "proj.4": "9.7.1"
+            },
+            "platform": "x86_64-pc-linux-gnu",
+            "sf": "1.1.3"
+          },
+          "seed": 20261022,
+          "source_citation": "Natural Resources Canada / Canadian Forest Service, Canadian Wood Fibre Centre; Petawawa Research Forest LiDAR 2012; https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip",
+          "tiles": [
+            "297000_5094000",
+            "298000_5092000",
+            "298000_5093000",
+            "298000_5094000",
+            "298000_5095000",
+            "299000_5091000",
+            "299000_5092000",
+            "299000_5093000",
+            "299000_5094000",
+            "299000_5095000",
+            "300000_5091000",
+            "300000_5092000",
+            "300000_5093000",
+            "300000_5094000",
+            "300000_5095000",
+            "301000_5091000",
+            "301000_5092000",
+            "301000_5093000",
+            "301000_5094000",
+            "301000_5095000",
+            "301000_5096000",
+            "302000_5091000",
+            "302000_5092000",
+            "302000_5093000",
+            "302000_5094000",
+            "302000_5095000",
+            "302000_5096000",
+            "303000_5091000",
+            "303000_5092000",
+            "303000_5093000",
+            "303000_5094000",
+            "303000_5095000",
+            "303000_5096000",
+            "304000_5092000",
+            "304000_5093000",
+            "304000_5094000",
+            "304000_5095000",
+            "304000_5096000",
+            "304000_5097000",
+            "305000_5092000",
+            "305000_5093000",
+            "305000_5094000",
+            "305000_5095000",
+            "305000_5096000",
+            "305000_5097000",
+            "306000_5092000",
+            "306000_5093000",
+            "306000_5094000",
+            "306000_5095000",
+            "306000_5096000",
+            "306000_5097000",
+            "307000_5092000",
+            "307000_5093000",
+            "307000_5094000",
+            "307000_5095000",
+            "307000_5096000",
+            "307000_5097000",
+            "308000_5091000",
+            "308000_5092000",
+            "308000_5093000",
+            "308000_5094000",
+            "308000_5095000",
+            "308000_5096000",
+            "309000_5091000",
+            "309000_5092000",
+            "309000_5093000",
+            "309000_5094000",
+            "309000_5095000",
+            "309000_5096000",
+            "310000_5091000",
+            "310000_5092000",
+            "310000_5093000",
+            "310000_5094000",
+            "310000_5095000",
+            "310000_5096000",
+            "311000_5091000",
+            "311000_5092000",
+            "311000_5093000",
+            "311000_5094000",
+            "311000_5095000",
+            "311000_5096000",
+            "312000_5091000",
+            "312000_5092000",
+            "312000_5093000",
+            "312000_5094000",
+            "312000_5095000",
+            "312000_5096000",
+            "312000_5097000",
+            "312000_5098000",
+            "313000_5091000",
+            "313000_5092000",
+            "313000_5093000",
+            "313000_5094000",
+            "313000_5095000",
+            "313000_5096000",
+            "313000_5097000",
+            "314000_5092000",
+            "314000_5093000",
+            "314000_5094000",
+            "314000_5095000"
+          ],
+          "tool_versions": {
+            "index": {
+              "build": "260914",
+              "status": 0
+            },
+            "sort": {
+              "build": "260914",
+              "status": 0
+            }
+          },
+          "tools": [
+            {
+              "file": "lassort64",
+              "md5": "0fe0f6ab4b34bc73818da17b7dd969d3",
+              "name": "sort"
+            },
+            {
+              "file": "lasindex64",
+              "md5": "4f0ded3635b23fe7b9316bc96448bd3e",
+              "name": "index"
+            }
+          ]
+        },
+        "ready": {
+          "archive_md5": "e26fafa0b41b6875784a66f2c5e604b9",
+          "policy": {
+            "density": "round(target * repaired source area); sample without replacement or add copies",
+            "negative_z": "Drop Z < 0 before all other repairs; audit filtered-input row IDs and original Z.",
+            "readiness": "Data QC only; cross-tool benchmark acceptance requires a new pilot.",
+            "repair": "Preserve XYZ precision and valid return labels; drop invalid legacy returns, duplicate XYZ (first row); then retain lowest-Z class-2 ground point per XY (first-row tie), audit removals; then repeated pulse/return (highest Z, first-row tie); raise NumberOfReturns to the pulse maximum reported count/return label. Pulse key: PointSourceID + gpstime (+ ScannerChannel if present). Do not infer pulse size from tile point counts; refuse remaining QC issues.",
+            "source_filter": "-drop_synthetic before R decoding; audit counts; row IDs refer to filtered input",
+            "synthetic": "Seeded XY jitter uniformly within +/-0.25 m, quantized on source grid; reject collisions/outside source bounds; Z noise +/-seq(0.10,0.50,0.05) m; separate GPS-time ranges per copy; classifications/flags retained; synthetic derivation explicitly labeled in preparation metadata, not acquisition data.",
+            "version": "fresh-petawawa-v4"
+          },
+          "policy_version": "fresh-petawawa-v4",
+          "preparation_md5": "30ac422b598cdbd1c187dc77ae5cb7ee",
+          "status": "data-qc-passed"
+        },
+        "root": {
+          "archive_md5_supplied": null,
+          "archive_url": "https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip",
+          "crs": 2959,
+          "executables": {
+            "index": "lasindex64",
+            "sort": "lassort64"
+          },
+          "metadata_confirmation": "Piotr Tompalski",
+          "policy_version": "fresh-petawawa-v3",
+          "seed": 20261022,
+          "tool_license_confirmed": true,
+          "vertical_epsg": 5713
+        },
+        "schema": "lidarbench.petawawa-receipts/1",
+        "stage": "full",
+        "stage_identity": {
+          "archive_md5": "e26fafa0b41b6875784a66f2c5e604b9",
+          "implementation_md5": [
+            "3d79583687c92ed0cd74afab1defbbcb",
+            "b0a94be880119b1df463a011fc1b76a2",
+            "f09a5c4083edc6240bde563f3798e187",
+            "a1aae442511b39b3852947df45eeece6",
+            "8d2293a66fa164619f91e1fdff844876"
+          ],
+          "policy_version": "fresh-petawawa-v3",
+          "tool_versions": {
+            "index": {
+              "build": "260914",
+              "status": 0
+            },
+            "sort": {
+              "build": "260914",
+              "status": 0
+            }
+          },
+          "tools_md5": [
+            "0fe0f6ab4b34bc73818da17b7dd969d3",
+            "4f0ded3635b23fe7b9316bc96448bd3e"
+          ]
+        }
+      }
+    },
+    "notes": [
+      "The archive MD5 was calculated locally by the R CLI; no independent checksum was supplied, so it establishes byte identity, not authenticity.",
+      "Every file MD5 was cross-checked against the R preparation receipts."
+    ],
+    "preparation": {
+      "config_example": null,
+      "dataset_parameters": {
+        "part": "archive"
+      },
+      "documentation": null,
+      "engine": "none",
+      "entry_point": null,
+      "generator": null,
+      "method": "original",
+      "parameters": {},
+      "requires": [],
+      "stages": []
+    },
+    "records": [
+      {
+        "bytes": 264,
+        "description": "archive download receipt (URL, MD5, bytes)",
+        "location": {
+          "path": "download/download.rds",
+          "root": "petawawa-fresh"
+        },
+        "md5": "7baf13556789aec352d9368fa8b8cbda",
+        "sha256": "9ad99e77797f5c2f3f7cbcdc451151194d25c67dff4c2f58c14ed67d3a77b4cd"
+      }
+    ],
+    "source_citation": "Natural Resources Canada / Canadian Forest Service, Canadian Wood Fibre Centre; Petawawa Research Forest LiDAR 2012",
+    "source_url": "https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip"
+  },
+  "recipe": "petawawa-als-2012",
+  "registration": {
+    "excluded_files_present": [
+      "Petawawa2012.zip.part",
+      "download.rds"
+    ],
+    "lidarbench_version": "2.0.0a1",
+    "registered_at": "2026-10-29T06:15:57Z",
+    "registered_on": "Linux"
+  },
+  "schema": "lidarbench.dataset/1",
+  "title": "Original PRF_LiDAR2012_LAS.zip archive (about 9.1 GB)",
+  "total_bytes": 9142409879,
+  "version": "2012"
+}

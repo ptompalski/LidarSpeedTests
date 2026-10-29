@@ -11,7 +11,8 @@ workloads  selected workloads with parameters, timeouts and every tool's
 tools      per tool instance: adapter class and module digest, options,
            availability, version, executables (path, size, SHA-256), details
 datasets   per dataset: every file (relative path, size, SHA-256) and the
-           ordered list of input files given to tools
+           ordered list of input files given to tools; for manifest datasets
+           also the manifest reference (files must equal the manifest)
 environment OS, release, architecture, CPU model, logical/physical CPUs,
            total memory, Python implementation and version
 schedule   the frozen schedule and its policy (seed, order mode, counts)
@@ -33,6 +34,7 @@ when a run ends.
 
 from __future__ import annotations
 
+import fnmatch
 import inspect
 import os
 import platform
@@ -48,10 +50,17 @@ from typing import Any
 import psutil
 
 import lidarbench
-from lidarbench.config.campaign import CampaignConfig, ConfigError, DatasetConfig, ToolConfig
+from lidarbench.config.campaign import (
+    CampaignConfig,
+    ConfigError,
+    DatasetConfig,
+    ToolConfig,
+    manifest_reference,
+)
 from lidarbench.core.canonical import digest, sha256_bytes, sha256_file
 from lidarbench.core.platform import PlatformInfo
 from lidarbench.core.store import iter_files
+from lidarbench.datasets.manifest import DatasetManifest
 from lidarbench.execution.adapters.base import (
     Availability,
     ToolAdapter,
@@ -402,7 +411,10 @@ def hash_dataset(
     """Hash every file of a dataset in full (SHA-256) and record fingerprints.
 
     Fingerprints are taken before and after hashing; a file that changed while
-    being hashed is an error.
+    being hashed is an error. A dataset bound to a manifest must match it
+    exactly (paths, sizes, SHA-256; files excluded by the manifest layout are
+    ignored for the comparison), and the manifest reference is frozen into the
+    record.
     """
     inputs = tuple(dataset.input_files())
     files: list[dict[str, Any]] = []
@@ -422,14 +434,42 @@ def hash_dataset(
                 "sha256": sha,
             }
         )
-    record = {
+    record: dict[str, Any] = {
         "id": dataset.id,
         "inputs": [p.relative_to(dataset.path).as_posix() for p in inputs],
         "files": files,
         "file_count": len(files),
         "total_bytes": sum(f["bytes"] for f in files),
     }
+    if dataset.manifest is not None:
+        problems = manifest_problems(dataset.manifest, files)
+        if problems:
+            raise IdentityError(
+                f"dataset {dataset.id!r} does not match manifest "
+                f"{dataset.manifest.dataset_id!r}: " + "; ".join(problems[:10])
+            )
+        record["manifest"] = manifest_reference(dataset.manifest)
     return DatasetIdentity(record, inputs, fingerprints, dataset.path)
+
+
+def manifest_problems(manifest: DatasetManifest, files: Iterable[Mapping[str, Any]]) -> list[str]:
+    """Differences between hashed files (path, bytes, sha256) and a manifest."""
+    excluded = manifest.layout.exclude
+    actual = {
+        f["path"]: f
+        for f in files
+        if not any(fnmatch.fnmatchcase(f["path"].rsplit("/", 1)[-1], p) for p in excluded)
+    }
+    expected = {f.path: f for f in manifest.files}
+    problems = [f"{p}: missing" for p in sorted(set(expected) - set(actual))]
+    problems += [f"{p}: not in the manifest" for p in sorted(set(actual) - set(expected))]
+    for path in sorted(set(expected) & set(actual)):
+        if (actual[path]["bytes"], actual[path]["sha256"]) != (
+            expected[path].bytes,
+            expected[path].sha256,
+        ):
+            problems.append(f"{path}: content differs")
+    return problems
 
 
 def resolve_tools(

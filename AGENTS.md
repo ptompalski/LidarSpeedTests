@@ -151,6 +151,16 @@ Normative description: [design/ADAPTERS.md](design/ADAPTERS.md) §10 (`execution
 - Dataset provenance (archive hash, policy version, per-tile receipts) is recorded and verified.
 - Frozen opt-in policies (extent discrepancies, LAStools cutoff exception, diagnostic lasR) are part of campaign identity.
 
+### 6a. Datasets
+
+Normative description: [design/DATASETS.md](design/DATASETS.md) (`src/lidarbench/datasets/`).
+
+- Recipes (`datasets/recipes/*.toml`) are written by hand; manifests (`datasets/manifests/**.json`) are only produced by `lidarbench data register`/`prepare` and never edited or rewritten. Changed bytes need a new dataset version.
+- Manifests store a root label and a POSIX relative path, never an absolute path; machines map labels in a data-roots file or with `--root LABEL=PATH`.
+- Keep `source`, `derived` and `fixture` data separate. Never modify, repair or reprocess original or registered data.
+- The Petawawa preparation stays in `R/prepare_fresh_data.R`; Python never reimplements, simplifies or changes it. Legacy receipts are read once by `bridges/r/export_petawawa_receipts.R` (base R) and cross-checked at registration.
+- Downloads only for `source` recipes whose license permits redistribution, with explicit `--accept-bytes`; never in tests.
+
 ### 7. Validator Plugin Protocol
 
 - Validators are loaded via entry points (`lidarbench.validators`); the entry-point name equals the validator's `name`.
@@ -246,5 +256,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 - 2026-10-28: lidR/lasR adapters through the R bridge and the adapter `interpret()` hook (Task 7; design/R_BRIDGE.md).
 - 2026-10-28: LAStools native adapter and declared accepted exceptions (Task 8; design/ADAPTERS.md §9).
 - 2026-10-28: PDAL adapter, `workloads-v2` suite and declared comparability classes (Task 9; design/ADAPTERS.md §10).
+- 2026-10-28: Dataset manifests, recipes, data roots and `lidarbench data` (Task 10; design/DATASETS.md).
 
 **Last reviewed**: 2026-10-28

@@ -187,6 +187,34 @@ Task 9 acceptance criteria:
 - Equivalence matrix can be queried programmatically.
 - Dataset manifests survive round-trip.
 
+**Progress — Task 10 (dataset management) ✅ DONE**: `lidarbench data
+list|show|roots|verify|register|prepare|download` manages versioned datasets
+through recipes (`datasets/recipes/*.toml`) and write-once manifests
+(`datasets/manifests/**.json`, `lidarbench.dataset/1`). Manifests record
+portable locations (root label + POSIX path, resolved per machine by a
+data-roots file), exact inventories with roles, SHA-256 (and MD5 for legacy
+receipts), LAS header facts, content identity, license, declared metadata and
+provenance. Original source, derived and fixture data are separate kinds.
+Existing Petawawa data were registered without R and without reprocessing. A
+base-R exporter turns the historical `.rds` receipts into JSON once, and
+registration cross-checks every MD5, the readiness chain and the repair-policy
+rule. The R preparation is documented and can be invoked unchanged, but it is
+not reproduced. Deterministic synthetic LAS fixtures are generated
+cross-platform with interruption-safe staging. Downloads are possible only for
+source data with established redistribution terms (none for Petawawa yet).
+Campaigns bind datasets by manifest and refuse different bytes. See
+[design/DATASETS.md](design/DATASETS.md).
+
+Task 10 acceptance criteria:
+- [x] Datasets are registered, listed, verified (full/quick/provenance) and versioned; manifests are write-once and survive round-trip.
+- [x] Portable locations: no absolute paths in manifests; data roots per machine; non-portable names, links and case collisions are refused.
+- [x] Existing prepared Petawawa datasets (archive, repaired tiles, six densities) registered without R or reprocessing, with the MD5 cross-check against the R receipts.
+- [x] Petawawa density preparation, return-attribute repairs and policies are unchanged; the R CLI remains the preparation tool (documented dependencies).
+- [x] Synthetic fixtures with byte-identical output on every OS; interrupted preparations are detected and discarded only when provably owned.
+- [x] Campaigns can use a manifest; the frozen identity records it, and changed bytes are refused.
+- [ ] Petawawa licence confirmed with the custodian (redistribution currently `unknown`; no download).
+- [ ] `data verify` run natively on Windows and macOS.
+
 ### Phase 5: Campaign Scheduling and Execution
 
 **Objective**: Run a campaign with scheduling, resumption and attempt tracking.

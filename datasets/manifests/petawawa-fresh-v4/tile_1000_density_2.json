@@ -1,0 +1,5941 @@
+{
+  "content_sha256": "05c34c5d07d7131df4fc74595c17f9e534bf08d7f9ad9baa1a41b382250a7d34",
+  "dataset_id": "petawawa-fresh-v4/tile_1000_density_2",
+  "declared_metadata": {
+    "confirmation": "Confirmed in the R preparation configuration (metadata_confirmation; see provenance details)",
+    "horizontal_epsg": 2959,
+    "vertical_epsg": 5713,
+    "xyz_units": "metre"
+  },
+  "file_count": 300,
+  "files": [
+    {
+      "bytes": 6072,
+      "md5": "6a5ebf458c88f7cbcbc64f8069746529",
+      "path": "297000_5094000.lax",
+      "role": "index",
+      "sha256": "894ed0b154cc0dae80701337c56320fed5a21962b2dea61b3c697b93f9ae6929"
+    },
+    {
+      "bytes": 7368164,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          298000.0,
+          5094999.99,
+          286.04
+        ],
+        "min": [
+          297357.0,
+          5094000.0,
+          203.56
+        ],
+        "offset": [
+          297356.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 942728,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "f542af30479dd2ccab9ffaead0b1e641",
+      "path": "297000_5094000.laz",
+      "role": "input",
+      "sha256": "aed22f6f4b3b032f55ebb407d3639d47a003fd564dd9d34fb3baaf80ce5abb56"
+    },
+    {
+      "bytes": 2140,
+      "md5": "b06dbc24e2a0c6777a643de181a31f05",
+      "path": "297000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "fe110d9e8c48b792ea577f57f2c9f526d9a1d921489c646f78c1779ecd87cbc4"
+    },
+    {
+      "bytes": 6780,
+      "md5": "c0ef7f58f6a69bfd8377edc97f374e9e",
+      "path": "298000_5092000.lax",
+      "role": "index",
+      "sha256": "be0aa63de39aeef7c1eeb262f584eafee5df351bd717853b139a813bd062832f"
+    },
+    {
+      "bytes": 12174840,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          298999.99,
+          5092999.99,
+          319.53000000000003
+        ],
+        "min": [
+          298054.14,
+          5092000.0,
+          209.22
+        ],
+        "offset": [
+          298053.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1552432,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "21f614ec42da9a710d9ef4836fb2a8da",
+      "path": "298000_5092000.laz",
+      "role": "input",
+      "sha256": "66cce811fefc1ede78541034bd2bba6bcce4e2ec4d2ae3b2bc1ed862b02c80e8"
+    },
+    {
+      "bytes": 2148,
+      "md5": "5c672f4bf5668703377d592a847b60ad",
+      "path": "298000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "f4f997bd18df82b7b75db0fda7d6446572fd431de20e26b07c561bab359be405"
+    },
+    {
+      "bytes": 2136,
+      "md5": "e57337dad365774c7e9d733c0fb20eca",
+      "path": "298000_5093000.lax",
+      "role": "index",
+      "sha256": "51a4fdd2abda41550d690d4d6a48a90ef43b4f5178e4aea4f1fd9c5017be4082"
+    },
+    {
+      "bytes": 15745893,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          299000.0,
+          5093999.99,
+          283.82
+        ],
+        "min": [
+          298000.0,
+          5093000.0,
+          165.06
+        ],
+        "offset": [
+          298000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1990936,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "d62fdf653e0e8622717d0f64b5071d40",
+      "path": "298000_5093000.laz",
+      "role": "input",
+      "sha256": "7692a505dba6a99e6aaecff36c96f2126460b8175a070bf6d378ccb992551e98"
+    },
+    {
+      "bytes": 2126,
+      "md5": "d7ce45b56ce688553969e993ea5672c5",
+      "path": "298000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "a763db54167bbbc16ef2946857838ea88898bbf534efd3f5592c8e32be28f7dd"
+    },
+    {
+      "bytes": 2144,
+      "md5": "2a5111dfe8ee4133c7a618ef7cf915a6",
+      "path": "298000_5094000.lax",
+      "role": "index",
+      "sha256": "ec7f0b66667883bd3a7fe98db814bf454eb4095242f707ba6b594302d54485d8"
+    },
+    {
+      "bytes": 15513299,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          298999.99,
+          5095000.0,
+          282.35
+        ],
+        "min": [
+          298000.0,
+          5094000.0,
+          184.77
+        ],
+        "offset": [
+          298000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1982632,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "7d1938fa782b6d429140e07af962e080",
+      "path": "298000_5094000.laz",
+      "role": "input",
+      "sha256": "5988b179839fee506a8e7897628b392e8fb271d6c858b5e8f156f63cd368ff8f"
+    },
+    {
+      "bytes": 2134,
+      "md5": "5e826e2c3ad2c29a7649f26af5eb2248",
+      "path": "298000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "9a143a23af92b3d10074d949bf70dff390897813630acb5eba9d3da2e988a172"
+    },
+    {
+      "bytes": 1020,
+      "md5": "2251e1b417e37c402898349d6cf3dce2",
+      "path": "298000_5095000.lax",
+      "role": "index",
+      "sha256": "17a2515a0af911a7f555c0599308be4f5e1c9eb6db3c102dabadd903ea426cd7"
+    },
+    {
+      "bytes": 8330598,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          299000.0,
+          5095721.35,
+          286.25
+        ],
+        "min": [
+          298000.0,
+          5095000.0,
+          184.79
+        ],
+        "offset": [
+          298000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1090560,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "82c5de072207e3dbbbfda4a49e08eccb",
+      "path": "298000_5095000.laz",
+      "role": "input",
+      "sha256": "2eb3db06aa6e65225dffc0ba0495b9d3416a5f6a735b23b010764f1664aee5fc"
+    },
+    {
+      "bytes": 2128,
+      "md5": "285581c5d899fd3803400698b099c9c7",
+      "path": "298000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "d09a1ac1f525f77da5ee14bbfb009dccc7941101e0a8f12593d0409397388e19"
+    },
+    {
+      "bytes": 2392,
+      "md5": "fe30e6ea65d83a4b4603f32324abd023",
+      "path": "299000_5091000.lax",
+      "role": "index",
+      "sha256": "0e23fe99e6029f46c06d05172ebc1667fb70f568dc286877ce8ee5d2306c48a7"
+    },
+    {
+      "bytes": 14401375,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          299999.99,
+          5092000.0,
+          314.13
+        ],
+        "min": [
+          299000.0,
+          5091000.0,
+          153.62
+        ],
+        "offset": [
+          299000.0,
+          5091000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1797752,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "56d52fc488b9dbb4d4811b8f4b07266a",
+      "path": "299000_5091000.laz",
+      "role": "input",
+      "sha256": "34304fc62ecfcb4048d33b91492c84903d84b5b5e1ad18b7deaaa6d177b21319"
+    },
+    {
+      "bytes": 2133,
+      "md5": "fd3512411aca7b78e51bff1125a45398",
+      "path": "299000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "4e96b730ca93beef86e3c94ab72f77861df8c3ad4259fb4507be7cc34cab8567"
+    },
+    {
+      "bytes": 2552,
+      "md5": "413570438a0867fa42baa165eee0ae33",
+      "path": "299000_5092000.lax",
+      "role": "index",
+      "sha256": "0e362552f26e98826aa7d632280eda355ee2ddc7c2a88101e97c82298d8108ce"
+    },
+    {
+      "bytes": 15141988,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          299999.99,
+          5093000.0,
+          306.40000000000003
+        ],
+        "min": [
+          299000.0,
+          5092000.0,
+          164.08
+        ],
+        "offset": [
+          299000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1960560,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "e66cbe7dcc78a09b8574cbc7c5b066e3",
+      "path": "299000_5092000.laz",
+      "role": "input",
+      "sha256": "391f39d09b5de5be5483572d4c4e6cc8b17d2a08e8c5fa5c4a0ba9971f0d62ec"
+    },
+    {
+      "bytes": 2143,
+      "md5": "ea921f02dd2656db995dfa41d75a8d35",
+      "path": "299000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "9795da8d43f01a74e7c58edff79a577e44d769a43791b4537d7eb67cf65fd65b"
+    },
+    {
+      "bytes": 14920,
+      "md5": "cf82d273b0b72ffd347cd8b55b12addc",
+      "path": "299000_5093000.lax",
+      "role": "index",
+      "sha256": "ef33577ab68a01807306c5a15ea48cf9ba5e40b2fb61e13dfc3ca813e7f2923d"
+    },
+    {
+      "bytes": 14999378,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          299999.99,
+          5093999.99,
+          366.98
+        ],
+        "min": [
+          299000.0,
+          5093000.0,
+          160.45000000000002
+        ],
+        "offset": [
+          299000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1939536,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "00c3087b500452d2de43d9f1a624ab4c",
+      "path": "299000_5093000.laz",
+      "role": "input",
+      "sha256": "23016f2ef2aa651dcc095fffbf00cc41ca8b872455b096cea757c909ed39f4f4"
+    },
+    {
+      "bytes": 2142,
+      "md5": "36711adaad59844b73546df49d406302",
+      "path": "299000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "ec24da22dc8e4b09a64948500e4430ef076fc06a19ac7eae09687edb01cefe0a"
+    },
+    {
+      "bytes": 2300,
+      "md5": "b2f750abb042364496c23d09398beae0",
+      "path": "299000_5094000.lax",
+      "role": "index",
+      "sha256": "ab640c183e3e0c792f754d4d883368bfe20221a7df3d4da3f69c1882b04afccf"
+    },
+    {
+      "bytes": 15504990,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          300000.0,
+          5094999.99,
+          362.93
+        ],
+        "min": [
+          299000.0,
+          5094000.0,
+          176.57
+        ],
+        "offset": [
+          299000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1987768,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "62e128e18f413f5d419374c71701c33c",
+      "path": "299000_5094000.laz",
+      "role": "input",
+      "sha256": "a3d965d45d2833590cf900bb3aef51eacb6b47d9f4dba9105999a30646856fdb"
+    },
+    {
+      "bytes": 2133,
+      "md5": "1163b79cb40adb66c171a5b231f18d99",
+      "path": "299000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "acc46d82ab1b88631ab82bb079a4b06103ef9133d978e1cf75675ae308460db0"
+    },
+    {
+      "bytes": 9216,
+      "md5": "a3ef8a17a108c3e7d3cdac3043eeb833",
+      "path": "299000_5095000.lax",
+      "role": "index",
+      "sha256": "23b4c3edb62c558a57dc5a866359975942d3b0fae7eefea525e4f3a510675327"
+    },
+    {
+      "bytes": 13630144,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          299999.99,
+          5095999.99,
+          303.79
+        ],
+        "min": [
+          299000.0,
+          5095000.0,
+          208.43
+        ],
+        "offset": [
+          299000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1772888,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "008cb8c010e6c9376683a45ed66b4333",
+      "path": "299000_5095000.laz",
+      "role": "input",
+      "sha256": "88642e4fb37bde78fe393bb180315fa95e996859ec7651df95e0b188fee204c4"
+    },
+    {
+      "bytes": 2144,
+      "md5": "3c2f242884834c363ba5ed937326a121",
+      "path": "299000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "e443e94b15decf893c98661f1946a9a5ea53134791621c4ab5771c48b4156723"
+    },
+    {
+      "bytes": 2340,
+      "md5": "46a7610144ec1f8794c120528572c627",
+      "path": "300000_5091000.lax",
+      "role": "index",
+      "sha256": "d0d5286e5d9939d4637bc92d99dc7064833e2cfed6b1a0c5f85d577e81cb93cd"
+    },
+    {
+      "bytes": 15371789,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          301000.0,
+          5092000.0,
+          308.6
+        ],
+        "min": [
+          300000.0,
+          5091000.0,
+          164.09
+        ],
+        "offset": [
+          300000.0,
+          5091000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1962424,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "58880d0ce9e11f265f6544ab0b67765d",
+      "path": "300000_5091000.laz",
+      "role": "input",
+      "sha256": "e8f7b5876367127bcb3e9127e07bcbad77fd65512ff3dd0a31babd17decf6c46"
+    },
+    {
+      "bytes": 2126,
+      "md5": "73ff68cf34f748fba8712d39b3b78fbe",
+      "path": "300000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "ca7823ad87b572e71a17cd7339d06bca569599fcafb9e2c60ebef2352a5c5260"
+    },
+    {
+      "bytes": 3608,
+      "md5": "4bb0e512740c7841a05e668eb3cb103e",
+      "path": "300000_5092000.lax",
+      "role": "index",
+      "sha256": "8fbb4197c22ef482be983ffc04c4cb09a30de663ab22395561b7d401fc82c03b"
+    },
+    {
+      "bytes": 13162395,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          300999.99,
+          5093000.0,
+          269.79
+        ],
+        "min": [
+          300000.0,
+          5092000.0,
+          163.92000000000002
+        ],
+        "offset": [
+          300000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1983056,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "7e518840b92753823e943a3e6eb68b66",
+      "path": "300000_5092000.laz",
+      "role": "input",
+      "sha256": "d7c59286dbbb9a3a7d09669d22c9fe0282c55b9430f774775045dd35d6034ebd"
+    },
+    {
+      "bytes": 2141,
+      "md5": "8d00a3e6a61b77e31a22023794e9ddd5",
+      "path": "300000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "a410b97da34eedd0eec065c1550e2f1a6cb0bc212946a5ced45f5629b10efea5"
+    },
+    {
+      "bytes": 3172,
+      "md5": "9ea8b7cee2a0ec84fb00396fa9788ab0",
+      "path": "300000_5093000.lax",
+      "role": "index",
+      "sha256": "09df48e36fb62e88b10091c0f44582cabaa63c13eb4d5db35ef3e770e70c24d5"
+    },
+    {
+      "bytes": 15090293,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          301000.0,
+          5093999.99,
+          253.44
+        ],
+        "min": [
+          300000.0,
+          5093000.0,
+          164.09
+        ],
+        "offset": [
+          300000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1998928,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "2dd42b665ab1b8f6f7bfd103b81c8b31",
+      "path": "300000_5093000.laz",
+      "role": "input",
+      "sha256": "3a33b2beb2c74fe3652bd84bbdb457d1b7350abc9a12dc93da29b977b84fd279"
+    },
+    {
+      "bytes": 2131,
+      "md5": "3467c055cc25a866a442fa01bb040a8a",
+      "path": "300000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "25a7f626b1a6322a53f7ad756db781cef47fc4b7db9d0a60b737ea3309b1e187"
+    },
+    {
+      "bytes": 8768,
+      "md5": "68cd23c324b69c26a9f9a7d46926078a",
+      "path": "300000_5094000.lax",
+      "role": "index",
+      "sha256": "d14432e19c044d66d68d741333d2f6d3531ab024146371a9e4f0da0fa841fb3d"
+    },
+    {
+      "bytes": 15639167,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          300999.99,
+          5094999.99,
+          317.27
+        ],
+        "min": [
+          300000.0,
+          5094000.0,
+          176.98
+        ],
+        "offset": [
+          300000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1990016,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "e06b305e3ce0d9621cda708bb6e30f49",
+      "path": "300000_5094000.laz",
+      "role": "input",
+      "sha256": "8b25ac554a2d436035c71422419dc3f0a8bc714958d5333c06380b55c2cdce00"
+    },
+    {
+      "bytes": 2134,
+      "md5": "20efc9ad79b6c8296d2081cf38017605",
+      "path": "300000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "562b24f8af49089c465c8fd8555542800872721d3dab3fa5771195dafcc238f3"
+    },
+    {
+      "bytes": 9096,
+      "md5": "9782e55285cd1599ce1d2b3edc3adab8",
+      "path": "300000_5095000.lax",
+      "role": "index",
+      "sha256": "6027ac91d075b3dbee5672f5eb53d4ea4c196302a43aa32bbe529f03284db0bd"
+    },
+    {
+      "bytes": 15500270,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          300999.99,
+          5095999.99,
+          303.73
+        ],
+        "min": [
+          300000.0,
+          5095000.0,
+          205.49
+        ],
+        "offset": [
+          300000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1986504,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "1832f13f8968f720d6b2d094e761aeec",
+      "path": "300000_5095000.laz",
+      "role": "input",
+      "sha256": "69bcad3670454c55d4fdf47888a6039027dc2d990da6aaf7e775200869218e4b"
+    },
+    {
+      "bytes": 2133,
+      "md5": "a65b73ef9c03c02fd98cca3fd7bd4aa1",
+      "path": "300000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "fe4d2cb87d8d88138f4f327d128f91136f551f0b4e77d33e0128195f07b5b971"
+    },
+    {
+      "bytes": 29764,
+      "md5": "e2342cdbd69aacbb2d669ddfda8aae87",
+      "path": "301000_5091000.lax",
+      "role": "index",
+      "sha256": "12e37eeefa18a9eb0cbdd7fe7ef6dfde0a0ff9cfad7bde0accba32189702c6af"
+    },
+    {
+      "bytes": 11369437,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          301999.99,
+          5091999.99,
+          240.01
+        ],
+        "min": [
+          301000.0,
+          5091000.0,
+          164.02
+        ],
+        "offset": [
+          301000.0,
+          5091000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1542360,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "82be4b315095cd26be7204784679cb4f",
+      "path": "301000_5091000.laz",
+      "role": "input",
+      "sha256": "9f4bd84f629b1e7bb1a155237cb16fb909266feac7ac56716ec4447cada68d7c"
+    },
+    {
+      "bytes": 2142,
+      "md5": "ad73c2efa6a2299baef6d5d184cab10b",
+      "path": "301000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "4e8eb4d5641c401df61c3c22c721b2b9e4d5c2530c1ea369fc59fcfb8832c110"
+    },
+    {
+      "bytes": 3240,
+      "md5": "a93576b75646fc96ba28a0c4f42e1b6e",
+      "path": "301000_5092000.lax",
+      "role": "index",
+      "sha256": "451d4450dc6083e4a03533832d627d844ed854dd1c5e4c461bf8ee9674a2879d"
+    },
+    {
+      "bytes": 15394448,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302000.0,
+          5093000.0,
+          244.02
+        ],
+        "min": [
+          301000.0,
+          5092000.0,
+          164.08
+        ],
+        "offset": [
+          301000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1981784,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "095b775e8aeb2d341ffb5e2d2996ef89",
+      "path": "301000_5092000.laz",
+      "role": "input",
+      "sha256": "99b930b35cd7c2b45c5b08f1b72ac1046e1c4a89bf114cf13651668738efe914"
+    },
+    {
+      "bytes": 2127,
+      "md5": "fc75301c25e1f8bb9fbe8714484e8bc8",
+      "path": "301000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "c920ecd7a2ccaeb063b9315fb2db1d0e3626c0adfaf61febaa728000541b8765"
+    },
+    {
+      "bytes": 3256,
+      "md5": "b47560d22e7acae6610dc55fce5a8afc",
+      "path": "301000_5093000.lax",
+      "role": "index",
+      "sha256": "56a7165ac59bb4fd4a0de4c5f765e6fcf83f22fd0470ff1239bdbaea4195be1a"
+    },
+    {
+      "bytes": 14606657,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302000.0,
+          5093999.99,
+          254.89000000000001
+        ],
+        "min": [
+          301000.0,
+          5093000.0,
+          164.09
+        ],
+        "offset": [
+          301000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1942856,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "60e07c8cf3a439564bdd52a3eea04ade",
+      "path": "301000_5093000.laz",
+      "role": "input",
+      "sha256": "008b498b80d1a3ccb01d52af1b7951e6e03e3bf59331ed1ea8339e5898de57eb"
+    },
+    {
+      "bytes": 2126,
+      "md5": "3bd69dba45b0ad36b9e06fcc2913da58",
+      "path": "301000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "f82e761f0141b2253095f1ec7660a51b05cf358dd99d90bf5871c123939bcd1c"
+    },
+    {
+      "bytes": 3248,
+      "md5": "f98d4d412146dfbbcba849e808593d90",
+      "path": "301000_5094000.lax",
+      "role": "index",
+      "sha256": "71ccc609dabdf57f31590096c0df65810a00bcd73c50e8fc74ff7746b9194c18"
+    },
+    {
+      "bytes": 13904291,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302000.0,
+          5095000.0,
+          255.94
+        ],
+        "min": [
+          301000.0,
+          5094000.0,
+          189.79
+        ],
+        "offset": [
+          301000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1812120,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "0993d7849ea4030a743b14cf129d5edb",
+      "path": "301000_5094000.laz",
+      "role": "input",
+      "sha256": "c701077aca5fa2fb60db9ccfa2c8097c8de9654e6fcfa290905bd8b0a418e315"
+    },
+    {
+      "bytes": 2130,
+      "md5": "a5f73238630b8dc210a1e0e8fd886ead",
+      "path": "301000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "26b4e799d6bbb1625cedc18b8218b0056a1c286002a6cb3f79bb69b2d7da178f"
+    },
+    {
+      "bytes": 2048,
+      "md5": "b4a9372ee7b6f3c731b8562f009807d6",
+      "path": "301000_5095000.lax",
+      "role": "index",
+      "sha256": "d10509620d0ec67ee8728b84e6f7864935ef63e9b067a1b8ebd47b935e5419fc"
+    },
+    {
+      "bytes": 15347384,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302000.0,
+          5095999.99,
+          271.27
+        ],
+        "min": [
+          301000.0,
+          5095000.0,
+          199.81
+        ],
+        "offset": [
+          301000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1995816,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "da9d82fb4dceaeedf6ac605b8ba23a57",
+      "path": "301000_5095000.laz",
+      "role": "input",
+      "sha256": "c56eea590287995700454cf9a9c80d6bb85ec428be8c16da627d82dd92636977"
+    },
+    {
+      "bytes": 2128,
+      "md5": "cae87e6ff62e6d9bb9594e574d1c7ff4",
+      "path": "301000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "ca2315fa32d753325dff4a62a6572d991a28531a91e6433c1a15ecafe8afa580"
+    },
+    {
+      "bytes": 1204,
+      "md5": "c3cfec2c03acaee8ceace9faf618adf5",
+      "path": "301000_5096000.lax",
+      "role": "index",
+      "sha256": "8438a47a684ee65226af1568fa5eeac2578abf8e9257026ee4c459f4133d05c7"
+    },
+    {
+      "bytes": 8963375,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302000.0,
+          5096746.45,
+          261.7
+        ],
+        "min": [
+          301000.0,
+          5096000.0,
+          199.75
+        ],
+        "offset": [
+          301000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1167256,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "594bc1a97642cbcb57ef9d68d18552c8",
+      "path": "301000_5096000.laz",
+      "role": "input",
+      "sha256": "06b0f62b3acd8f207f1664ccd4f7d8a8e3533f029cfad217ebb31562c202303e"
+    },
+    {
+      "bytes": 2138,
+      "md5": "d0759139b99730349d9dd006e7a25cb4",
+      "path": "301000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "88a085faa9c4c271a5a6136424cb55b6f794d58160d9c39214da8c86e5751584"
+    },
+    {
+      "bytes": 1948,
+      "md5": "d0fc4be267568fd121fc7cda6cf435ec",
+      "path": "302000_5091000.lax",
+      "role": "index",
+      "sha256": "d86b276c9026689ee9886407a610a47fe0567427b279b5bad70e1cd8b07f3fab"
+    },
+    {
+      "bytes": 12517014,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302999.99,
+          5092000.0,
+          256.18
+        ],
+        "min": [
+          302000.0,
+          5091000.0,
+          164.05
+        ],
+        "offset": [
+          302000.0,
+          5091000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1617232,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "9d18ca516080665c0d32e43a7a3a86ab",
+      "path": "302000_5091000.laz",
+      "role": "input",
+      "sha256": "e9bc70dc7a451d5d2fbe9af83bf36aa15557a3ae8994bfdff86cdddb02a4bb8a"
+    },
+    {
+      "bytes": 2138,
+      "md5": "0610456e36724b228e79eea4f20ab5f1",
+      "path": "302000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "5b105ee11069eb4dfd1c574789974319941b1b97b7b092bcc82c615e1adfeb01"
+    },
+    {
+      "bytes": 8280,
+      "md5": "21902f8d8425f6106b08a475bf8e9190",
+      "path": "302000_5092000.lax",
+      "role": "index",
+      "sha256": "554d33ebafb3f2344afad8b6fb1ec0d9fdc07134de476616d56a03e4efe1549f"
+    },
+    {
+      "bytes": 16021254,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302999.99,
+          5092999.99,
+          263.88
+        ],
+        "min": [
+          302000.0,
+          5092000.0,
+          166.20000000000002
+        ],
+        "offset": [
+          302000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999336,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "34d667b35ceda93f43131e8f57b72dcf",
+      "path": "302000_5092000.laz",
+      "role": "input",
+      "sha256": "f9352302b3f6c3cf2752fbec562e5b3535c6588f91e1ff69b017a12ca2732eae"
+    },
+    {
+      "bytes": 2138,
+      "md5": "728ab58f64a9ad6fa638064a4099c5e3",
+      "path": "302000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "83d2771d12a27f37df6f293c17c7a4b1e4e7888e292ae502dd91d894d04d23ee"
+    },
+    {
+      "bytes": 2056,
+      "md5": "dba1a665162d9335c41a66104d2c4f04",
+      "path": "302000_5093000.lax",
+      "role": "index",
+      "sha256": "1ca1a6e942d95705341d378e12310e9f4f142b79453fd6b366a2711edcf61b61"
+    },
+    {
+      "bytes": 15486130,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302999.99,
+          5094000.0,
+          262.28000000000003
+        ],
+        "min": [
+          302000.0,
+          5093000.0,
+          172.99
+        ],
+        "offset": [
+          302000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999360,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "e26d915cd75852f67cf898360504449c",
+      "path": "302000_5093000.laz",
+      "role": "input",
+      "sha256": "3fd788b0a1bb3af9d7811672cb4c37f23c4a79ab623e98a2ed035cc36e3846b4"
+    },
+    {
+      "bytes": 2129,
+      "md5": "4ad637c4a77f7306f952bd47410d284b",
+      "path": "302000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "9e45e532549e19957e5ad1711d0fd6b7cfbf6d827ea6163f3a5b576ab12fb0b7"
+    },
+    {
+      "bytes": 2388,
+      "md5": "572c041c07b36e75679a5b95afedea4e",
+      "path": "302000_5094000.lax",
+      "role": "index",
+      "sha256": "904f4385b4f59b58a1eaaa933384624d5ad7eebaf282f7aeeac988cec8d296a5"
+    },
+    {
+      "bytes": 15208188,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          303000.0,
+          5095000.0,
+          268.95
+        ],
+        "min": [
+          302000.0,
+          5094000.0,
+          196.01
+        ],
+        "offset": [
+          302000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1984848,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "e760d6b375b6d03a6bec654f4801b5e2",
+      "path": "302000_5094000.laz",
+      "role": "input",
+      "sha256": "82445b7215a80edcfb561a9fbb616528734108f1da5aad254e246d7aeabce466"
+    },
+    {
+      "bytes": 2130,
+      "md5": "6148d946fa6a5e2e71b69970199aece3",
+      "path": "302000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "9ab525a7f6315768ceb690cb7239131f6aa795cb3ee94077014e11f07b8fa476"
+    },
+    {
+      "bytes": 2480,
+      "md5": "c0dc2bb2ae59b3f022a773f1e79818aa",
+      "path": "302000_5095000.lax",
+      "role": "index",
+      "sha256": "83c622a58fce88edc53f6023bc8a78b165ed8ffbe836a062cd728bb489f9788c"
+    },
+    {
+      "bytes": 15411290,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302999.99,
+          5096000.0,
+          271.75
+        ],
+        "min": [
+          302000.0,
+          5095000.0,
+          196.39000000000001
+        ],
+        "offset": [
+          302000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1986104,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "54807c1b44b04fb0b2e6ddcd58b51482",
+      "path": "302000_5095000.laz",
+      "role": "input",
+      "sha256": "dfc046bcd4f560d6a49293578f6cd16176ec69fadb90cee2e6e9de0120ad48af"
+    },
+    {
+      "bytes": 2131,
+      "md5": "c2b9b52588d11c35ea8e2ce0a930ade5",
+      "path": "302000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "0a06afa9ba652d3f243b3ae3eafcbe3ce9aa41534dab2d078af9395c2cfe37ce"
+    },
+    {
+      "bytes": 11152,
+      "md5": "2e4b771abc11576a7b16588b793d5ac4",
+      "path": "302000_5096000.lax",
+      "role": "index",
+      "sha256": "be0eb4c2e77ed42f20b55ae2fb9c0be1b9c191bc9fabb329dd6b2ac6916d9df6"
+    },
+    {
+      "bytes": 13472125,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          302999.99,
+          5097000.0,
+          264.43
+        ],
+        "min": [
+          302000.0,
+          5096000.01,
+          197.97
+        ],
+        "offset": [
+          302000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1765680,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "037a0bf06b3bf13c96a6d8d83e0eeca0",
+      "path": "302000_5096000.laz",
+      "role": "input",
+      "sha256": "2985e06af18dbf4f4bb41f5b538b43823d69e90a1087aada49d49e9cf010b361"
+    },
+    {
+      "bytes": 2142,
+      "md5": "52471b85eca448d033c3f0d59bf71b7e",
+      "path": "302000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "5a3e5ece7894a96d8e0c5db803a8c20a420002ad2897fb6adad07cd1eb2154c5"
+    },
+    {
+      "bytes": 11092,
+      "md5": "4c1afceae307ae76788be62f6e1a4f3d",
+      "path": "303000_5091000.lax",
+      "role": "index",
+      "sha256": "10869994091985a8a03bc78322cf7cf3acbd2ca9f38e746ea423e9274d7853c0"
+    },
+    {
+      "bytes": 14352385,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          303999.99,
+          5092000.0,
+          258.52
+        ],
+        "min": [
+          303000.0,
+          5091000.01,
+          164.07
+        ],
+        "offset": [
+          303000.0,
+          5091000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1892400,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "0591a32826f033788fc9319f3ded3180",
+      "path": "303000_5091000.laz",
+      "role": "input",
+      "sha256": "2906ca362387874a5d75f21a7847829fbde412ef06c594ac7b2cffa3e8350197"
+    },
+    {
+      "bytes": 2147,
+      "md5": "69433f0be196eca6adf2f20d39668611",
+      "path": "303000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "4e76b7605b0c1ef7ca68661e161dc429fac04e98dc981363174e06ecc89d5edb"
+    },
+    {
+      "bytes": 2212,
+      "md5": "31c1ceaa9c9e76a1e53dcd81701bc809",
+      "path": "303000_5092000.lax",
+      "role": "index",
+      "sha256": "107324ef462b4e53536c89b38bb2d2fddc309e6a2df2b94d81b05d9fab508bd0"
+    },
+    {
+      "bytes": 15405785,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          304000.0,
+          5093000.0,
+          266.77
+        ],
+        "min": [
+          303000.0,
+          5092000.01,
+          178.51
+        ],
+        "offset": [
+          303000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1978904,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "e4645f365cc0af702e8989fb10be1b6a",
+      "path": "303000_5092000.laz",
+      "role": "input",
+      "sha256": "27df48faabbaf57fda20f104d1891356e02515c884287ae658d6986609df4ce4"
+    },
+    {
+      "bytes": 2138,
+      "md5": "1e73c3c1c2658b15d6558225cf8cee5f",
+      "path": "303000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "fe05da50e406052cc8922e39c5d3dbbc659683519dfbb2f985c7a33033802004"
+    },
+    {
+      "bytes": 8484,
+      "md5": "69e54c81846abc578ef6df5a22485c38",
+      "path": "303000_5093000.lax",
+      "role": "index",
+      "sha256": "3839b032abc7b937cbb16e3a19f6e4960d3f1a80eb6430ce589ff2d37167a01e"
+    },
+    {
+      "bytes": 15699206,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          303999.99,
+          5094000.0,
+          261.72
+        ],
+        "min": [
+          303000.0,
+          5093000.01,
+          175.62
+        ],
+        "offset": [
+          303000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999200,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "2431b6cda603b611d7f10cf48ce02b39",
+      "path": "303000_5093000.laz",
+      "role": "input",
+      "sha256": "eacda8772f94497b1e92ad346ee84b71d9b46ae837a8988e610096683668322e"
+    },
+    {
+      "bytes": 2137,
+      "md5": "d9240551ce68abe41847c424d9ae0f04",
+      "path": "303000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "2081ec2c65fe4eea70d44fda0be639e5f9e199d88f23b74b541e8118bb34243f"
+    },
+    {
+      "bytes": 2076,
+      "md5": "0a056de8500bd73785b6301ccfe0462b",
+      "path": "303000_5094000.lax",
+      "role": "index",
+      "sha256": "f066d2f46c1fb2ff2dc263b12414f2d09bbfa3999504743b9e55953372032a3a"
+    },
+    {
+      "bytes": 15419902,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          303999.99,
+          5095000.0,
+          258.49
+        ],
+        "min": [
+          303000.0,
+          5094000.0,
+          185.13
+        ],
+        "offset": [
+          303000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999016,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "c97f6e2eb8ab037dcd7d018eabb4c490",
+      "path": "303000_5094000.laz",
+      "role": "input",
+      "sha256": "a53b84c637171cfa6f793ea83c349e8f47f8321714493e9978089c8d3ef199ac"
+    },
+    {
+      "bytes": 2140,
+      "md5": "bc63f5bc6af241f30497544b0bd4cc87",
+      "path": "303000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "80955151e312cd9f5172b543cc02b96e1180ede9fcd09774a6ee9bc3e107bebd"
+    },
+    {
+      "bytes": 2476,
+      "md5": "beaa9d704e8fc1b03fc62e26773381be",
+      "path": "303000_5095000.lax",
+      "role": "index",
+      "sha256": "53f6c9d2f4f5a3911e41e912cd1d956fb765bf0385677b8e80ecea57efa0c91f"
+    },
+    {
+      "bytes": 15577621,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          304000.0,
+          5096000.0,
+          259.83
+        ],
+        "min": [
+          303000.0,
+          5095000.0,
+          195.46
+        ],
+        "offset": [
+          303000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1997224,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "33d503c89349fd848fd8ce72dac98d4e",
+      "path": "303000_5095000.laz",
+      "role": "input",
+      "sha256": "aba1094db9776d7d42da87f00f71a487425566c2984259c8bc6fe1f32250319a"
+    },
+    {
+      "bytes": 2130,
+      "md5": "40fc55122d4b952c8416215b6171b1aa",
+      "path": "303000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "35ea35b9afb17d4a07f8404e8ccab204890105f33f13ac83c8020e89e9a8a29a"
+    },
+    {
+      "bytes": 1960,
+      "md5": "589602e533415a4571e261f499acfa67",
+      "path": "303000_5096000.lax",
+      "role": "index",
+      "sha256": "13d439010e6fc8de4376c83325778a234ddf7289135e36cc17397ed91cfc1513"
+    },
+    {
+      "bytes": 15422100,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          304000.0,
+          5097000.0,
+          250.56
+        ],
+        "min": [
+          303000.0,
+          5096000.01,
+          193.63
+        ],
+        "offset": [
+          303000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 2000056,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "1f32bd423200c30a631a91905350a718",
+      "path": "303000_5096000.laz",
+      "role": "input",
+      "sha256": "5ebc1ead35c477b30a80ac3c294b23ead32eaf137256b134fdc63b4ca40d737d"
+    },
+    {
+      "bytes": 2135,
+      "md5": "4f083c41235235a66f484b370917ed40",
+      "path": "303000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "0db7e5ded56f1e58dfc289d1b68a5a142b88aa2a2ead146a6ba9cc988c2e1b3d"
+    },
+    {
+      "bytes": 8476,
+      "md5": "381c0ddc2829e83ad6a111753c9f6f5e",
+      "path": "304000_5092000.lax",
+      "role": "index",
+      "sha256": "08ebd3edd6d26a7285a9584037784eafe7d3bb72944e0a2b952f2ae950a15a60"
+    },
+    {
+      "bytes": 15112838,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          304999.99,
+          5092999.99,
+          263.03000000000003
+        ],
+        "min": [
+          304000.0,
+          5092000.0,
+          201.42000000000002
+        ],
+        "offset": [
+          304000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1991096,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "689540b0e39387b853920df6921be81e",
+      "path": "304000_5092000.laz",
+      "role": "input",
+      "sha256": "4e2cf9d55c7ea4cae94f5bc93d3d78c0dcd3769dc9c5ab606500bad9c9676a86"
+    },
+    {
+      "bytes": 2143,
+      "md5": "9390959552e03397509b9541d6faecd1",
+      "path": "304000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "cb71b577062244843d0ed7b4d982765a5c56c32a33aa3529a269482934fdb815"
+    },
+    {
+      "bytes": 8564,
+      "md5": "0fefc76fd1541aa53d6d8c1a95b71068",
+      "path": "304000_5093000.lax",
+      "role": "index",
+      "sha256": "d840ecb215c2abeae7fd134c710daafa4ac347a82a11ad3e77f2656c1d3767ec"
+    },
+    {
+      "bytes": 15667321,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          304999.99,
+          5093999.99,
+          264.55
+        ],
+        "min": [
+          304000.0,
+          5093000.0,
+          185.92000000000002
+        ],
+        "offset": [
+          304000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1997192,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "902499265247eceab69f2f418e0876c0",
+      "path": "304000_5093000.laz",
+      "role": "input",
+      "sha256": "e508c3a563e45463f1b217bdb7997f34a7017efd1ababe9d7810b42175283155"
+    },
+    {
+      "bytes": 2134,
+      "md5": "5621971983f07b463e424e8baf56c6ed",
+      "path": "304000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "25aebd7d5b4139ad044a6dd7d7ed4336882dc15b6385ec6aab737c7869f0020a"
+    },
+    {
+      "bytes": 8508,
+      "md5": "7ef8445a66e9ddb121e44beeaa7161ad",
+      "path": "304000_5094000.lax",
+      "role": "index",
+      "sha256": "7f700492a67b6a00e2d8b830e223d0954110fb4b27ac620065dd28d098c07646"
+    },
+    {
+      "bytes": 15489276,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          304999.99,
+          5094999.99,
+          255.6
+        ],
+        "min": [
+          304000.0,
+          5094000.0,
+          185.18
+        ],
+        "offset": [
+          304000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1995608,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "035f574731569916c72b96c2bca1f896",
+      "path": "304000_5094000.laz",
+      "role": "input",
+      "sha256": "566cbb003423b50aad1b6ba24dcfb07509deb699fba3a9bdef888299c55d607e"
+    },
+    {
+      "bytes": 2147,
+      "md5": "404076e179b4b955e1815c18ff420d4e",
+      "path": "304000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "d4209e24d5f051ab2522be9440ff1a84911361155ef0747e12a5d716561965d9"
+    },
+    {
+      "bytes": 2148,
+      "md5": "c139697c9f6e1e6f4c4f3e1b858d0a5e",
+      "path": "304000_5095000.lax",
+      "role": "index",
+      "sha256": "363ba14079b50c60f913ecc55110943aad8d249468e2ac941c123cab3c557a99"
+    },
+    {
+      "bytes": 15474061,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          305000.0,
+          5096000.0,
+          254.98000000000002
+        ],
+        "min": [
+          304000.0,
+          5095000.0,
+          182.35
+        ],
+        "offset": [
+          304000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 2000576,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "7fff9cf3369ef8e8fedfa385b8a14795",
+      "path": "304000_5095000.laz",
+      "role": "input",
+      "sha256": "f2bcb5fd04b56668e785672f6ce89d9560a1e66c37c20340172ebe28a43c8c29"
+    },
+    {
+      "bytes": 2127,
+      "md5": "dfbdbbf5238632730ac7669630837311",
+      "path": "304000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "55d1da4a5a7c1399c4f72389cb3e4ba49803ce38439e8ee3102fb4c377a936b6"
+    },
+    {
+      "bytes": 2428,
+      "md5": "2e60601450c5d020cd2be2633dfc9419",
+      "path": "304000_5096000.lax",
+      "role": "index",
+      "sha256": "c7600006427e279b73293066506256931dddc1ba629b53ae36bef21127a9c573"
+    },
+    {
+      "bytes": 14789267,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          305000.0,
+          5097000.0,
+          249.19
+        ],
+        "min": [
+          304000.0,
+          5096000.0,
+          178.31
+        ],
+        "offset": [
+          304000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1944504,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "d8f4c58006a4d241986436ddc058fd6a",
+      "path": "304000_5096000.laz",
+      "role": "input",
+      "sha256": "35fd82136b43e4fd70d589823dbd57d493df4546f25e99eb097c78e1e531bf7b"
+    },
+    {
+      "bytes": 2127,
+      "md5": "35f24bc818f8eef851892697011b877f",
+      "path": "304000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "b09a15c9782e304d7e8d9120ffa623e2fee628453a2acad64d8026152614a008"
+    },
+    {
+      "bytes": 1228,
+      "md5": "66f283058d8d1cd6b3dcfcdd0f2ed358",
+      "path": "304000_5097000.lax",
+      "role": "index",
+      "sha256": "27739e8ddd00cd19701ac8eaad2063992cd283384a15398c3e6c47ca72705fad"
+    },
+    {
+      "bytes": 9108142,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          305000.0,
+          5097816.88,
+          257.94
+        ],
+        "min": [
+          304000.0,
+          5097000.0,
+          179.16
+        ],
+        "offset": [
+          304000.0,
+          5097000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1198936,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "e0a9a787fcd6f770ac9658191014947b",
+      "path": "304000_5097000.laz",
+      "role": "input",
+      "sha256": "a67944d46be1300b8cd0730db05dd11330975f88fcc1c429dd1910488e898277"
+    },
+    {
+      "bytes": 2144,
+      "md5": "f9ab874b9e01fdf69b9358ef656074aa",
+      "path": "304000_5097000.laz.rds",
+      "role": "receipt",
+      "sha256": "b3ec47f9c1a40c92a1c76712f8239b449d853e7d643a54d3cae2b900f20852df"
+    },
+    {
+      "bytes": 1544,
+      "md5": "5c23db735ba6bc692097c376e5c394fb",
+      "path": "305000_5092000.lax",
+      "role": "index",
+      "sha256": "761564d1f09892442844b24956dc25808b90e12a4ba14d362c913a9d5ecdbb9e"
+    },
+    {
+      "bytes": 12159860,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          306000.0,
+          5092999.99,
+          264.11
+        ],
+        "min": [
+          305000.0,
+          5092000.0,
+          187.18
+        ],
+        "offset": [
+          305000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1585664,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "cba723fe8722335811518773d67b208b",
+      "path": "305000_5092000.laz",
+      "role": "input",
+      "sha256": "d13d718ee235b7a4b3e40048bec52e3df9e649e17d4cd02c1f7eb13d17ce338d"
+    },
+    {
+      "bytes": 2133,
+      "md5": "17da9e2a88bda8f83b984d79fea93c85",
+      "path": "305000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "c9e4c041d2003ee4242db4f4b8191d8e624c909ceafa4f90cf6f347f9631ab3d"
+    },
+    {
+      "bytes": 2296,
+      "md5": "32d4ef2b222d5976ac4635f2c1b1c69f",
+      "path": "305000_5093000.lax",
+      "role": "index",
+      "sha256": "3949668ac65f4cc3c488cd43cdc0f347728706d63ec732960d1cafc0a76ec672"
+    },
+    {
+      "bytes": 15746680,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          306000.0,
+          5093999.99,
+          254.35
+        ],
+        "min": [
+          305000.0,
+          5093000.0,
+          186.9
+        ],
+        "offset": [
+          305000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 2000856,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "6e9162e6c903f38c3be26a9cfce5d789",
+      "path": "305000_5093000.laz",
+      "role": "input",
+      "sha256": "24d92b0d12955665edb3ea3807585a129bd6b446d994199666b9de98bee73751"
+    },
+    {
+      "bytes": 2135,
+      "md5": "db8243b6381936f0910671f80086aa84",
+      "path": "305000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "4dac430f978930f07cbc0110e3b77f6042a220b2176742ba09c83953bbeb1f5b"
+    },
+    {
+      "bytes": 2156,
+      "md5": "2113e5ad6fbca97c59c27afb55dca64d",
+      "path": "305000_5094000.lax",
+      "role": "index",
+      "sha256": "04ef4d76c56f7d70f5d19b8a0a9751daa025fe9509ae8f9bc79cae37f708edc5"
+    },
+    {
+      "bytes": 15539589,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          305999.99,
+          5095000.0,
+          246.46
+        ],
+        "min": [
+          305000.0,
+          5094000.0,
+          184.32
+        ],
+        "offset": [
+          305000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999984,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "447dac204e5dd90caa6a3324cdeb84f1",
+      "path": "305000_5094000.laz",
+      "role": "input",
+      "sha256": "cc55f964c234aaa4a6b10ace03bd8fce02d3db81bad77377ca83c909453a3304"
+    },
+    {
+      "bytes": 2134,
+      "md5": "f7df4af9d4e529044344331c42e903a7",
+      "path": "305000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "4bd69613f44278efd307ff202ed41ad6856b78cc5566d4fcb408a26549230390"
+    },
+    {
+      "bytes": 8256,
+      "md5": "2747af0e701659443f2505e6abced019",
+      "path": "305000_5095000.lax",
+      "role": "index",
+      "sha256": "9e9ec6c302d6b425c5e92a0f7ae0bc8b7de79080533d92b248d60fe036a5cd00"
+    },
+    {
+      "bytes": 15447863,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          305999.99,
+          5095999.99,
+          261.2
+        ],
+        "min": [
+          305000.0,
+          5095000.0,
+          175.21
+        ],
+        "offset": [
+          305000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1995288,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "921f4430870f5517e3953bff526d7d75",
+      "path": "305000_5095000.laz",
+      "role": "input",
+      "sha256": "e198b5bb6b5fe7c46898b2af82f8071c39f58341ebf3233eb60e51cf103d2be1"
+    },
+    {
+      "bytes": 2136,
+      "md5": "948a0f2beacfd35337140b426ce8a9db",
+      "path": "305000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "cfd943ccd6282a78440cfa30d9c4c4cb2f6e501accb290bd4fc680b03cb86a68"
+    },
+    {
+      "bytes": 2588,
+      "md5": "2dd820b1281a6334a91953a6af88cb03",
+      "path": "305000_5096000.lax",
+      "role": "index",
+      "sha256": "5b28551ccc8aae5dca67433fb7b9df115a2d0954683651d56468e039a47ce80c"
+    },
+    {
+      "bytes": 15543786,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          306000.0,
+          5096999.99,
+          251.96
+        ],
+        "min": [
+          305000.0,
+          5096000.0,
+          176.68
+        ],
+        "offset": [
+          305000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1995784,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "be06a9dffa05458d63e3b1b212f18f78",
+      "path": "305000_5096000.laz",
+      "role": "input",
+      "sha256": "c4985b7a46262b0a6833e4b445f27f6e45206781c82ee8b0cb8d19711c8f3f2e"
+    },
+    {
+      "bytes": 2139,
+      "md5": "1f42a7387d6062b4c711105719d0d814",
+      "path": "305000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "edbc1c7f3966f0c1399d014c583cab3d8b14658231d0cc50fc5c7a55f66b9798"
+    },
+    {
+      "bytes": 2112,
+      "md5": "a0ed80d36138e461120b024296aaa27d",
+      "path": "305000_5097000.lax",
+      "role": "index",
+      "sha256": "9db418e630b66f9f4690b94a5817d6de2ab6990441f40a5c3e7869681df6f766"
+    },
+    {
+      "bytes": 14291479,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          305999.99,
+          5098000.0,
+          237.15
+        ],
+        "min": [
+          305000.0,
+          5097000.0,
+          179.22
+        ],
+        "offset": [
+          305000.0,
+          5097000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1868216,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "97c67f9b206e3efba3c1c74e17445d9c",
+      "path": "305000_5097000.laz",
+      "role": "input",
+      "sha256": "f5ddf33dd4a56c5db1b1b1c9b69de467dda9aa37fd0f66766455db3dbb40d9f7"
+    },
+    {
+      "bytes": 2149,
+      "md5": "517074e355818b33cf5fdc92b934a4ac",
+      "path": "305000_5097000.laz.rds",
+      "role": "receipt",
+      "sha256": "c05d1610819d88763c0f739737ac0ae3696173bdc0b932a2287eff27b9f015af"
+    },
+    {
+      "bytes": 10056,
+      "md5": "e3d7fe0eacf23a98a47a845cfbae6299",
+      "path": "306000_5092000.lax",
+      "role": "index",
+      "sha256": "a32db43fc3ecb6c35212437bc8d1667f62f801d946ce8b8212305e913e2b2d00"
+    },
+    {
+      "bytes": 11999941,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          306999.99,
+          5092999.99,
+          232.34
+        ],
+        "min": [
+          306000.0,
+          5092000.0,
+          181.91
+        ],
+        "offset": [
+          306000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1589008,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "83b9e18c84f1e06619b6d73d35f34894",
+      "path": "306000_5092000.laz",
+      "role": "input",
+      "sha256": "47a79139b96a1a5c972d1222c6805e820cc70e6095b9d767693e6bcd3371b4cd"
+    },
+    {
+      "bytes": 2143,
+      "md5": "e34adbe6b9cb9501c59172d1a067390d",
+      "path": "306000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "441cb162a072f6af8fc0faf98116f6134a59176d98b393c35bf198d219469f75"
+    },
+    {
+      "bytes": 2104,
+      "md5": "72e188ae65c563426d537b5a7ce4a14b",
+      "path": "306000_5093000.lax",
+      "role": "index",
+      "sha256": "22cb6bc273fca732df9980209991fc71b7c48edab0054aaa56a42d75adcbd918"
+    },
+    {
+      "bytes": 15410982,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          307000.0,
+          5094000.0,
+          227.31
+        ],
+        "min": [
+          306000.0,
+          5093000.0,
+          173.4
+        ],
+        "offset": [
+          306000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999656,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "a01fb1ae5907513a04450e9deaffffe4",
+      "path": "306000_5093000.laz",
+      "role": "input",
+      "sha256": "1584c8c9e0fa688f98fac9a197d1c8bfe273189a7359865d9cffd08e6f9328cc"
+    },
+    {
+      "bytes": 2132,
+      "md5": "a03ebbebf9f7e98052335fb21125bcb9",
+      "path": "306000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "7147355dff1f3e4359deb7cd7c3c5a5aba714797ec70f0c658c7ada8764ca075"
+    },
+    {
+      "bytes": 2536,
+      "md5": "9499cc92e3df1d5b23080a0be5f6d495",
+      "path": "306000_5094000.lax",
+      "role": "index",
+      "sha256": "59cb874526e0564b5d45aa1b04120e101f673972af9b1c86b429a5df052b6f9c"
+    },
+    {
+      "bytes": 15550204,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          307000.0,
+          5095000.0,
+          227.48000000000002
+        ],
+        "min": [
+          306000.0,
+          5094000.0,
+          175.20000000000002
+        ],
+        "offset": [
+          306000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 2000456,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "a9cb70c277b4203ab9c0a9b204add60b",
+      "path": "306000_5094000.laz",
+      "role": "input",
+      "sha256": "7aabc0c7853e28c57cf41655dd9afd69c1ab35162d1b9e1ba2b907beacfeea75"
+    },
+    {
+      "bytes": 2125,
+      "md5": "0e84ab345f8171eca2f75aa49edff387",
+      "path": "306000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "99a22408bd8d0066147af9d86393af0872a8adbdc733ba861c972f37b6ec93dd"
+    },
+    {
+      "bytes": 9296,
+      "md5": "7c2d4e82eacd50b8eeb45a2af645cf30",
+      "path": "306000_5095000.lax",
+      "role": "index",
+      "sha256": "cc9d6e7332e901f5f28516e6265c155837ea51417ef714b5432d2b853f84d1be"
+    },
+    {
+      "bytes": 15044284,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          306999.99,
+          5096000.0,
+          233.88
+        ],
+        "min": [
+          306000.0,
+          5095000.01,
+          175.14000000000001
+        ],
+        "offset": [
+          306000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1993232,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "c76643031a3ad6ce4485bcec99d3f63c",
+      "path": "306000_5095000.laz",
+      "role": "input",
+      "sha256": "2f2861a9a81396c3e97a4e02d80eb786b77f07e6ecfe02d800322a5dad549254"
+    },
+    {
+      "bytes": 2137,
+      "md5": "5e2856eeb1ef731bd9a017d98d19215f",
+      "path": "306000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "ecb2d62c447bc46b24c870a160bd527f489c589411509b3a9a39725684c61170"
+    },
+    {
+      "bytes": 7904,
+      "md5": "a8ea3130b574b1e47fb4128c1d3fead1",
+      "path": "306000_5096000.lax",
+      "role": "index",
+      "sha256": "b9b6462826e7100edd6b23fe1389e8daf4a224647d4192ccca937fcee0778daa"
+    },
+    {
+      "bytes": 15540926,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          306999.99,
+          5096999.99,
+          251.86
+        ],
+        "min": [
+          306000.0,
+          5096000.0,
+          170.72
+        ],
+        "offset": [
+          306000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1995400,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "eb7faa68320aa63878c3a7e9d15ccdbf",
+      "path": "306000_5096000.laz",
+      "role": "input",
+      "sha256": "b2bab1d72cdb4a90acad757458098b4124636bb80372cd58cc2933d774cf1fe4"
+    },
+    {
+      "bytes": 2136,
+      "md5": "9cce192db4a8b4f118e9b6a1bb898932",
+      "path": "306000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "e29f7cc5fef80350185d9cfe114e1240e9c9d72373d909d093fea979ac2abb64"
+    },
+    {
+      "bytes": 1992,
+      "md5": "89cfd131cfb4e4d2cf0fa4907aa19beb",
+      "path": "306000_5097000.lax",
+      "role": "index",
+      "sha256": "591d4f97b931e06328c70289c4bece701d38a8e6509027df276cd0919d05abb2"
+    },
+    {
+      "bytes": 14854834,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          306999.99,
+          5098000.0,
+          230.79
+        ],
+        "min": [
+          306000.0,
+          5097000.0,
+          145.24
+        ],
+        "offset": [
+          306000.0,
+          5097000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1948736,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "bc0129ba08049f049dfbd0d735064a47",
+      "path": "306000_5097000.laz",
+      "role": "input",
+      "sha256": "1c1c1487e32ba7a3cdc636d887dd9231a3420a7f1c5edb26e611c7944521c245"
+    },
+    {
+      "bytes": 2128,
+      "md5": "eb7be41f8249bb9bcf1d1bd715010b94",
+      "path": "306000_5097000.laz.rds",
+      "role": "receipt",
+      "sha256": "dabf703235ee70663df5fedf5341a7eb8ad0468cc6cae7c007d807c872281ac0"
+    },
+    {
+      "bytes": 1992,
+      "md5": "228fb6f34d1990840394a0682ae486ce",
+      "path": "307000_5092000.lax",
+      "role": "index",
+      "sha256": "3cbcf326949735558aba6448401425bd88308a2ccff5b3da37f3696c652bcba0"
+    },
+    {
+      "bytes": 15324652,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          308000.0,
+          5092999.99,
+          231.16
+        ],
+        "min": [
+          307000.0,
+          5092000.0,
+          181.88
+        ],
+        "offset": [
+          307000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 2000192,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "7b29a7e7717449217a91f01a0e065fa7",
+      "path": "307000_5092000.laz",
+      "role": "input",
+      "sha256": "fc6243989e8c9e872417515faf8ebe077ddcef41242f0cd5afb87c54999ff721"
+    },
+    {
+      "bytes": 2135,
+      "md5": "b904720b2f0518fefcc1e87159ba8f58",
+      "path": "307000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "cb55b3f40f2e6fa8b19629c70445544977bdb6c4a00b1b4591a755fe0c99256f"
+    },
+    {
+      "bytes": 9964,
+      "md5": "85f1b9538b32f417d26d6132af404074",
+      "path": "307000_5093000.lax",
+      "role": "index",
+      "sha256": "3267889ac04a4d8a560239ea28badd03b3e737ac72032e42a8a4938874fc5410"
+    },
+    {
+      "bytes": 15762534,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          307999.99,
+          5093999.99,
+          229.81
+        ],
+        "min": [
+          307000.0,
+          5093000.0,
+          163.58
+        ],
+        "offset": [
+          307000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1991472,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "063dc1e5583c1958bd4a08f4d5969ee0",
+      "path": "307000_5093000.laz",
+      "role": "input",
+      "sha256": "fab14d03a91ed9e3fc665e916b264fe30c0243f0b431a0af3167d1009e0edb76"
+    },
+    {
+      "bytes": 2140,
+      "md5": "122ab3c8d7371b47e93345f40b09d6c1",
+      "path": "307000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "06b771801064dee7042e617ba2d32503d9cd7880cc0d06feaffece8f64198829"
+    },
+    {
+      "bytes": 3040,
+      "md5": "f2c20bead6f1a8ab0d2da5247926eee0",
+      "path": "307000_5094000.lax",
+      "role": "index",
+      "sha256": "2007d0a2f867570a6081623d120fd82a2303d3caf40068588169e1bcfc3f7248"
+    },
+    {
+      "bytes": 15997344,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          308000.0,
+          5094999.99,
+          229.55
+        ],
+        "min": [
+          307000.0,
+          5094000.0,
+          167.45000000000002
+        ],
+        "offset": [
+          307000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1995696,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "4aff5387fff080e52677e11dc6ece3ff",
+      "path": "307000_5094000.laz",
+      "role": "input",
+      "sha256": "22b20a864b2372d763bbd1fc3677e228594f328cf93cdadbb0c0c6132a73cc8b"
+    },
+    {
+      "bytes": 2134,
+      "md5": "159d24d33d7e2e37415570ab15aa0bc5",
+      "path": "307000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "ab64a96f76fb21b5941fc97a631af27841b6ed8c3c0f93a1582687776bef20a7"
+    },
+    {
+      "bytes": 2076,
+      "md5": "65ad4d4627959bad74b096c76fcf00c6",
+      "path": "307000_5095000.lax",
+      "role": "index",
+      "sha256": "ceb3db30bd5eab378dea295bb76239e271a4d838227746939664ece1791e6e0b"
+    },
+    {
+      "bytes": 15303311,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          307999.99,
+          5096000.0,
+          236.27
+        ],
+        "min": [
+          307000.0,
+          5095000.0,
+          175.19
+        ],
+        "offset": [
+          307000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1992032,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "eec1cfde8594d4758af188836c360486",
+      "path": "307000_5095000.laz",
+      "role": "input",
+      "sha256": "42d5b9a41f5f5c8ac07549486b5da5780890bcbda99add02d452d5273846e295"
+    },
+    {
+      "bytes": 2140,
+      "md5": "aa6deb388b09b482d3903f542f5822c4",
+      "path": "307000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "ca3f5c2387fe325620a0fe55b25a91169fccb1163b993714a6a116ff7b57ca2b"
+    },
+    {
+      "bytes": 2080,
+      "md5": "fd5b69ecd2d94c989bd7efc0c97e2f55",
+      "path": "307000_5096000.lax",
+      "role": "index",
+      "sha256": "9e94e1968bea506bf1603ac8a1cfec6596b388b841a8e8f03f328d32d1ddf0b5"
+    },
+    {
+      "bytes": 15559308,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          307999.99,
+          5097000.0,
+          235.65
+        ],
+        "min": [
+          307000.0,
+          5096000.0,
+          169.99
+        ],
+        "offset": [
+          307000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1990256,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "ebf82364369d7d1f5d631055ceede978",
+      "path": "307000_5096000.laz",
+      "role": "input",
+      "sha256": "9edd052940459226df172211670c34f28feb9f76ab245ff77e81ebcc2e9b63a4"
+    },
+    {
+      "bytes": 2129,
+      "md5": "ee2ab50b70b90d39921675f11a77e5ad",
+      "path": "307000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "a3a57398f247d1988d6f3246506d7ea75ca80a23099acd9daecf38d6209ec163"
+    },
+    {
+      "bytes": 8676,
+      "md5": "113069841095d47f231161a0a1b69bfa",
+      "path": "307000_5097000.lax",
+      "role": "index",
+      "sha256": "8e4d51d746c393a818c8a95218282e2dd900ab8902cf77e935213df9952a75e8"
+    },
+    {
+      "bytes": 10679304,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          307999.99,
+          5097849.09,
+          230.86
+        ],
+        "min": [
+          307000.0,
+          5097000.0,
+          145.24
+        ],
+        "offset": [
+          307000.0,
+          5097000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1363432,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "6f200ebc4249d4d4c19bb26b7a59c621",
+      "path": "307000_5097000.laz",
+      "role": "input",
+      "sha256": "c8407e01cafeed69d18897b72448f739acf5c7b298127674f49ae36d3fbe630a"
+    },
+    {
+      "bytes": 2141,
+      "md5": "ca72f391c42ccc62a944513113ba0567",
+      "path": "307000_5097000.laz.rds",
+      "role": "receipt",
+      "sha256": "91741e338b77f8692a0a323e7d93beb880d984f2f8e13e5651e169dd373a8d9f"
+    },
+    {
+      "bytes": 1560,
+      "md5": "a9f631ad8bc06bdb34a65da0eca1331b",
+      "path": "308000_5091000.lax",
+      "role": "index",
+      "sha256": "c79112c96ecc60a274d6d2da67c37aa4836113d5409638656321dca0d606fd69"
+    },
+    {
+      "bytes": 13228525,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          309000.0,
+          5092000.0,
+          245.28
+        ],
+        "min": [
+          308000.0,
+          5091000.0,
+          175.67000000000002
+        ],
+        "offset": [
+          308000.0,
+          5091000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1731952,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "5389d5e499bc864fa4f2b5d72e8d3b66",
+      "path": "308000_5091000.laz",
+      "role": "input",
+      "sha256": "4a2eb5e7093825b6e89f0a190b526fcb55ef4178b63a81853268bcf659248a49"
+    },
+    {
+      "bytes": 2142,
+      "md5": "a8b44425eb0ca6742791d065e8e368e0",
+      "path": "308000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "76d25cabf92a331812dd479d39e10539cbaebf4ead9b08e5e0e580d80d296c9f"
+    },
+    {
+      "bytes": 8108,
+      "md5": "e9145b52f8c6dbd6629ec478bc25e15b",
+      "path": "308000_5092000.lax",
+      "role": "index",
+      "sha256": "a0eeab5aac6cc0bfb5c01e84a6be99f3345064bde30a648f2b6b8d34944d362a"
+    },
+    {
+      "bytes": 15478903,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          308999.99,
+          5092999.99,
+          235.92000000000002
+        ],
+        "min": [
+          308000.0,
+          5092000.0,
+          180.11
+        ],
+        "offset": [
+          308000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1997760,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "816404ab80e1527b64f821264b0585d5",
+      "path": "308000_5092000.laz",
+      "role": "input",
+      "sha256": "c128a1389f5d4f7911ef2fcb54a0f45934b4679fdfb8f776865a080391611cdd"
+    },
+    {
+      "bytes": 2141,
+      "md5": "a2abbc5f1c2ba1fc99dbb7aa8f4cfc47",
+      "path": "308000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "e5d9aa4d3ac627b410c5b11a1e368e1b72803fee9a7e2675c5b8a4d7f16119a5"
+    },
+    {
+      "bytes": 2996,
+      "md5": "14b6cedc83d51d9035e824f4d86cde2c",
+      "path": "308000_5093000.lax",
+      "role": "index",
+      "sha256": "e32fa2500b07ba6dc8721c21afa62aa487422f2d38bf276460ceb5dc7ff464ec"
+    },
+    {
+      "bytes": 16284324,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          308999.99,
+          5094000.0,
+          233.29
+        ],
+        "min": [
+          308000.0,
+          5093000.0,
+          161.63
+        ],
+        "offset": [
+          308000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1998584,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "0e9ff3d2a5ef3d7468a8b024a2afdf08",
+      "path": "308000_5093000.laz",
+      "role": "input",
+      "sha256": "e35b46d91bafc423b9b040f55ffc514695938fff86ee3a4bc495f3f13d818539"
+    },
+    {
+      "bytes": 2134,
+      "md5": "9401cde19207bddca75b3c50a0ae8927",
+      "path": "308000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "83cf2a40ea4ee11fc77c1b156e1d0d61ce5ebb637a8dbf19fa78ed67d2634736"
+    },
+    {
+      "bytes": 3076,
+      "md5": "435abca40cc682a20999169b464fcfcf",
+      "path": "308000_5094000.lax",
+      "role": "index",
+      "sha256": "f9d0f3ac2a864c40bc00739b0ca5b90175228f74bd28415fbfaf272d51cd141f"
+    },
+    {
+      "bytes": 16444428,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          308999.99,
+          5095000.0,
+          232.01
+        ],
+        "min": [
+          308000.0,
+          5094000.0,
+          162.68
+        ],
+        "offset": [
+          308000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1998712,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "362fb391dfe50addfd916fe329705500",
+      "path": "308000_5094000.laz",
+      "role": "input",
+      "sha256": "0be7511a69d0783b4d18de35beab4a884b584ed2e9d5d0740f4c0eb9f37b6f30"
+    },
+    {
+      "bytes": 2129,
+      "md5": "54921a8f5b370a6ef10b3dd227edfd65",
+      "path": "308000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "5f9b39c22131817e825885f7c4ce3115931362c25dd3537a72c17bf90b8584dc"
+    },
+    {
+      "bytes": 7992,
+      "md5": "4f35d03ce4696b947a0b3e16297b3e08",
+      "path": "308000_5095000.lax",
+      "role": "index",
+      "sha256": "0b158836fc04ba27eba81f19182604ec299a1a2c74860c78a2d1b2d8af14b219"
+    },
+    {
+      "bytes": 15479056,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          308999.99,
+          5096000.0,
+          235.05
+        ],
+        "min": [
+          308000.0,
+          5095000.01,
+          65.21000000000001
+        ],
+        "offset": [
+          308000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1998080,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "ee1f8e70aa87f00f3afc8254c0fcc7aa",
+      "path": "308000_5095000.laz",
+      "role": "input",
+      "sha256": "b44aab635c13cde63d76983ccb17a4bb9ff5945089344f67282377df26ec1ec0"
+    },
+    {
+      "bytes": 2141,
+      "md5": "bac0b4033996b9d6b50d4c7d939fdc88",
+      "path": "308000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "77d0c4aace1f981236b41794df443b0a156cf981644449f34cec6cc117726f1c"
+    },
+    {
+      "bytes": 9164,
+      "md5": "445da1d52ad5b3a53403484b33caac5a",
+      "path": "308000_5096000.lax",
+      "role": "index",
+      "sha256": "92a644290c7991a2df0048021414d159bedc6aa3540004cb975ca893ba76eb95"
+    },
+    {
+      "bytes": 15535634,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          308999.99,
+          5096999.99,
+          236.03
+        ],
+        "min": [
+          308000.0,
+          5096000.0,
+          160.70000000000002
+        ],
+        "offset": [
+          308000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1993696,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "1d64f7aef98e30ed725930b1b14e1ef9",
+      "path": "308000_5096000.laz",
+      "role": "input",
+      "sha256": "d9d6a6fcaea34839de5298996f4082af94f4148862dc7a6f9b24372916f82a0d"
+    },
+    {
+      "bytes": 2147,
+      "md5": "38895311161e4fc70f77504c0920c461",
+      "path": "308000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "e0adc1942a69135b1b813806054b5aa41a8562d3ac1ac7e905c5a53a12a94422"
+    },
+    {
+      "bytes": 1716,
+      "md5": "121d6cba6f33341b3bc6eef783708438",
+      "path": "309000_5091000.lax",
+      "role": "index",
+      "sha256": "c4b389779aaf7f900d948a076fb49e17627e89e269da0b1777352c73acac4aed"
+    },
+    {
+      "bytes": 8047481,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          310000.0,
+          5091999.99,
+          243.34
+        ],
+        "min": [
+          309000.0,
+          5091016.85,
+          170.5
+        ],
+        "offset": [
+          309000.0,
+          5091016.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1023856,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "00602ae5bbc04623080b5f1c87267b3e",
+      "path": "309000_5091000.laz",
+      "role": "input",
+      "sha256": "f437c8b0d67274e4a351e7a94ec8edd3c7572e88f4515100ec087db867f80404"
+    },
+    {
+      "bytes": 2160,
+      "md5": "a7bf51f754273eaff929dab85f001fb0",
+      "path": "309000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "0c5098822b6cc11e094572084d66bd56f577b4012fa1c7ab9b06ab1d09b012c3"
+    },
+    {
+      "bytes": 3156,
+      "md5": "35b82bfd5ce45d81a7a17ece06e27c04",
+      "path": "309000_5092000.lax",
+      "role": "index",
+      "sha256": "9b24ed9e6004c915f145e77022507a5cdae53fdf2599e83388ac5544094f9c37"
+    },
+    {
+      "bytes": 16195050,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          310000.0,
+          5092999.99,
+          225.66
+        ],
+        "min": [
+          309000.0,
+          5092000.0,
+          161.57
+        ],
+        "offset": [
+          309000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 2000104,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "51ff2d867b186bf720bdd91ba8d27c90",
+      "path": "309000_5092000.laz",
+      "role": "input",
+      "sha256": "7ed989e8b8da9f6687237bc3a1dc30a2fd658cf4bdab60822e633b45e8a02d27"
+    },
+    {
+      "bytes": 2136,
+      "md5": "0e2f78d643c4eba99344814b82dadfa7",
+      "path": "309000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "6a9dd2ba98d120455c7ee14988bb01c7d245342475b45d07e687b82968f99427"
+    },
+    {
+      "bytes": 3204,
+      "md5": "bf7c2338d99ab555e5e7272560733faa",
+      "path": "309000_5093000.lax",
+      "role": "index",
+      "sha256": "3b681c959d7fbb30245a198db9469b3ddb58106bd26356e409cde179515e1a66"
+    },
+    {
+      "bytes": 16487865,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          309999.99,
+          5094000.0,
+          223.76
+        ],
+        "min": [
+          309000.0,
+          5093000.0,
+          161.57
+        ],
+        "offset": [
+          309000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999552,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "6cb3dde97a1bba9710c8e120c28ec2ae",
+      "path": "309000_5093000.laz",
+      "role": "input",
+      "sha256": "bdd47b248482bc05fca60ada5f9d169613f807770265610dd22e5bfe086653eb"
+    },
+    {
+      "bytes": 2141,
+      "md5": "7c48392d17e8b5e29a15ac48d72b9065",
+      "path": "309000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "2faba65c0463387bb3ac867fbca983bb35af71db031cb3f5732eceb88dab6b4a"
+    },
+    {
+      "bytes": 2792,
+      "md5": "0bc1fad0a1a703b7f30ec2437c696715",
+      "path": "309000_5094000.lax",
+      "role": "index",
+      "sha256": "bef0896b7fabf74e9b4eb8efacb0faedb983376ae0c332755b0ab154e8f7a1e2"
+    },
+    {
+      "bytes": 15924993,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          310000.0,
+          5095000.0,
+          224.19
+        ],
+        "min": [
+          309000.0,
+          5094000.01,
+          162.66
+        ],
+        "offset": [
+          309000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999576,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "2945862bf8e67ed18867ed506239ea50",
+      "path": "309000_5094000.laz",
+      "role": "input",
+      "sha256": "8044bd828117c2caa05b52347520b6d33f485ec21c30015124155259d31bb69b"
+    },
+    {
+      "bytes": 2137,
+      "md5": "ab082efdbdc118b902ca98c5e213687d",
+      "path": "309000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "597cd0a3101ccc69052a71d1f4fb6c699101a8532938b474898751c0922e4ced"
+    },
+    {
+      "bytes": 7760,
+      "md5": "7a3f3c40bfd378b55f031f2f25dc4213",
+      "path": "309000_5095000.lax",
+      "role": "index",
+      "sha256": "869bb7e407746817bbee71d39cee33fdd2f8b415130ddb09e6dbae58231cb727"
+    },
+    {
+      "bytes": 15497157,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          309999.99,
+          5095999.99,
+          233.15
+        ],
+        "min": [
+          309000.0,
+          5095000.0,
+          168.24
+        ],
+        "offset": [
+          309000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1998216,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "ecac07a949a4fddaf68bb4c52a691526",
+      "path": "309000_5095000.laz",
+      "role": "input",
+      "sha256": "ee8dfcdd89ab7316be25768dabf58db1ac00b37e8a773dbe259be58a5ec76741"
+    },
+    {
+      "bytes": 2152,
+      "md5": "fdcde593014610a73ffd1a91fb2c5d94",
+      "path": "309000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "d56729a032bb1ca5560bd6160319793e74d29ebf169b992e31022b2723234c9e"
+    },
+    {
+      "bytes": 9316,
+      "md5": "d8fc70a5ceaf03e1b4f643ddf6c641b5",
+      "path": "309000_5096000.lax",
+      "role": "index",
+      "sha256": "79985e1cc66fab1e0a00ff75bc244f9a9f44427db1f65c088205fad811b012df"
+    },
+    {
+      "bytes": 15229129,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          309999.99,
+          5096999.99,
+          228.27
+        ],
+        "min": [
+          309000.0,
+          5096000.0,
+          145.31
+        ],
+        "offset": [
+          309000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1964272,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "6828a1dd45047a30df1842fdfa73745e",
+      "path": "309000_5096000.laz",
+      "role": "input",
+      "sha256": "0ad98709bf0095c7b1b1607246b1d262e56a7cdcc594fc3024bc53a94ad5f508"
+    },
+    {
+      "bytes": 2151,
+      "md5": "1cb183882b16857eae43878164a54f2c",
+      "path": "309000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "00a04d57abd7f355dbe4da3a67d69d7326e3b7a11be6ab1355fd8bccc9e52afd"
+    },
+    {
+      "bytes": 2080,
+      "md5": "57ddce63a88255e9cf4e272ead5fff70",
+      "path": "310000_5091000.lax",
+      "role": "index",
+      "sha256": "f480ced222d32343e8c603a11953d9612c0df161813b9e801540aa377edd5357"
+    },
+    {
+      "bytes": 9517720,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          311000.0,
+          5092000.0,
+          215.24
+        ],
+        "min": [
+          310000.0,
+          5091293.99,
+          163.43
+        ],
+        "offset": [
+          310000.0,
+          5091293.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1165960,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "1e49674e0698c239215b6e81a47519dd",
+      "path": "310000_5091000.laz",
+      "role": "input",
+      "sha256": "17cccdc2a9d9927da4fa5889362eee4455923fdb8a1854127361546678851c42"
+    },
+    {
+      "bytes": 2140,
+      "md5": "7544a2fe061cd86996bc202f544672a2",
+      "path": "310000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "1420fcecbaab3ad491d082dca02ed4b728754d1773940d57a9f4a6768da02285"
+    },
+    {
+      "bytes": 3108,
+      "md5": "1f3990297eb175bdfac9ba98827b5054",
+      "path": "310000_5092000.lax",
+      "role": "index",
+      "sha256": "0f3d769e65e9ba8d73e08e8a95519f8c1b2e034a3b86caba9fc45cf053dec41e"
+    },
+    {
+      "bytes": 16752557,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          311000.0,
+          5093000.0,
+          215.06
+        ],
+        "min": [
+          310000.0,
+          5092000.01,
+          159.09
+        ],
+        "offset": [
+          310000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999320,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "227e1c3a2996c33eeb0aecdc4b835b35",
+      "path": "310000_5092000.laz",
+      "role": "input",
+      "sha256": "a81f164d25d02e047a21522a241a10053399c8e85c3cd72bca8103ae0e85e110"
+    },
+    {
+      "bytes": 2139,
+      "md5": "c8d77d1be04b189551a41630cae533b5",
+      "path": "310000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "da1d71723b566a3ac494d5da2111dcbb8c6a3e6ec03cb25759b5b138630032d5"
+    },
+    {
+      "bytes": 3100,
+      "md5": "db8cd619702dda29a99bfe64d936e0f5",
+      "path": "310000_5093000.lax",
+      "role": "index",
+      "sha256": "888f119b8a1ce6dc558a6cc1a786967b79d114f53b85a0d93d3531c10fc17323"
+    },
+    {
+      "bytes": 16278253,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          311000.0,
+          5093999.99,
+          299.1
+        ],
+        "min": [
+          310000.0,
+          5093000.0,
+          169.78
+        ],
+        "offset": [
+          310000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999336,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "40466a643ee290760558ae2cc7ce3c33",
+      "path": "310000_5093000.laz",
+      "role": "input",
+      "sha256": "660cb5935b1c421a02fe0a5234592af86d86e17618cdc07a13c0d77cc4b62f72"
+    },
+    {
+      "bytes": 2147,
+      "md5": "0a906062aff6ddaadfe162f1c009ee2e",
+      "path": "310000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "43b9122e6d9556b3cce30e6be6fec0f27bd4bcb6fb7cab5d04132b2b2d97a7ba"
+    },
+    {
+      "bytes": 8048,
+      "md5": "d29063348e39a293658b92c7b1d74c68",
+      "path": "310000_5094000.lax",
+      "role": "index",
+      "sha256": "f2ead5781ca07f10fadd89c91abf8df6cd225e9a42abe9a3cce9585b638860ef"
+    },
+    {
+      "bytes": 15491673,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          310999.99,
+          5094999.99,
+          235.28
+        ],
+        "min": [
+          310000.0,
+          5094000.0,
+          169.70000000000002
+        ],
+        "offset": [
+          310000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1998784,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "d60640afde73c310de243e1ee857c917",
+      "path": "310000_5094000.laz",
+      "role": "input",
+      "sha256": "486816fb485442d4a52b5fcfc6e39f8a3b2167dfbd2a9ac8d591f48811625b1d"
+    },
+    {
+      "bytes": 2142,
+      "md5": "16c2c1c96257fb5c115ec4acd960b60a",
+      "path": "310000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "5c1fb8a9a2c75348a221727e7692b96f7a848f3eefc6b4e23c4d58e79daf22c2"
+    },
+    {
+      "bytes": 1952,
+      "md5": "ae38f65c6e4a513847f605aca2b672ba",
+      "path": "310000_5095000.lax",
+      "role": "index",
+      "sha256": "26848f81abd075504b28cefbb6fbd109e26d75fc003102c1d311d66a1851d249"
+    },
+    {
+      "bytes": 14769838,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          310999.99,
+          5096000.0,
+          234.52
+        ],
+        "min": [
+          310000.0,
+          5095000.0,
+          183.28
+        ],
+        "offset": [
+          310000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1961264,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "2a4e7ea6760a4e61c807ef0d9f9cf5d8",
+      "path": "310000_5095000.laz",
+      "role": "input",
+      "sha256": "4278c98a47aa507bd1ca019e4d89767ef483c8d0961a153e5bd18d437e5c17d5"
+    },
+    {
+      "bytes": 2140,
+      "md5": "cc51705157725fcf8d892f941c1b7741",
+      "path": "310000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "a8d2b6d501cff4ea0bf14edb639799370369897494ff4002d4f71156c3bf41e6"
+    },
+    {
+      "bytes": 2044,
+      "md5": "e4a50f8171b3dca84e797ff00d14a9cc",
+      "path": "310000_5096000.lax",
+      "role": "index",
+      "sha256": "65e0482c0440b7e809e1e0710dc6b374f5ae013eaf5e079cf4b2d649bd87c1f9"
+    },
+    {
+      "bytes": 14976023,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          311000.0,
+          5096999.62,
+          230.53
+        ],
+        "min": [
+          310000.0,
+          5096000.0,
+          145.28
+        ],
+        "offset": [
+          310000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1948600,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "e770cc78dbdb8e15af085dd31ee7827e",
+      "path": "310000_5096000.laz",
+      "role": "input",
+      "sha256": "66061e2041805ecc6a197549a85e9483bf0c69e645166a5eff55053eb2c76bad"
+    },
+    {
+      "bytes": 2146,
+      "md5": "57328038dc19b4a3880b67da56baa37c",
+      "path": "310000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "91e21b673be548b6c49bd5123ecb16c24c4dbc73e14d3b7cec682197a8a68107"
+    },
+    {
+      "bytes": 15048,
+      "md5": "93b172b2c866c5542f7102db87129032",
+      "path": "311000_5091000.lax",
+      "role": "index",
+      "sha256": "2788721fccabfb32682731c12e3b5ce59efa490aa425def235c7408be6f54161"
+    },
+    {
+      "bytes": 11693839,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          311999.99,
+          5091999.99,
+          212.61
+        ],
+        "min": [
+          311000.0,
+          5091196.53,
+          157.18
+        ],
+        "offset": [
+          311000.0,
+          5091196.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1396480,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "70dce91c780981ed079fd43d075e05b3",
+      "path": "311000_5091000.laz",
+      "role": "input",
+      "sha256": "19d58b11713804d89072ba5af79d9c658d86d6b2ae82dc0e71d123f2602367f0"
+    },
+    {
+      "bytes": 2148,
+      "md5": "56616cacbdef5fa3ddd952cf4cdd61cc",
+      "path": "311000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "9171e1a1e5d9137b82e5b18e4af82107842b4ccfd731adad0999211455a7956b"
+    },
+    {
+      "bytes": 10592,
+      "md5": "ae4e2edcf4c5de7ad72d59a4a05df2d4",
+      "path": "311000_5092000.lax",
+      "role": "index",
+      "sha256": "28b69669292df143b2723500551e8ed3c572e11d18700c40edbd5401da74d1ec"
+    },
+    {
+      "bytes": 16646807,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          311999.99,
+          5092999.99,
+          212.97
+        ],
+        "min": [
+          311000.0,
+          5092000.0,
+          157.3
+        ],
+        "offset": [
+          311000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1998712,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "cbb949e708b8bd7b698c6aa8ab209f3c",
+      "path": "311000_5092000.laz",
+      "role": "input",
+      "sha256": "80a6c9b2293a9d8e42ab1de09aa511c1f8a3afc94ba2d271f1029da0ae9b97d3"
+    },
+    {
+      "bytes": 2139,
+      "md5": "82bd5274e289de176d6c9a53aece7a1c",
+      "path": "311000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "72f10e6bef4753837ff523243f92c8379e370d5142a4bb8a5e40dbe06ac62a2b"
+    },
+    {
+      "bytes": 2452,
+      "md5": "1d248093457308bf8b289b759346e647",
+      "path": "311000_5093000.lax",
+      "role": "index",
+      "sha256": "3d03fb43bcd35f473afd8ca6e0098956d6922c9ed448770704561d233cf894c6"
+    },
+    {
+      "bytes": 15933153,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          312000.0,
+          5093999.99,
+          224.14000000000001
+        ],
+        "min": [
+          311000.0,
+          5093000.0,
+          165.39000000000001
+        ],
+        "offset": [
+          311000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999608,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "4b04a0afbacd404d5f42f42ac2f3d710",
+      "path": "311000_5093000.laz",
+      "role": "input",
+      "sha256": "9728c7b0400d9a061e093e36dffa46f009c9c20bcf2b6e65dda871b2601db237"
+    },
+    {
+      "bytes": 2125,
+      "md5": "dd7230c9cd9d0108a74b3e7c65bcea20",
+      "path": "311000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "0e402fa2566802c3f6e8edd223f337eb6a7b132814a8a1598c399cb98128e4af"
+    },
+    {
+      "bytes": 1916,
+      "md5": "520e549614bda2fc286cce30059ce927",
+      "path": "311000_5094000.lax",
+      "role": "index",
+      "sha256": "83597e1afd8a30200286f3fd5c80b82321adbdd4888b7bc9be64d8918ceaa851"
+    },
+    {
+      "bytes": 15297834,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          311999.99,
+          5095000.0,
+          227.74
+        ],
+        "min": [
+          311000.0,
+          5094000.0,
+          166.35
+        ],
+        "offset": [
+          311000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999840,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "d4c673c5dce83bb18057c39b9eee4405",
+      "path": "311000_5094000.laz",
+      "role": "input",
+      "sha256": "c8745b8d03389cbbd3b4d57ac3e60f3f5a1f330da9df9ee330a5bd15c496fe4f"
+    },
+    {
+      "bytes": 2137,
+      "md5": "b68ca002d06b5539907435742ead5ff5",
+      "path": "311000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "19627384de06f14d239d8669f610e266ab66de743aa1e0665f2fdaaf78477669"
+    },
+    {
+      "bytes": 1980,
+      "md5": "a32cd72a130a1105be10d9138295c8d1",
+      "path": "311000_5095000.lax",
+      "role": "index",
+      "sha256": "44133f5f0f46a8bbb0dde13124623d71e897c23fc866a88e85c3d19852e34a26"
+    },
+    {
+      "bytes": 15446049,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          312000.0,
+          5095999.99,
+          227.24
+        ],
+        "min": [
+          311000.0,
+          5095000.0,
+          171.96
+        ],
+        "offset": [
+          311000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 2001088,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "b972cbb585774175e9800266b3063378",
+      "path": "311000_5095000.laz",
+      "role": "input",
+      "sha256": "353414e30b8de161d2eb70e190eafaca366209dcc70519ce103783241f8d9568"
+    },
+    {
+      "bytes": 2139,
+      "md5": "4759d469ceac58d484282b135c858628",
+      "path": "311000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "168244e9b8bc1db8da1b57dc3b99d656176c7f7dd800df1a472f8b5d9eb7a012"
+    },
+    {
+      "bytes": 1488,
+      "md5": "6d7e34341181829210224e37c299d35c",
+      "path": "311000_5096000.lax",
+      "role": "index",
+      "sha256": "5add628b92c9676f20a3a3849cc6d87b6ac1b6777b7c4c259c5668207e9f241c"
+    },
+    {
+      "bytes": 11724079,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          312000.0,
+          5096898.92,
+          255.67000000000002
+        ],
+        "min": [
+          311000.0,
+          5096000.0,
+          145.28
+        ],
+        "offset": [
+          311000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1535664,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "0052e307c9f03a88d0e117fed7705109",
+      "path": "311000_5096000.laz",
+      "role": "input",
+      "sha256": "dfdd4c87a42a2b9fc1cacc8f8986f37d17dd426d589422b66f18b3a887339fe6"
+    },
+    {
+      "bytes": 2142,
+      "md5": "7f6487560789e921daa5429c8d924293",
+      "path": "311000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "719eb6308520963f2d87d2279d52af18ae3bfcb3c122564df8636105cde34d0a"
+    },
+    {
+      "bytes": 2200,
+      "md5": "f6e015ea622637a40d93be6e5f778b31",
+      "path": "312000_5091000.lax",
+      "role": "index",
+      "sha256": "203504b00e6082d55eecb6efe0b4f868b2db626f39da1561db20f1356cd94357"
+    },
+    {
+      "bytes": 13359380,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          313000.0,
+          5091999.99,
+          213.32
+        ],
+        "min": [
+          312000.0,
+          5091116.64,
+          156.07
+        ],
+        "offset": [
+          312000.0,
+          5091116.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1652720,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "1f630a2854f754a810848c6bfcc7c9eb",
+      "path": "312000_5091000.laz",
+      "role": "input",
+      "sha256": "8ef1e8dfaaa52f35a58acb6ca9a8126017331cb0d4f54dbd1849afb58672c57a"
+    },
+    {
+      "bytes": 2139,
+      "md5": "e3dabc09d86dc9b14e23beaa37bcdd4a",
+      "path": "312000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "9915e3a07e9ac1596d5d797e85c093dbf3a2735cefd4295f5f7c010a47d4001c"
+    },
+    {
+      "bytes": 8120,
+      "md5": "54bff940efe8dc86e049ddf9b648730d",
+      "path": "312000_5092000.lax",
+      "role": "index",
+      "sha256": "c3bebd4d5f76d711312e23228bac132b692615446c17e9cdad84272da96b1882"
+    },
+    {
+      "bytes": 16008450,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          312999.99,
+          5092999.99,
+          212.95000000000002
+        ],
+        "min": [
+          312000.0,
+          5092000.0,
+          155.71
+        ],
+        "offset": [
+          312000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999984,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "30466dd4c3a01c5e100b0a0b7f5de119",
+      "path": "312000_5092000.laz",
+      "role": "input",
+      "sha256": "2e751fd858b70d6db10806ef6794eb99a868e9152b9cdb938cc2b032dd529f10"
+    },
+    {
+      "bytes": 2131,
+      "md5": "006f0ed838b566614cf8e062df678036",
+      "path": "312000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "b9ef44f6c2072443023ce057e19e3826503aa3107e3372c2c2ac4a378a72484b"
+    },
+    {
+      "bytes": 2144,
+      "md5": "61788ce8182c249e50ff57a7a07c1f0b",
+      "path": "312000_5093000.lax",
+      "role": "index",
+      "sha256": "6bda246426b283f86d5b8223a3dcfd4d79919d101d1450de634df343a7684e98"
+    },
+    {
+      "bytes": 15083361,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          312999.99,
+          5094000.0,
+          212.07
+        ],
+        "min": [
+          312000.0,
+          5093000.0,
+          162.08
+        ],
+        "offset": [
+          312000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1952456,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "612dda1b2c49516881d998633dfb5c8d",
+      "path": "312000_5093000.laz",
+      "role": "input",
+      "sha256": "57c755d861b239aa47eeed595fe7fd1d8af7a7c69f88bd5d21ed27c8f266b117"
+    },
+    {
+      "bytes": 2135,
+      "md5": "45671fe2043ac0d7209152ad7d0b2bd1",
+      "path": "312000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "474a4840e024d1b2fc7688ad5a584b1f211e063bc92d5ca7cb0c642dd04c725b"
+    },
+    {
+      "bytes": 2144,
+      "md5": "ee68c1ad557ebb402cadf119becad364",
+      "path": "312000_5094000.lax",
+      "role": "index",
+      "sha256": "6d59252ac6e9bb054234c75ebccbd75f039caf48fb1906ec8a3889f4eb554f10"
+    },
+    {
+      "bytes": 15158119,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          313000.0,
+          5094999.99,
+          215.15
+        ],
+        "min": [
+          312000.0,
+          5094000.0,
+          159.52
+        ],
+        "offset": [
+          312000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1996864,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "3e77847f2b891dfec1890fc51be972c3",
+      "path": "312000_5094000.laz",
+      "role": "input",
+      "sha256": "e7bfe0e005e31f861c594c3f58b9b0da21a2a0fcff38c1415fad6e9f406c0d98"
+    },
+    {
+      "bytes": 2133,
+      "md5": "20bf6bb7a9dfe727527db6d3f44be90c",
+      "path": "312000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "66331b7d4a817088c7299572c1fce9c127cfb1383804319ef3f56e728e02f8c9"
+    },
+    {
+      "bytes": 2080,
+      "md5": "32134d5ae007044cb652ea32a552fc24",
+      "path": "312000_5095000.lax",
+      "role": "index",
+      "sha256": "eed38cf79eeac679cdfe5239676f11da4499455874aa1755bd2e5963c167f853"
+    },
+    {
+      "bytes": 15274204,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          313000.0,
+          5096000.0,
+          219.02
+        ],
+        "min": [
+          312000.0,
+          5095000.0,
+          157.03
+        ],
+        "offset": [
+          312000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1992864,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "91050a26129608aaf2d9a8b590bfa231",
+      "path": "312000_5095000.laz",
+      "role": "input",
+      "sha256": "20710acee6d412374a91b5a03f8fbf259457acd235490563f35cceccc8222b66"
+    },
+    {
+      "bytes": 2128,
+      "md5": "b59e04f020ff1a9c99a5d849f4bcb478",
+      "path": "312000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "37e398853d6cf714bc03611bc8682210dfdfc55bdd2cf576f207143ab807ac99"
+    },
+    {
+      "bytes": 11032,
+      "md5": "1463812aad6d5a2b3285f34e6106a164",
+      "path": "312000_5096000.lax",
+      "role": "index",
+      "sha256": "36d76c5c3237cc7c7f12bde38b3ae37f3630bca2fc5306f8d5a70ba6ae0acd9a"
+    },
+    {
+      "bytes": 13070845,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          312999.99,
+          5096897.98,
+          218.54
+        ],
+        "min": [
+          312000.0,
+          5096000.0,
+          144.86
+        ],
+        "offset": [
+          312000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1682792,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "9bab10b45f78186b934a68a50530b28b",
+      "path": "312000_5096000.laz",
+      "role": "input",
+      "sha256": "a32741384008fbda4d5f41e6ae542d6a86d06c49d262c389cf012623b87e784f"
+    },
+    {
+      "bytes": 2140,
+      "md5": "5a12494bfd3b1d0f17cefbd6bd040445",
+      "path": "312000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "649a98af226c1a390185c2b27f6620a66471d9f24e72ff3ba6fbca4cf62ba788"
+    },
+    {
+      "bytes": 13692,
+      "md5": "a0d6387fabb6f53f8d78fd29b34cdf97",
+      "path": "312000_5097000.lax",
+      "role": "index",
+      "sha256": "80b15b24637b3be315a661c6ea8536f0ef41560dd3940274599dfdcb2e46374a"
+    },
+    {
+      "bytes": 6398034,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          312999.99,
+          5098000.0,
+          188.61
+        ],
+        "min": [
+          312000.0,
+          5097389.19,
+          152.75
+        ],
+        "offset": [
+          312000.0,
+          5097389.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 835712,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "7d7b85d479ec00ff551ba92d9b9985f6",
+      "path": "312000_5097000.laz",
+      "role": "input",
+      "sha256": "2987ad7019b4e7b72057098150c93a4bbaf04b9beed5225d2bf0adde3e884e17"
+    },
+    {
+      "bytes": 2154,
+      "md5": "0380c2e50fc442dd4ac43f28546b1629",
+      "path": "312000_5097000.laz.rds",
+      "role": "receipt",
+      "sha256": "798d806cc918c1c72b0695908abfba402a1384c52de2e47ff51333cce2b5d85e"
+    },
+    {
+      "bytes": 8108,
+      "md5": "1fb92641d499fc73fb87040c5adc1f1f",
+      "path": "312000_5098000.lax",
+      "role": "index",
+      "sha256": "38393eef17673bf7cc003ec7793e22871b519e994cf3514d983e89d6e766fa27"
+    },
+    {
+      "bytes": 9659951,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          312999.99,
+          5098792.97,
+          199.27
+        ],
+        "min": [
+          312000.0,
+          5098000.0,
+          149.65
+        ],
+        "offset": [
+          312000.0,
+          5098000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1246000,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "18d917988277cfa45e2cded6d5069be3",
+      "path": "312000_5098000.laz",
+      "role": "input",
+      "sha256": "08082b8f2a7b4488130e2c9dd2efb27fb8bc1dd70db95c618971b1abe7234db4"
+    },
+    {
+      "bytes": 2149,
+      "md5": "f3ca74b50ca9da1b4c767c9d4e8371e1",
+      "path": "312000_5098000.laz.rds",
+      "role": "receipt",
+      "sha256": "7a74eee8a1b267c4395af38e44a69228c36c4e8121ca7753a92dcd2e21de9b32"
+    },
+    {
+      "bytes": 1260,
+      "md5": "7ed68b5310df8848f9414f6754f1fb0f",
+      "path": "313000_5091000.lax",
+      "role": "index",
+      "sha256": "6a36797d930f9dd9b4d1ef3ffd745b81b8e913f3bd5baeb175596ec308aebdd4"
+    },
+    {
+      "bytes": 8601457,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          314000.0,
+          5092000.0,
+          205.8
+        ],
+        "min": [
+          313000.0,
+          5091285.55,
+          159.53
+        ],
+        "offset": [
+          313000.0,
+          5091285.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1081640,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "33c278eef89167008041f835f9896af4",
+      "path": "313000_5091000.laz",
+      "role": "input",
+      "sha256": "e7b4f6b6b74d30e12a710729d6c5f92db3633f558196cb14ed13f37d1d98634d"
+    },
+    {
+      "bytes": 2141,
+      "md5": "f68ab67699445319476e4b052ee7b433",
+      "path": "313000_5091000.laz.rds",
+      "role": "receipt",
+      "sha256": "025471fa5efdbc75a1a9424604360fc68ccd93e404f9a0e282f5a442c4048b54"
+    },
+    {
+      "bytes": 2156,
+      "md5": "c682d5e2e114cee13519df65bcab1ac4",
+      "path": "313000_5092000.lax",
+      "role": "index",
+      "sha256": "ac353cbdc7c2692d0a69a25c99854f56ff7847b09c38bec5bc4fbccb7d616330"
+    },
+    {
+      "bytes": 15558473,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          314000.0,
+          5093000.0,
+          206.69
+        ],
+        "min": [
+          313000.0,
+          5092000.01,
+          155.05
+        ],
+        "offset": [
+          313000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1999704,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "f9f2af2c770ec43d5f58f49dd2cb678d",
+      "path": "313000_5092000.laz",
+      "role": "input",
+      "sha256": "204a8581031efec22e12a8b1d81a10ad628428e18d183c0f3d9ce9e36958c356"
+    },
+    {
+      "bytes": 2138,
+      "md5": "2e4573cc2c048967a664dd83229f258b",
+      "path": "313000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "2b41b8197b201389d283cc4c06d1bbfc5fcdf8487b5500c7a0a105031cf973aa"
+    },
+    {
+      "bytes": 1820,
+      "md5": "2b606f3c6df45306e5224f8c3993413c",
+      "path": "313000_5093000.lax",
+      "role": "index",
+      "sha256": "bab73720b4c887f99aacc0877944a493201b497fcb7a7be7b5eb40d00ced20ed"
+    },
+    {
+      "bytes": 15668394,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          314000.0,
+          5094000.0,
+          206.9
+        ],
+        "min": [
+          313000.0,
+          5093000.01,
+          151.18
+        ],
+        "offset": [
+          313000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1996976,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "9ab19fefd935ff3d31c0979543d907df",
+      "path": "313000_5093000.laz",
+      "role": "input",
+      "sha256": "dfc93587350baa31433f5a73ba2221ffee60a227eb5711041da19b87e367d458"
+    },
+    {
+      "bytes": 2136,
+      "md5": "afec7326022674ccd561a66f140d2c4f",
+      "path": "313000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "705da2ee97421e6f79c23bd2b83804b2f31daf6922798f7dd3b392ffb8a6e97c"
+    },
+    {
+      "bytes": 7416,
+      "md5": "f9d238298ace6061e6e55ad8464d69a1",
+      "path": "313000_5094000.lax",
+      "role": "index",
+      "sha256": "cac5ca0de8c53928f07c869f54510abe565ae3a40f99602e99ccf82fa6f8b0a2"
+    },
+    {
+      "bytes": 15411865,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          313999.99,
+          5094999.99,
+          205.54
+        ],
+        "min": [
+          313000.0,
+          5094000.0,
+          146.73
+        ],
+        "offset": [
+          313000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1996456,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "243cc377abc631c0c2d2d915187195d3",
+      "path": "313000_5094000.laz",
+      "role": "input",
+      "sha256": "70ec33456648821869cb47c2b9f464d878acee5af04d8476edfda3d09aa8d667"
+    },
+    {
+      "bytes": 2134,
+      "md5": "4041a26da03baf5dbd0c3e8bc93bcd5a",
+      "path": "313000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "b3b6cee139cbb4d9d77c7078acacf6cc321deb3791dd312c1ea5aa1d0df8f065"
+    },
+    {
+      "bytes": 1932,
+      "md5": "919eb5d00078ddf930102d6f4b03ed0e",
+      "path": "313000_5095000.lax",
+      "role": "index",
+      "sha256": "3514b8440ba6e7db5862b8fdab7b7c4dc61c9f1a7119e24503f5177156e2f526"
+    },
+    {
+      "bytes": 15302005,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          314000.0,
+          5095999.99,
+          205.07
+        ],
+        "min": [
+          313000.0,
+          5095000.0,
+          146.84
+        ],
+        "offset": [
+          313000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1994360,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "f627e99950bcf315ef56f97bc0fbdb98",
+      "path": "313000_5095000.laz",
+      "role": "input",
+      "sha256": "29f74ca00c1fa4d5390c4bb0f6f451e32efde051a2d63532469912a854494a15"
+    },
+    {
+      "bytes": 2132,
+      "md5": "850279ba7d6d55c0ebffb478d8646f87",
+      "path": "313000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "666990be0e60145c5bb371b9d921500d9ca68fee17080e397c0ffaaead083b49"
+    },
+    {
+      "bytes": 2256,
+      "md5": "2524156a1c8f600fd2f3bdc9f1db2ff3",
+      "path": "313000_5096000.lax",
+      "role": "index",
+      "sha256": "e8ab2bcc52294e41f05a464bb39e240e26165cc366936f867a91da753d645fad"
+    },
+    {
+      "bytes": 12127263,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          314000.0,
+          5097000.0,
+          201.61
+        ],
+        "min": [
+          313000.0,
+          5096000.0,
+          144.72
+        ],
+        "offset": [
+          313000.0,
+          5096000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1607832,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "d076b9c61e4fef38d0b3076f9efaab36",
+      "path": "313000_5096000.laz",
+      "role": "input",
+      "sha256": "db40ac011a864c4f0132f84bef6bce273478c2cacd2379c29373111601e4f63e"
+    },
+    {
+      "bytes": 2128,
+      "md5": "d22359bf2f0c3e045b13f61185e7067a",
+      "path": "313000_5096000.laz.rds",
+      "role": "receipt",
+      "sha256": "f62f9e57a663ab093832d207950c7e19725add172448295bb4636c9fdcc1d213"
+    },
+    {
+      "bytes": 9696,
+      "md5": "ca9e7a0b72c09fb6108754a6c1ddfce8",
+      "path": "313000_5097000.lax",
+      "role": "index",
+      "sha256": "01e0f919f66d4999b8ea2e0049b0d3a3c056fc82ade11eeaa284b3000309a66d"
+    },
+    {
+      "bytes": 11713279,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          313997.64,
+          5097999.99,
+          186.95000000000002
+        ],
+        "min": [
+          313000.0,
+          5097000.0,
+          139.94
+        ],
+        "offset": [
+          313000.0,
+          5097000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1506224,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "9c97c6dca34396f8a5302864490bdf8b",
+      "path": "313000_5097000.laz",
+      "role": "input",
+      "sha256": "51d4c3d117ed10ea62e708f3e90b83d92fc7c206c3b3301a087513df20e5e040"
+    },
+    {
+      "bytes": 2132,
+      "md5": "0c1878a3cd9e1b2f5a10008236402eb0",
+      "path": "313000_5097000.laz.rds",
+      "role": "receipt",
+      "sha256": "6bb1c50d65271ce19fdd0920ab913fec403327ffd786aff6cd0fa784df8e2f6c"
+    },
+    {
+      "bytes": 1976,
+      "md5": "8c5c533c7c9c42314d7e5395c8ffeea3",
+      "path": "314000_5092000.lax",
+      "role": "index",
+      "sha256": "3753bc9356d061af64ce7b0cde5a7bed0242c789a635219b3c7b9ff7eac0c9af"
+    },
+    {
+      "bytes": 15245760,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          314999.99,
+          5093000.0,
+          202.84
+        ],
+        "min": [
+          314000.0,
+          5092000.0,
+          152.94
+        ],
+        "offset": [
+          314000.0,
+          5092000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1966872,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "ed0a1a7f96c0ad4c3d310555e87a9bab",
+      "path": "314000_5092000.laz",
+      "role": "input",
+      "sha256": "ab2e07a77838d04e18a1b05b620094de1648864326434c23ba687034b929f6fa"
+    },
+    {
+      "bytes": 2137,
+      "md5": "4e96f7b0fb4035548f3a72d9732e06b9",
+      "path": "314000_5092000.laz.rds",
+      "role": "receipt",
+      "sha256": "310d9cc9bebaf9ab7b05ed79002f663880e8f940112bc5a0ed55c77cf0184216"
+    },
+    {
+      "bytes": 2120,
+      "md5": "9c69d9053192c352919a3f10c7792459",
+      "path": "314000_5093000.lax",
+      "role": "index",
+      "sha256": "d6e7f26999275b16dcb8b7b0e237b52c487c09b2045f0430639f9d98657a3d35"
+    },
+    {
+      "bytes": 15628872,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          314999.99,
+          5094000.0,
+          201.49
+        ],
+        "min": [
+          314000.0,
+          5093000.0,
+          151.65
+        ],
+        "offset": [
+          314000.0,
+          5093000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1998480,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "16cbd6a85f6e4bb1c88c940b0235bf6d",
+      "path": "314000_5093000.laz",
+      "role": "input",
+      "sha256": "a0dd2a4d79ed9c7937ac11785375dcdb5fba8c3dde89e211e12fdd9e3f7569d3"
+    },
+    {
+      "bytes": 2134,
+      "md5": "9c4ca40895bb0a58949047cfb8363af1",
+      "path": "314000_5093000.laz.rds",
+      "role": "receipt",
+      "sha256": "97ad8888f817604628d037345e1e53e45109db76e960d7dfd4fe6f68d7b58c1c"
+    },
+    {
+      "bytes": 2040,
+      "md5": "65291a0f12e566cafea65a55957fafd4",
+      "path": "314000_5094000.lax",
+      "role": "index",
+      "sha256": "c5ce603750f8e6bfb461722521dd6320f8acd32c6dd9bdd89eefc3f41a96cfe8"
+    },
+    {
+      "bytes": 15461203,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          315000.0,
+          5094999.99,
+          199.55
+        ],
+        "min": [
+          314000.0,
+          5094000.0,
+          145.89000000000001
+        ],
+        "offset": [
+          314000.0,
+          5094000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 2000192,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "7ea563c0d3a9cd848dfd5fe0a4b568a7",
+      "path": "314000_5094000.laz",
+      "role": "input",
+      "sha256": "0cb98f4b8c70a74e48e2304330f71b7b43579a611d1f77990254c9ebb6fdd468"
+    },
+    {
+      "bytes": 2125,
+      "md5": "c0a10c45ce930ed286bac35570558d24",
+      "path": "314000_5094000.laz.rds",
+      "role": "receipt",
+      "sha256": "ead6b1f80f768c8aae4a13caa2998d83d77fe8c8ea7dbc59ca0f054cbd053d2b"
+    },
+    {
+      "bytes": 1640,
+      "md5": "396fe6f3f2546465a7f69228cb89054a",
+      "path": "314000_5095000.lax",
+      "role": "index",
+      "sha256": "d2e4e2e3539dc9621f4a90d5eae0b0fdcfe83ececec5ba66c626449fbe40de14"
+    },
+    {
+      "bytes": 10733595,
+      "las": {
+        "compressed": true,
+        "crs": "geotiff",
+        "max": [
+          314999.96,
+          5096000.0,
+          193.68
+        ],
+        "min": [
+          314000.0,
+          5095000.0,
+          145.64000000000001
+        ],
+        "offset": [
+          314000.0,
+          5095000.0,
+          0.0
+        ],
+        "point_format": 1,
+        "points": 1416672,
+        "scale": [
+          0.001,
+          0.001,
+          0.001
+        ],
+        "version": "1.2"
+      },
+      "md5": "a16bf4a4f70453bfa9336c74bcb36c92",
+      "path": "314000_5095000.laz",
+      "role": "input",
+      "sha256": "173216a445a4a664ea00021328070b0913086f7be91a6e8bb31c5c17b958f4d7"
+    },
+    {
+      "bytes": 2134,
+      "md5": "7f8e44c816c3534f1d3d0c4360db8080",
+      "path": "314000_5095000.laz.rds",
+      "role": "receipt",
+      "sha256": "00bcfa1f8a2de20e2cdcb2e55bcc357f15c0f660ed2cf1f25b4f8eb10187e629"
+    }
+  ],
+  "kind": "derived",
+  "layout": {
+    "auxiliary": [],
+    "exclude": [],
+    "indexes": [
+      "*.lax"
+    ],
+    "inputs": [
+      "*.laz"
+    ],
+    "las_headers": "required",
+    "receipts": [
+      "*.laz.rds"
+    ]
+  },
+  "license": {
+    "attribution": "Contains information licensed under the Open Government Licence – Canada.",
+    "name": "Open Government Licence - Canada",
+    "notes": "Licence as recorded by the preparation configuration. lidarbench has not\nconfirmed it against a custodian licence statement for this archive, so\nredistribution terms are treated as not established: the data are not\nredistributed or downloaded by lidarbench. Confirm with the custodian before\npublishing any copy.\n",
+    "redistribution": "unknown",
+    "url": "https://open.canada.ca/en/open-government-licence-canada"
+  },
+  "location": {
+    "path": "full/prepared/1_org/tile_1000_density_2",
+    "root": "petawawa-fresh"
+  },
+  "provenance": {
+    "derived_from": [
+      {
+        "content_sha256": "2616aa1e48ed2a58cf9db244614fa1f20eaac7b54b91518a7f70f7971ffd32db",
+        "dataset_id": "petawawa-als-2012/archive",
+        "description": "Original archive PRF_LiDAR2012_LAS.zip as downloaded by the R CLI (download/Petawawa2012.zip)"
+      }
+    ],
+    "details": {
+      "legacy_receipts": {
+        "checksum_note": "MD5 values are content identifiers from the R receipts, cross-checked against the registered bytes; they do not establish authenticity.",
+        "download": {
+          "authenticity": "No independent checksum supplied",
+          "bytes": 9142409879,
+          "md5": "e26fafa0b41b6875784a66f2c5e604b9",
+          "url": "https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip"
+        },
+        "export_sha256": "3484ea64eae92fab0fd78bd6952f4dc2bc88a432a1089e1f95af017e717f6206",
+        "negative_z_transition": {
+          "current_policy": "fresh-petawawa-v4",
+          "frozen_md5": [
+            "de560ec2e7029c1c436d3182543d8d06",
+            "c4ceca89c6c05c566e35267cab70c95d",
+            "1224443b1ca38d2e88d96138880a5c35",
+            "8353d9c354172ef3b167c220c3019b67",
+            "7c51dbb05d301923ed1a00e27f6013aa"
+          ],
+          "previous_policy": "fresh-petawawa-v3"
+        },
+        "parallel_transition": true,
+        "preparation": {
+          "archive_md5": "e26fafa0b41b6875784a66f2c5e604b9",
+          "crs_wkt": "PROJCRS[\"NAD83(CSRS) / UTM zone 18N\",\n    BASEGEOGCRS[\"NAD83(CSRS)\",\n        DATUM[\"NAD83 Canadian Spatial Reference System\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4617]],\n    CONVERSION[\"UTM zone 18N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-75,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"Canada between 78°W and 72°W, onshore and offshore south of 84°N - Nunavut, Ontario and Quebec.\"],\n        BBOX[43.63,-78,84,-72]],\n    ID[\"EPSG\",2959]]",
+          "densities": [
+            1,
+            2,
+            5,
+            10,
+            20,
+            50
+          ],
+          "fresh_implementation_md5": [
+            "7d35317ff3bfa3fc88a34589999dd960",
+            "b0a94be880119b1df463a011fc1b76a2",
+            "f09a5c4083edc6240bde563f3798e187",
+            "a1aae442511b39b3852947df45eeece6"
+          ],
+          "implementation_md5": [
+            "b0a94be880119b1df463a011fc1b76a2",
+            "f09a5c4083edc6240bde563f3798e187",
+            "a1aae442511b39b3852947df45eeece6",
+            "8d2293a66fa164619f91e1fdff844876"
+          ],
+          "license": "Open Government Licence - Canada; Contains information licensed under the Open Government Licence – Canada. https://open.canada.ca/en/open-government-licence-canada",
+          "method": "fresh-petawawa-v4",
+          "parameters": {
+            "density": "round(target * repaired source area); sample without replacement or add copies",
+            "negative_z": "Drop Z < 0 before all other repairs; audit filtered-input row IDs and original Z.",
+            "readiness": "Data QC only; cross-tool benchmark acceptance requires a new pilot.",
+            "repair": "Preserve XYZ precision and valid return labels; drop invalid legacy returns, duplicate XYZ (first row); then retain lowest-Z class-2 ground point per XY (first-row tie), audit removals; then repeated pulse/return (highest Z, first-row tie); raise NumberOfReturns to the pulse maximum reported count/return label. Pulse key: PointSourceID + gpstime (+ ScannerChannel if present). Do not infer pulse size from tile point counts; refuse remaining QC issues.",
+            "source_filter": "-drop_synthetic before R decoding; audit counts; row IDs refer to filtered input",
+            "synthetic": "Seeded XY jitter uniformly within +/-0.25 m, quantized on source grid; reject collisions/outside source bounds; Z noise +/-seq(0.10,0.50,0.05) m; separate GPS-time ranges per copy; classifications/flags retained; synthetic derivation explicitly labeled in preparation metadata, not acquisition data.",
+            "version": "fresh-petawawa-v4"
+          },
+          "repair_provenance": "Preserve XYZ precision and valid return labels; drop invalid legacy returns, duplicate XYZ (first row); then retain lowest-Z class-2 ground point per XY (first-row tie), audit removals; then repeated pulse/return (highest Z, first-row tie); raise NumberOfReturns to the pulse maximum reported count/return label. Pulse key: PointSourceID + gpstime (+ ScannerChannel if present). Do not infer pulse size from tile point counts; refuse remaining QC issues.",
+          "runtime": {
+            "R": "4.6.1",
+            "lidR": "4.3.3",
+            "native": {
+              "GDAL": "3.12.2",
+              "GDAL_with_GEOS": "true",
+              "GEOS": "3.14.1",
+              "PROJ": "9.7.1",
+              "USE_PROJ_H": "true",
+              "proj.4": "9.7.1"
+            },
+            "platform": "x86_64-pc-linux-gnu",
+            "sf": "1.1.3"
+          },
+          "seed": 20261022,
+          "source_citation": "Natural Resources Canada / Canadian Forest Service, Canadian Wood Fibre Centre; Petawawa Research Forest LiDAR 2012; https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip",
+          "tiles": [
+            "297000_5094000",
+            "298000_5092000",
+            "298000_5093000",
+            "298000_5094000",
+            "298000_5095000",
+            "299000_5091000",
+            "299000_5092000",
+            "299000_5093000",
+            "299000_5094000",
+            "299000_5095000",
+            "300000_5091000",
+            "300000_5092000",
+            "300000_5093000",
+            "300000_5094000",
+            "300000_5095000",
+            "301000_5091000",
+            "301000_5092000",
+            "301000_5093000",
+            "301000_5094000",
+            "301000_5095000",
+            "301000_5096000",
+            "302000_5091000",
+            "302000_5092000",
+            "302000_5093000",
+            "302000_5094000",
+            "302000_5095000",
+            "302000_5096000",
+            "303000_5091000",
+            "303000_5092000",
+            "303000_5093000",
+            "303000_5094000",
+            "303000_5095000",
+            "303000_5096000",
+            "304000_5092000",
+            "304000_5093000",
+            "304000_5094000",
+            "304000_5095000",
+            "304000_5096000",
+            "304000_5097000",
+            "305000_5092000",
+            "305000_5093000",
+            "305000_5094000",
+            "305000_5095000",
+            "305000_5096000",
+            "305000_5097000",
+            "306000_5092000",
+            "306000_5093000",
+            "306000_5094000",
+            "306000_5095000",
+            "306000_5096000",
+            "306000_5097000",
+            "307000_5092000",
+            "307000_5093000",
+            "307000_5094000",
+            "307000_5095000",
+            "307000_5096000",
+            "307000_5097000",
+            "308000_5091000",
+            "308000_5092000",
+            "308000_5093000",
+            "308000_5094000",
+            "308000_5095000",
+            "308000_5096000",
+            "309000_5091000",
+            "309000_5092000",
+            "309000_5093000",
+            "309000_5094000",
+            "309000_5095000",
+            "309000_5096000",
+            "310000_5091000",
+            "310000_5092000",
+            "310000_5093000",
+            "310000_5094000",
+            "310000_5095000",
+            "310000_5096000",
+            "311000_5091000",
+            "311000_5092000",
+            "311000_5093000",
+            "311000_5094000",
+            "311000_5095000",
+            "311000_5096000",
+            "312000_5091000",
+            "312000_5092000",
+            "312000_5093000",
+            "312000_5094000",
+            "312000_5095000",
+            "312000_5096000",
+            "312000_5097000",
+            "312000_5098000",
+            "313000_5091000",
+            "313000_5092000",
+            "313000_5093000",
+            "313000_5094000",
+            "313000_5095000",
+            "313000_5096000",
+            "313000_5097000",
+            "314000_5092000",
+            "314000_5093000",
+            "314000_5094000",
+            "314000_5095000"
+          ],
+          "tool_versions": {
+            "index": {
+              "build": "260914",
+              "status": 0
+            },
+            "sort": {
+              "build": "260914",
+              "status": 0
+            }
+          },
+          "tools": [
+            {
+              "file": "lassort64",
+              "md5": "0fe0f6ab4b34bc73818da17b7dd969d3",
+              "name": "sort"
+            },
+            {
+              "file": "lasindex64",
+              "md5": "4f0ded3635b23fe7b9316bc96448bd3e",
+              "name": "index"
+            }
+          ]
+        },
+        "ready": {
+          "archive_md5": "e26fafa0b41b6875784a66f2c5e604b9",
+          "policy": {
+            "density": "round(target * repaired source area); sample without replacement or add copies",
+            "negative_z": "Drop Z < 0 before all other repairs; audit filtered-input row IDs and original Z.",
+            "readiness": "Data QC only; cross-tool benchmark acceptance requires a new pilot.",
+            "repair": "Preserve XYZ precision and valid return labels; drop invalid legacy returns, duplicate XYZ (first row); then retain lowest-Z class-2 ground point per XY (first-row tie), audit removals; then repeated pulse/return (highest Z, first-row tie); raise NumberOfReturns to the pulse maximum reported count/return label. Pulse key: PointSourceID + gpstime (+ ScannerChannel if present). Do not infer pulse size from tile point counts; refuse remaining QC issues.",
+            "source_filter": "-drop_synthetic before R decoding; audit counts; row IDs refer to filtered input",
+            "synthetic": "Seeded XY jitter uniformly within +/-0.25 m, quantized on source grid; reject collisions/outside source bounds; Z noise +/-seq(0.10,0.50,0.05) m; separate GPS-time ranges per copy; classifications/flags retained; synthetic derivation explicitly labeled in preparation metadata, not acquisition data.",
+            "version": "fresh-petawawa-v4"
+          },
+          "policy_version": "fresh-petawawa-v4",
+          "preparation_md5": "30ac422b598cdbd1c187dc77ae5cb7ee",
+          "status": "data-qc-passed"
+        },
+        "root": {
+          "archive_md5_supplied": null,
+          "archive_url": "https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip",
+          "crs": 2959,
+          "executables": {
+            "index": "lasindex64",
+            "sort": "lassort64"
+          },
+          "metadata_confirmation": "Piotr Tompalski",
+          "policy_version": "fresh-petawawa-v3",
+          "seed": 20261022,
+          "tool_license_confirmed": true,
+          "vertical_epsg": 5713
+        },
+        "schema": "lidarbench.petawawa-receipts/1",
+        "stage": "full",
+        "stage_identity": {
+          "archive_md5": "e26fafa0b41b6875784a66f2c5e604b9",
+          "implementation_md5": [
+            "3d79583687c92ed0cd74afab1defbbcb",
+            "b0a94be880119b1df463a011fc1b76a2",
+            "f09a5c4083edc6240bde563f3798e187",
+            "a1aae442511b39b3852947df45eeece6",
+            "8d2293a66fa164619f91e1fdff844876"
+          ],
+          "policy_version": "fresh-petawawa-v3",
+          "tool_versions": {
+            "index": {
+              "build": "260914",
+              "status": 0
+            },
+            "sort": {
+              "build": "260914",
+              "status": 0
+            }
+          },
+          "tools_md5": [
+            "0fe0f6ab4b34bc73818da17b7dd969d3",
+            "4f0ded3635b23fe7b9316bc96448bd3e"
+          ]
+        },
+        "tiles": [
+          {
+            "index_validation": "passed",
+            "points": 942728,
+            "seed": 20261123,
+            "source_md5": "7ea83f4139c9d3eb4ca43b5167b5545f",
+            "tile": "297000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1552432,
+            "seed": 20261124,
+            "source_md5": "7a7e32a3db763afaf7d650929b6020c3",
+            "tile": "298000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1990936,
+            "seed": 20261125,
+            "source_md5": "017f8d660b54227994e07798522561a5",
+            "tile": "298000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1982632,
+            "seed": 20261126,
+            "source_md5": "986483006efad8c9ab7ab1c97141864f",
+            "tile": "298000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1090560,
+            "seed": 20261127,
+            "source_md5": "9d46b7be33cdda692a144995b4915abe",
+            "tile": "298000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1797752,
+            "seed": 20261128,
+            "source_md5": "e079d66c8431a63f14adea955a8bf313",
+            "tile": "299000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1960560,
+            "seed": 20261129,
+            "source_md5": "68c337067e47439cbbe66a6b13e0eeff",
+            "tile": "299000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1939536,
+            "seed": 20261130,
+            "source_md5": "b8ff4d972c560d05fb187e3312015285",
+            "tile": "299000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1987768,
+            "seed": 20261131,
+            "source_md5": "d8caa3a10cf22553da7d0029bbe87e40",
+            "tile": "299000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1772888,
+            "seed": 20261132,
+            "source_md5": "23caf443c80367d003d578bafbf466e5",
+            "tile": "299000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1962424,
+            "seed": 20261133,
+            "source_md5": "b56fc171f638448a46e7ac99f4fe1a8e",
+            "tile": "300000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1983056,
+            "seed": 20261134,
+            "source_md5": "36e3a7ed8d6727c9254eaa24811d7c13",
+            "tile": "300000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1998928,
+            "seed": 20261135,
+            "source_md5": "dde79176df24f363617d7a3f9222e23c",
+            "tile": "300000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1990016,
+            "seed": 20261136,
+            "source_md5": "71b1dd8e36b78ea395d839ef34946176",
+            "tile": "300000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1986504,
+            "seed": 20261137,
+            "source_md5": "345b4a1f8ebd91ba32c1e524c9d5e537",
+            "tile": "300000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1542360,
+            "seed": 20261138,
+            "source_md5": "6c093aeec64cd8898f2e8599b3a99ea4",
+            "tile": "301000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1981784,
+            "seed": 20261139,
+            "source_md5": "9e139ce3a44509b2e28333a24b7c9041",
+            "tile": "301000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1942856,
+            "seed": 20261140,
+            "source_md5": "b250ce390ebf88ca33175f0004d64c22",
+            "tile": "301000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1812120,
+            "seed": 20261141,
+            "source_md5": "ffe5232714e1537caa618a3acbd6dfee",
+            "tile": "301000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1995816,
+            "seed": 20261142,
+            "source_md5": "a5af08a140ca30e44dd68d84f1dbd4a9",
+            "tile": "301000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1167256,
+            "seed": 20261143,
+            "source_md5": "31f8733eaa1f115d030aae2e1dfd7b8e",
+            "tile": "301000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1617232,
+            "seed": 20261144,
+            "source_md5": "2b1963e9a57c59839ca6a9a20aa1edcc",
+            "tile": "302000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999336,
+            "seed": 20261145,
+            "source_md5": "9e5249f335943ee2a6e352f3f9937d40",
+            "tile": "302000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999360,
+            "seed": 20261146,
+            "source_md5": "6e1aab4e8ad8b5364368469c3458f654",
+            "tile": "302000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1984848,
+            "seed": 20261147,
+            "source_md5": "69181ffe1ea8c356916eb8a1f73a58e8",
+            "tile": "302000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1986104,
+            "seed": 20261148,
+            "source_md5": "4a9930567f856a16aace0b02a71041c4",
+            "tile": "302000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1765680,
+            "seed": 20261149,
+            "source_md5": "467fa03cfb80837654ca81cd752472ca",
+            "tile": "302000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1892400,
+            "seed": 20261150,
+            "source_md5": "02e8e4a1a6cadb48392aefa1197a64ca",
+            "tile": "303000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1978904,
+            "seed": 20261151,
+            "source_md5": "419f1e64d91a02b395c4a61695c120f7",
+            "tile": "303000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999200,
+            "seed": 20261152,
+            "source_md5": "225287d1a202a9122143d6f7bd0aa4f8",
+            "tile": "303000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999016,
+            "seed": 20261153,
+            "source_md5": "0053f206e71d7a8f3cebd77078bfe8a7",
+            "tile": "303000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1997224,
+            "seed": 20261154,
+            "source_md5": "b4db055d9843bb0659a4fc280ccd74da",
+            "tile": "303000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 2000056,
+            "seed": 20261155,
+            "source_md5": "de6ef2397e733e33c5aeddfe035f5da1",
+            "tile": "303000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1991096,
+            "seed": 20261156,
+            "source_md5": "516714da7396e17d3c3206afbf4a3ca2",
+            "tile": "304000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1997192,
+            "seed": 20261157,
+            "source_md5": "73e3c4727a2fac219c7d1112950a9a30",
+            "tile": "304000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1995608,
+            "seed": 20261158,
+            "source_md5": "770c6c8bad3b0a4d9b3a007ae45ec4ee",
+            "tile": "304000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 2000576,
+            "seed": 20261159,
+            "source_md5": "3f24aaf693bcf8ea34c9b443cb191c8d",
+            "tile": "304000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1944504,
+            "seed": 20261160,
+            "source_md5": "766a20a5fd25dd3cf45744f28a366a8e",
+            "tile": "304000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1198936,
+            "seed": 20261161,
+            "source_md5": "5f0a0727f4eb7af11c18847cbe78fb1b",
+            "tile": "304000_5097000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1585664,
+            "seed": 20261162,
+            "source_md5": "d4487c185e9f67864ab413319936788d",
+            "tile": "305000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 2000856,
+            "seed": 20261163,
+            "source_md5": "39fed6d1a459f6fe2f924add5d30378e",
+            "tile": "305000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999984,
+            "seed": 20261164,
+            "source_md5": "1312899f51aed1d075b07f80f5761bd8",
+            "tile": "305000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1995288,
+            "seed": 20261165,
+            "source_md5": "69ff876187c4bf9ec8164ca24ee8d67e",
+            "tile": "305000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1995784,
+            "seed": 20261166,
+            "source_md5": "eb42a1e253838d31056fc3407fa5d217",
+            "tile": "305000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1868216,
+            "seed": 20261167,
+            "source_md5": "e2f55e2342aebebc886429d52cf4e1dd",
+            "tile": "305000_5097000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1589008,
+            "seed": 20261168,
+            "source_md5": "f7cc1a9b67b19a6918f915d68a5df6f1",
+            "tile": "306000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999656,
+            "seed": 20261169,
+            "source_md5": "ef978844a48cc05aff05e54d0ef109f4",
+            "tile": "306000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 2000456,
+            "seed": 20261170,
+            "source_md5": "41c4091442f321c196b34651ffdd8c40",
+            "tile": "306000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1993232,
+            "seed": 20261171,
+            "source_md5": "0a4a71608a221dc9291336bafec1bb66",
+            "tile": "306000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1995400,
+            "seed": 20261172,
+            "source_md5": "0efdc699ffce22f70a217fecd14d4199",
+            "tile": "306000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1948736,
+            "seed": 20261173,
+            "source_md5": "d2e015cfeba1b30661f2b1857cac344d",
+            "tile": "306000_5097000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 2000192,
+            "seed": 20261174,
+            "source_md5": "1cfd713febfa51bf89bb9de04755ab56",
+            "tile": "307000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1991472,
+            "seed": 20261175,
+            "source_md5": "5036a571f0c414af6b0025abc90055d6",
+            "tile": "307000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1995696,
+            "seed": 20261176,
+            "source_md5": "136592ba7de35d62502d4cee67dd2b90",
+            "tile": "307000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1992032,
+            "seed": 20261177,
+            "source_md5": "bb628f8dd172c5ea49f5d23191c1f5f6",
+            "tile": "307000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1990256,
+            "seed": 20261178,
+            "source_md5": "e4ddb99f1930e8b9e3fdfdc2715d15a6",
+            "tile": "307000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1363432,
+            "seed": 20261179,
+            "source_md5": "df6cd04220d75594e337539e7c8582d3",
+            "tile": "307000_5097000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1731952,
+            "seed": 20261180,
+            "source_md5": "152a45a5e8d441fa8c7ef4cbad15ca4f",
+            "tile": "308000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1997760,
+            "seed": 20261181,
+            "source_md5": "0f7cae5fa57136781c3525f42531d7cc",
+            "tile": "308000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1998584,
+            "seed": 20261182,
+            "source_md5": "0468316225f0fe53fa8f4e40d14d36a1",
+            "tile": "308000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1998712,
+            "seed": 20261183,
+            "source_md5": "fa095b1dc5c1968a89ac2001dafb1a49",
+            "tile": "308000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1998080,
+            "seed": 20261184,
+            "source_md5": "6ad50a6926c260e84566a6088fb3225f",
+            "tile": "308000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1993696,
+            "seed": 20261185,
+            "source_md5": "f0a8144adbbbaf023bb5fad1377b0689",
+            "tile": "308000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1023856,
+            "seed": 20261186,
+            "source_md5": "4524e9b7fb0d865a6ecea803cfaf2e7a",
+            "tile": "309000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 2000104,
+            "seed": 20261187,
+            "source_md5": "2820984a62e6b54dd71ab0f1a18f9fbe",
+            "tile": "309000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999552,
+            "seed": 20261188,
+            "source_md5": "ce2072806ee39444ab5f4ca1eb1f78ea",
+            "tile": "309000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999576,
+            "seed": 20261189,
+            "source_md5": "50c43821cc73b369f06398d7a5c12646",
+            "tile": "309000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1998216,
+            "seed": 20261190,
+            "source_md5": "538d0f99cab211f1f2a433944d888977",
+            "tile": "309000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1964272,
+            "seed": 20261191,
+            "source_md5": "63bfd12f2458bacc9d2f60faef37bd31",
+            "tile": "309000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1165960,
+            "seed": 20261192,
+            "source_md5": "f67f02ac001f5ff131c3ea602e1c954c",
+            "tile": "310000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999320,
+            "seed": 20261193,
+            "source_md5": "ea48a60366a1c3ed3442231ae1c2b275",
+            "tile": "310000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999336,
+            "seed": 20261194,
+            "source_md5": "94578f144c98fd6b0219ae786383c016",
+            "tile": "310000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1998784,
+            "seed": 20261195,
+            "source_md5": "5c7a78d25e836e015f72abf614771612",
+            "tile": "310000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1961264,
+            "seed": 20261196,
+            "source_md5": "9a1007cf204b8e13aeebca2b264f796e",
+            "tile": "310000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1948600,
+            "seed": 20261197,
+            "source_md5": "27dd90e78e89826dba607efbab3e5ae6",
+            "tile": "310000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1396480,
+            "seed": 20261198,
+            "source_md5": "c37484cfcce779f6e3c30a5a2ce82480",
+            "tile": "311000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1998712,
+            "seed": 20261199,
+            "source_md5": "7c8aba51413dae0e3e7b36f6091237bb",
+            "tile": "311000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999608,
+            "seed": 20261200,
+            "source_md5": "3fa5370600aaf0f347b8dea97f2609f1",
+            "tile": "311000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999840,
+            "seed": 20261201,
+            "source_md5": "80086eaf2e407048232379102cc9389f",
+            "tile": "311000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 2001088,
+            "seed": 20261202,
+            "source_md5": "a96da3076c9ebd002604357761998076",
+            "tile": "311000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1535664,
+            "seed": 20261203,
+            "source_md5": "7f62f7e11819e521e411db7dd2df61c0",
+            "tile": "311000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1652720,
+            "seed": 20261204,
+            "source_md5": "0aa13e4479bf97ae58014fc7e152d49d",
+            "tile": "312000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999984,
+            "seed": 20261205,
+            "source_md5": "540b69d2751efd4abe276e8556dfe5da",
+            "tile": "312000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1952456,
+            "seed": 20261206,
+            "source_md5": "cd133ebc7cf3e0f596caa612c678bcba",
+            "tile": "312000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1996864,
+            "seed": 20261207,
+            "source_md5": "a29aa579aa4430eb9635cf39b861b113",
+            "tile": "312000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1992864,
+            "seed": 20261208,
+            "source_md5": "1474fab794ec98cd8e40822d8c80d707",
+            "tile": "312000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1682792,
+            "seed": 20261209,
+            "source_md5": "68430801bac3d4701f8eca7c9d49df48",
+            "tile": "312000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 835712,
+            "seed": 20261210,
+            "source_md5": "c67ed0af9e812b1c960381bcc199ff9b",
+            "tile": "312000_5097000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1246000,
+            "seed": 20261211,
+            "source_md5": "8f5e9b0b44519d3e0e076fa2b109abc0",
+            "tile": "312000_5098000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1081640,
+            "seed": 20261212,
+            "source_md5": "c507caa87e49b7cc4f07a2bdc7276d20",
+            "tile": "313000_5091000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1999704,
+            "seed": 20261213,
+            "source_md5": "0552833f272207f1e0c3c24839c07bb0",
+            "tile": "313000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1996976,
+            "seed": 20261214,
+            "source_md5": "15925788aa9b4cf5b367893406b528e6",
+            "tile": "313000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1996456,
+            "seed": 20261215,
+            "source_md5": "40d0d359ab4f6e4c9091fcad57ac78d1",
+            "tile": "313000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1994360,
+            "seed": 20261216,
+            "source_md5": "2f926391809d0dbb117124ccb2c87d5d",
+            "tile": "313000_5095000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1607832,
+            "seed": 20261217,
+            "source_md5": "d43fd2583892af8a0c399a009b93e22f",
+            "tile": "313000_5096000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1506224,
+            "seed": 20261218,
+            "source_md5": "4a5587585c43926e9e3beb1e7ededbac",
+            "tile": "313000_5097000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1966872,
+            "seed": 20261219,
+            "source_md5": "19aaa6962d17407b52fe88c7909cad80",
+            "tile": "314000_5092000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1998480,
+            "seed": 20261220,
+            "source_md5": "c2a8b3755a145109190b1678daa44884",
+            "tile": "314000_5093000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 2000192,
+            "seed": 20261221,
+            "source_md5": "73bc49a5bebb4fdeed45f19c4573ea4e",
+            "tile": "314000_5094000"
+          },
+          {
+            "index_validation": "passed",
+            "points": 1416672,
+            "seed": 20261222,
+            "source_md5": "9f8aaaf305b49e5acd6e70a68127ece1",
+            "tile": "314000_5095000"
+          }
+        ]
+      }
+    },
+    "notes": [
+      "The root and stage identities were created under fresh-petawawa-v3 and moved to v4 by the documented --resume-negative-z-full transition (negative-z-transition.rds).",
+      "Repair receipts predate the policy field; the R CLI accepts them under v4 only because their audits contain no negative source Z (fresh_check_repair_policy).",
+      "Every file MD5 was cross-checked against the R preparation receipts."
+    ],
+    "preparation": {
+      "config_example": "fresh-data.example.R",
+      "dataset_parameters": {
+        "part": "prepared",
+        "target_density": 2
+      },
+      "documentation": "design/DATASETS.md",
+      "engine": "r-cli",
+      "entry_point": "R/prepare_fresh_data.R",
+      "generator": null,
+      "method": "fresh-petawawa-v4",
+      "parameters": {
+        "densities_pts_per_m2": [
+          1,
+          2,
+          5,
+          10,
+          20,
+          50
+        ],
+        "pilot_tiles": [
+          "298000_5093000",
+          "298000_5094000"
+        ],
+        "seed": 20261022,
+        "stage": "full",
+        "tiles": "the 100 approved tiles of ALS_tiles.gpkg"
+      },
+      "requires": [
+        "R 4.6.1 with the renv.lock library (lidR, rlas, sf, data.table, withr, fs, cli, callr)",
+        "LAStools lassort and lasindex with a confirmed licence (the stage receipts record build 260914)",
+        "curl for the resumable archive download (about 9.1 GB)",
+        "the protected inputs ALS_tiles.gpkg and R/2_data.R, R/1_functions.R, renv.lock at the recorded identities"
+      ],
+      "stages": [
+        "--download",
+        "--pilot",
+        "--verify-pilot",
+        "--full",
+        "--verify-full",
+        "--upgrade-failed-pilot",
+        "--retry-failed-preparation",
+        "--resume-parallel-full",
+        "--resume-negative-z-full"
+      ]
+    },
+    "records": [
+      {
+        "bytes": 264,
+        "description": "archive download receipt (URL, MD5, bytes)",
+        "location": {
+          "path": "download/download.rds",
+          "root": "petawawa-fresh"
+        },
+        "md5": "7baf13556789aec352d9368fa8b8cbda",
+        "sha256": "9ad99e77797f5c2f3f7cbcdc451151194d25c67dff4c2f58c14ed67d3a77b4cd"
+      },
+      {
+        "bytes": 1082,
+        "description": "root identity (configuration and policy)",
+        "location": {
+          "path": "fresh-root.rds",
+          "root": "petawawa-fresh"
+        },
+        "md5": "de560ec2e7029c1c436d3182543d8d06",
+        "sha256": "6ce19d3725dde31dfe7ec77953657f0b5d4212eed89d320c1f436af89eb5c006"
+      },
+      {
+        "bytes": 2175,
+        "description": "serial-to-parallel resume transition receipt",
+        "location": {
+          "path": "full/parallel-transition.rds",
+          "root": "petawawa-fresh"
+        },
+        "md5": "a7f3aee7e68942d49cddd2a118fbfab0",
+        "sha256": "f081ba6666a01de0ebf31e96480977e923b5bad8f188b6aaf0b38202c9045e2e"
+      },
+      {
+        "bytes": 7871,
+        "description": "preparation plan and parameters",
+        "location": {
+          "path": "full/prepared/preparation.rds",
+          "root": "petawawa-fresh"
+        },
+        "md5": "30ac422b598cdbd1c187dc77ae5cb7ee",
+        "sha256": "d67960edc7d6ccd1cb8e6ae0a280ab433d5f99720e45ca847f06556bfef762cf"
+      },
+      {
+        "bytes": 901,
+        "description": "readiness receipt (data-qc-passed)",
+        "location": {
+          "path": "full/ready.rds",
+          "root": "petawawa-fresh"
+        },
+        "md5": "ab4f1ecb1114eb79f01db417b0c6572c",
+        "sha256": "94065961efd6c249ae866b2af3e8e4b929ed1e924864a7a27cff2f1790784a4e"
+      },
+      {
+        "bytes": 1954,
+        "description": "full-stage identity (archive, tools, implementation, runtime)",
+        "location": {
+          "path": "full/stage-identity.rds",
+          "root": "petawawa-fresh"
+        },
+        "md5": "7c51dbb05d301923ed1a00e27f6013aa",
+        "sha256": "032429ca5bb5050cd6ea50aba293ad8111d1e495bb26c7f1f43d89578958a09f"
+      },
+      {
+        "bytes": 1487,
+        "description": "v3 to v4 negative-Z transition receipt",
+        "location": {
+          "path": "negative-z-transition.rds",
+          "root": "petawawa-fresh"
+        },
+        "md5": "04b997bc07289127306e930639cbd38e",
+        "sha256": "12821b3b3b22862685e022b6f55bd65ee569e8161d83b0ee53c1cd4adca3a016"
+      }
+    ],
+    "source_citation": "Natural Resources Canada / Canadian Forest Service, Canadian Wood Fibre Centre; Petawawa Research Forest LiDAR 2012",
+    "source_url": "https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip"
+  },
+  "recipe": "petawawa-fresh-v4",
+  "registration": {
+    "lidarbench_version": "2.0.0a1",
+    "registered_at": "2026-10-29T06:17:00Z",
+    "registered_on": "Linux"
+  },
+  "schema": "lidarbench.dataset/1",
+  "title": "100 x 1 km tiles at 2 points per square metre",
+  "total_bytes": 1429075926,
+  "version": "fresh-petawawa-v4"
+}

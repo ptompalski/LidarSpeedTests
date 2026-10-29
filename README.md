@@ -52,8 +52,22 @@ uv run lidarbench run CONFIG.toml --dry-run   # schedule, resume decisions, plan
 uv run lidarbench run CONFIG.toml             # create or resume a campaign and execute it
 uv run lidarbench export WORKSPACE/campaigns/ID --format csv -o results.csv
 uv run lidarbench validate --workload pixel_metrics_1a --tool lasR --outputs OUT --input-dir TILES --epsg 2959
+uv run lidarbench data list        # registered datasets and recipes
+uv run lidarbench data verify --all --root petawawa-fresh=/path/to/fresh-root   # read-only, no R
 uv run pytest tests/python         # Python test suite
 ```
+
+Benchmark data are described by write-once dataset manifests in
+[`datasets/`](datasets/) (`lidarbench.dataset/1`). They record portable
+locations, SHA-256 inventories, LAS header facts, licence and provenance. The
+existing Petawawa archive, repaired tiles and six density datasets are
+registered. Their MD5s were cross-checked against the R preparation receipts,
+and verifying them needs no R. A campaign dataset can be given as
+`manifest = "petawawa-fresh-v4/tile_1000_density_1"`, so every OS benchmarks
+identical input bytes. The Petawawa preparation itself still requires the
+original R tooling (`R/prepare_fresh_data.R`, see below). Licence status,
+provenance and remaining dependencies are in
+[design/DATASETS.md](design/DATASETS.md).
 
 `lidarbench run` freezes a campaign (configuration, workloads, tool binaries,
 input hashes, hardware/OS, code digests and a seeded `schedule-v2`) in

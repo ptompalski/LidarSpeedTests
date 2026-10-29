@@ -33,6 +33,14 @@ Example::
     id = "tiny"
     path = "data/tiny"
 
+    # A registered dataset (design/DATASETS.md): the directory is resolved from
+    # the manifest's data root and every file is checked against the manifest.
+    # [data]
+    # roots = { fixtures = "fixtures" }
+    # [[datasets]]
+    # id = "pair"
+    # manifest = "synthetic-tiles-v1/pair"
+
     [[workloads]]
     id = "synthetic.hashchain"
     parameters = { iterations = 20000 }
@@ -54,6 +62,14 @@ from pathlib import Path
 from typing import Any
 
 from lidarbench.core.canonical import sha256_bytes
+from lidarbench.datasets.manifest import (
+    SHA256_PATTERN,
+    DatasetManifest,
+    ManifestError,
+    manifest_sha256,
+)
+from lidarbench.datasets.registry import DatasetRegistry, RegistryError, default_registry_dir
+from lidarbench.datasets.roots import DataRootError, DataRoots, load_data_roots
 from lidarbench.execution.adapters.base import ADAPTER_ID_PATTERN, WORKLOAD_ID_PATTERN
 
 CONFIG_SCHEMA = "lidarbench.campaign-config/1"
@@ -234,17 +250,31 @@ class IntegrityConfig:
 
 @dataclass(frozen=True)
 class DatasetConfig:
-    """A directory of input files."""
+    """A directory of input files, optionally described by a registered manifest."""
 
     id: str
     path: Path
     include: tuple[str, ...] = ("*",)
     scratch: str = ""
+    manifest: DatasetManifest | None = None
 
     def input_files(self) -> list[Path]:
-        """Top-level regular files whose names match ``include``, sorted by name."""
+        """Input files, sorted.
+
+        Without a manifest: top-level regular files whose names match ``include``.
+        With a manifest: its ``input`` files (which must exist).
+        """
         if not self.path.is_dir():
             raise ConfigError(f"dataset {self.id!r}: directory not found: {self.path}")
+        if self.manifest is not None:
+            files = [self.path.joinpath(*f.path.split("/")) for f in self.manifest.inputs]
+            missing = [os.fspath(f) for f in files if not f.is_file()]
+            if missing:
+                raise ConfigError(
+                    f"dataset {self.id!r}: manifest inputs missing: {missing[:5]} "
+                    f"(run `lidarbench data verify {self.manifest.dataset_id}`)"
+                )
+            return files
         files = sorted(
             entry
             for entry in self.path.iterdir()
@@ -259,12 +289,31 @@ class DatasetConfig:
 
     def to_record(self) -> dict[str, Any]:
         """JSON-ready representation."""
+        if self.manifest is not None:
+            return {
+                "id": self.id,
+                "path": os.fspath(self.path),
+                "manifest": manifest_reference(self.manifest),
+                "scratch": self.scratch,
+            }
         return {
             "id": self.id,
             "path": os.fspath(self.path),
             "include": list(self.include),
             "scratch": self.scratch,
         }
+
+
+def manifest_reference(manifest: DatasetManifest) -> dict[str, Any]:
+    """The portable part of a manifest frozen into campaign identity."""
+    return {
+        "dataset_id": manifest.dataset_id,
+        "version": manifest.version,
+        "kind": manifest.kind,
+        "location": manifest.location.to_record(),
+        "content_sha256": manifest.content_sha256,
+        "manifest_sha256": manifest_sha256(manifest),
+    }
 
 
 @dataclass(frozen=True)
@@ -382,6 +431,7 @@ _TOP_KEYS = {
     "monitoring",
     "scratch",
     "integrity",
+    "data",
     "datasets",
     "workloads",
     "tools",
@@ -496,17 +546,41 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
         ),
     )
 
+    data_raw = _table(top.get("data", {}), "data", {"registry", "roots_file", "roots"})
+    data_context: tuple[DatasetRegistry, DataRoots] | None = None
+
+    def data_context_for() -> tuple[DatasetRegistry, DataRoots]:
+        nonlocal data_context
+        if data_context is None:
+            registry = DatasetRegistry(
+                _path(data_raw["registry"], "data.registry", base_dir)
+                if "registry" in data_raw
+                else default_registry_dir()
+            )
+            inline = {
+                label: _path(p, f"data.roots.{label}", base_dir)
+                for label, p in _table(data_raw.get("roots", {}), "data.roots", None).items()
+            }
+            roots_file = (
+                _path(data_raw["roots_file"], "data.roots_file", base_dir)
+                if "roots_file" in data_raw
+                else None
+            )
+            try:
+                data_context = (registry, load_data_roots(roots_file, inline))
+            except DataRootError as exc:
+                raise ConfigError(f"data: {exc}") from None
+        return data_context
+
     datasets = []
     for i, raw in enumerate(_list(top["datasets"], "datasets")):
         where = f"datasets[{i}]"
-        d = _table(raw, where, {"id", "path", "include", "scratch"}, {"id", "path"})
-        include = d.get("include", ["*"])
-        if (
-            not isinstance(include, list)
-            or not include
-            or not all(isinstance(p, str) and p and "/" not in p and "\\" not in p for p in include)
-        ):
-            raise ConfigError(f"{where}.include must be a non-empty array of file-name patterns")
+        d = _table(
+            raw,
+            where,
+            {"id", "path", "include", "scratch", "manifest", "manifest_sha256"},
+            {"id"},
+        )
         label = d.get("scratch")
         if label is None:
             if len(roots) != 1:
@@ -514,9 +588,27 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
             label = next(iter(roots))
         if label not in roots:
             raise ConfigError(f"{where}.scratch {label!r} is not in scratch.roots {sorted(roots)}")
+        dataset_id = _name(d["id"], f"{where}.id")
+        if ("path" in d) == ("manifest" in d):
+            raise ConfigError(f"{where}: give exactly one of 'path' or 'manifest'")
+        if "manifest" in d:
+            if "include" in d:
+                raise ConfigError(f"{where}.include is not allowed with 'manifest'")
+            manifest, path = _manifest_dataset(d, where, *data_context_for())
+            datasets.append(DatasetConfig(dataset_id, path, (), label, manifest))
+            continue
+        if "manifest_sha256" in d:
+            raise ConfigError(f"{where}.manifest_sha256 requires 'manifest'")
+        include = d.get("include", ["*"])
+        if (
+            not isinstance(include, list)
+            or not include
+            or not all(isinstance(p, str) and p and "/" not in p and "\\" not in p for p in include)
+        ):
+            raise ConfigError(f"{where}.include must be a non-empty array of file-name patterns")
         datasets.append(
             DatasetConfig(
-                id=_name(d["id"], f"{where}.id"),
+                id=dataset_id,
                 path=_path(d["path"], f"{where}.path", base_dir),
                 include=tuple(include),
                 scratch=label,
@@ -578,6 +670,33 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
         timeout_s=timeout_s,
         description=description,
     )
+
+
+def _manifest_dataset(
+    d: Mapping[str, Any], where: str, registry: DatasetRegistry, data_roots: DataRoots
+) -> tuple[DatasetManifest, Path]:
+    """Resolve a ``manifest = "<dataset id>"`` dataset to its manifest and local directory."""
+    dataset_id = d["manifest"]
+    if not isinstance(dataset_id, str):
+        raise ConfigError(f"{where}.manifest must be a dataset ID string")
+    try:
+        manifest = registry.manifest(dataset_id)
+    except (RegistryError, ManifestError) as exc:
+        raise ConfigError(f"{where}.manifest: {exc}") from None
+    pinned = d.get("manifest_sha256")
+    if pinned is not None:
+        if not isinstance(pinned, str) or not SHA256_PATTERN.match(pinned):
+            raise ConfigError(f"{where}.manifest_sha256 must be a lowercase SHA-256 hex digest")
+        if pinned != manifest_sha256(manifest):
+            raise ConfigError(
+                f"{where}.manifest_sha256 does not match the registered manifest of "
+                f"{dataset_id!r} ({manifest_sha256(manifest)})"
+            )
+    try:
+        path = data_roots.resolve(manifest.location.root, manifest.location.path)
+    except DataRootError as exc:
+        raise ConfigError(f"{where}.manifest: {exc}") from None
+    return manifest, Path(os.path.abspath(path))
 
 
 def load_config(path: str | os.PathLike[str]) -> CampaignConfig:

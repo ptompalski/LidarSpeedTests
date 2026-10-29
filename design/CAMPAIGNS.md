@@ -45,6 +45,13 @@ integrity options. Unknown keys and wrong types are errors with the key named.
 Every default is resolved and frozen (`identity/config.json`). Configs are data;
 nothing is evaluated.
 
+A dataset is either a directory (`path`, optional `include` patterns) or a
+registered manifest (`manifest = "<dataset id>"`, optional `manifest_sha256`
+pin, with an optional `[data]` table for the registry and data roots). A
+manifest dataset is resolved through the machine's data roots, its inputs are
+the manifest's `input` files, and the campaign refuses bytes that differ from
+the manifest. See [DATASETS.md §8](DATASETS.md).
+
 The schedule is the cross product of workloads × their datasets × CPU counts
 (a *unit*) × tools. A tool that cannot run a unit (unavailable, unsupported,
 blocked, thread count out of range) still gets schedule rows; they are recorded
@@ -62,7 +69,7 @@ describe warm-cache behaviour. Any cold-cache policy is rejected.
 | `config` | fully resolved configuration (including absolute paths and defaults) |
 | `workloads` | selected workloads, parameters, effective timeouts, each tool's declared status/reason/threading range |
 | `tools` | adapter class and module SHA-256, options, availability and reason, version, details, every executable's path/size/SHA-256 |
-| `datasets` | every file under each dataset directory (relative path, size, SHA-256) and the ordered input list |
+| `datasets` | every file under each dataset directory (relative path, size, SHA-256) and the ordered input list; for manifest datasets also the manifest reference (ID, version, kind, location, `content_sha256`, `manifest_sha256`), and the files must equal the manifest |
 | `environment` | OS, release, architecture, CPU model, logical/physical CPUs, total RAM, Python implementation/version |
 | `schedule` | frozen schedule, RNG description, seed, order mode, counts |
 

@@ -1,0 +1,61 @@
+schema = "lidarbench.dataset-recipe/1"
+id = "petawawa-als-2012"
+version = "2012"
+title = "Petawawa Research Forest ALS 2012: original LAS/LAZ archive"
+kind = "source"
+root = "petawawa-fresh"
+description = """
+The original archive PRF_LiDAR2012_LAS.zip, unchanged, as downloaded by the
+R CLI (`Rscript --vanilla R/prepare_fresh_data.R --download <config>`) into
+<root>/download/Petawawa2012.zip. Its receipts live beside it and are
+recorded as provenance records, not inventory: download.rds is the R
+download receipt, and a stray Petawawa2012.zip.part left by the R download is
+excluded explicitly (it is not part of the dataset).
+"""
+
+[layout]
+inputs = ["Petawawa2012.zip"]
+exclude = ["download.rds", "transfer.rds", "Petawawa2012.zip.part"]
+las_headers = "none"
+
+[license]
+name = "Open Government Licence - Canada"
+url = "https://open.canada.ca/en/open-government-licence-canada"
+attribution = "Contains information licensed under the Open Government Licence – Canada."
+redistribution = "unknown"
+notes = """
+Licence as recorded by the preparation configuration; not confirmed by
+lidarbench against a custodian licence statement. Public access is
+established (HTTPS URL below), redistribution terms are not, so this recipe
+declares no lidarbench download: use the R CLI --download stage, which keeps
+its own receipt.
+"""
+
+[source]
+citation = "Natural Resources Canada / Canadian Forest Service, Canadian Wood Fibre Centre; Petawawa Research Forest LiDAR 2012"
+url = "https://opendata.nfis.org/downloads/petawawa/Raster/LiDAR%202012/PRF_LiDAR2012_LAS.zip"
+
+[declared_metadata]
+horizontal_epsg = 2959
+vertical_epsg = 5713
+xyz_units = "metre"
+confirmation = "Confirmed in the R preparation configuration (metadata_confirmation)"
+
+[preparation]
+engine = "none"
+method = "original"
+
+[provenance]
+legacy_receipts = "petawawa-fresh"
+notes = [
+  "The archive MD5 was calculated locally by the R CLI; no independent checksum was supplied, so it establishes byte identity, not authenticity.",
+]
+records = [
+  { path = "download/download.rds", description = "archive download receipt (URL, MD5, bytes)" },
+]
+
+[[datasets]]
+id = "petawawa-als-2012/archive"
+path = "download"
+title = "Original PRF_LiDAR2012_LAS.zip archive (about 9.1 GB)"
+parameters = { part = "archive" }
