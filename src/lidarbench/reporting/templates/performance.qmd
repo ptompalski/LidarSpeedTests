@@ -1,0 +1,75 @@
+---
+title: "Performance"
+engine: knitr
+---
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+lb_banner()
+summary <- lb_table("summary")
+reps <- lb_table("repetitions")
+timing_columns <- c("workload", "dataset", "cpus", "tool", "tool_version", "evidence",
+                    "n_planned", "n_included", "n_missing", "n_short", "mean_seconds",
+                    "sd_seconds", "cv", "median_seconds", "q1_seconds", "q3_seconds",
+                    "min_seconds", "max_seconds", "tool_workload_mean_seconds",
+                    "startup_overhead_mean_seconds")
+```
+
+## Validated results
+
+Measurements whose outputs passed every validation level (or an explicit, frozen
+accepted exception). These may enter [cross-tool comparisons](comparisons.qmd) when
+the comparability gate passes.
+
+```{r}
+#| results: asis
+validated <- summary[summary$section == "validated", , drop = FALSE]
+lb_kable(validated, timing_columns)
+```
+
+```{r}
+#| fig-height: 6
+lb_plot_repetitions(reps[reps$evidence_tier %in% c("validated", "accepted_exception") &
+                         paste(reps$workload, reps$dataset, reps$cpus, reps$tool) %in%
+                         paste(validated$workload, validated$dataset, validated$cpus, validated$tool), ,
+                         drop = FALSE], validated)
+```
+
+## Descriptive results (performance only)
+
+```{r}
+#| results: asis
+descriptive <- summary[summary$section == "descriptive", , drop = FALSE]
+if (nrow(descriptive)) {
+  cat("::: {.callout-note}\nThese timings include unverified or not validated outputs. ",
+      "They describe how long each tool took on these inputs; they are **not** cross-tool ",
+      "comparisons or speedups.\n:::\n\n", sep = "")
+}
+lb_kable(descriptive, c(timing_columns, "n_unverified", "n_execution_only",
+                        "declared_comparability"))
+```
+
+```{r}
+#| fig-height: 6
+keys <- paste(descriptive$workload, descriptive$dataset, descriptive$cpus, descriptive$tool)
+lb_plot_repetitions(reps[paste(reps$workload, reps$dataset, reps$cpus, reps$tool) %in% keys, ,
+                         drop = FALSE], descriptive)
+```
+
+```{r}
+#| results: asis
+lb_plot_mean_sd(summary[summary$section != "no_measurements", , drop = FALSE], "timing.png")
+```
+
+## Units without measurements
+
+```{r}
+#| results: asis
+lb_kable(summary[summary$section == "no_measurements", , drop = FALSE],
+         c("workload", "dataset", "cpus", "tool", "n_planned", "n_attempts", "n_failed",
+           "n_timed_out", "n_interrupted", "n_skipped", "n_validation_failed",
+           "n_validation_incomplete", "availability"))
+lb_download("summary", "Download the full summary (summary.csv)")
+lb_download("repetitions", "Download every included repetition (repetitions.csv)")
+```

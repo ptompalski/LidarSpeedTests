@@ -1,0 +1,46 @@
+---
+title: "Validated cross-tool comparisons"
+engine: knitr
+---
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+lb_banner()
+comparisons <- lb_table("comparisons")
+```
+
+A ratio is shown only when both tools' included measurements passed the
+comparability gate: validated report mode, every attempt `comparable`
+(numerically validated, matched definition, zero boundary differences), the same
+workload contract and digest, equivalence group, dataset digest, campaign
+identity (same machine), timing boundary and run dimensions (CPUs, execution
+mode). `speedup_a_vs_b` = time of *b* / time of *a* (how many times faster *a*
+is), from medians and from means.
+
+## Comparable pairs
+
+```{r}
+#| results: asis
+ok <- comparisons[comparisons$comparable %in% TRUE, , drop = FALSE]
+if (!nrow(ok)) {
+  cat("_No tool pair passed the comparability gate in this report._\n\n")
+} else {
+  lb_kable(ok, c("workload", "dataset", "cpus", "tool_a", "tool_b", "n_a", "n_b",
+                 "median_a_seconds", "median_b_seconds", "speedup_a_vs_b_median",
+                 "speedup_a_vs_b_mean"))
+}
+```
+
+## Pairs that are not comparable
+
+Listed so that missing comparisons are explained, not hidden. No ratio is
+computed for these pairs.
+
+```{r}
+#| results: asis
+lb_kable(comparisons[!(comparisons$comparable %in% TRUE), , drop = FALSE],
+         c("workload", "dataset", "cpus", "tool_a", "tool_b", "evidence_a", "evidence_b",
+           "reasons"))
+lb_download("comparisons")
+```

@@ -283,9 +283,33 @@ Task 6 acceptance criteria:
 - [x] Structural validator (Python): artifact inventory, file format sniffing, raster geometry/CRS checks.
 - R validation bridge: call existing `benchmark_validate_artifacts()` in numerical or performance-only mode.
 - [x] Numerical, structural and comparability verdicts as separate fields.
-- Report compilation: select latest attempt per key, apply exclusion reasons, compute summaries.
-- Report renderers: static HTML/Markdown; optional Quarto integration.
-- Legacy result importer.
+- [x] Report compilation: select latest attempt per key, apply exclusion reasons, compute summaries.
+- [x] Report renderers: Markdown summary; Quarto website.
+- [x] Legacy result importer.
+
+**Progress — Task 11 (reporting) ✅ DONE**: `lidarbench report` derives a stable
+reporting dataset (`lidarbench.report-dataset/1`: attempts, summary, repetitions,
+comparisons, scaling, issues, environment, tools, datasets, implementations)
+from a verified campaign, read-only (record digests checked before and after),
+in pure Python. Evidence tiers (`validated`, `accepted_exception`, `unverified`,
+`execution_only`) separate validated from descriptive results; cross-tool
+speedups only through the comparability gate; within-tool CPU scaling; every
+repetition with SD/CV/quartiles. A Quarto website (knitr, reusing
+`benchmark_report_plot()` from `R/reporting.R`) is staged and rendered when
+Quarto and R are available, with diagnostics otherwise. Historical R results
+are imported read-only (legacy CSVs in Python; R-harness campaigns through
+`bridges/r/export_legacy_campaign.R`), never mapped onto new contracts. See
+[design/REPORTING.md](design/REPORTING.md).
+
+Task 11 acceptance criteria:
+- [x] Stable reporting dataset from immutable records; Python export/aggregation without R.
+- [x] Quarto retained; legacy R plotting reused; clear diagnostics without Quarto/R.
+- [x] Performance tables, plots, tool versions, OS, hardware, CPU scaling and resources.
+- [x] Failures, skips, validation failures, unverified outputs and missing measurements reported.
+- [x] Validated comparisons separate from descriptive results; gated speedups only.
+- [x] Repetitions and variability; raw records preserved; downloadable tables.
+- [x] Read-only historical import; works with unavailable tools/workloads; tested on synthetic records.
+- [ ] Validated comparisons on real campaigns (needs runner validation integration).
 
 **Acceptance Criteria**:
 - Structural validation works on output artifacts.

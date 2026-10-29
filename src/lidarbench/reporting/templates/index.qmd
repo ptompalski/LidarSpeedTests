@@ -1,0 +1,76 @@
+---
+title: "Benchmark report"
+engine: knitr
+---
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+lb_banner()
+created <- lb_meta("campaign_created_at")
+if (length(created) && !is.na(created)) {
+  cat("- Campaign created: ", created, "\n", sep = "")
+  cat("- Full identity: `", lb_meta("identity_sha256"), "`\n", sep = "")
+  description <- lb_meta("campaign_description")
+  if (length(description) && !is.na(description)) cat("- Description: ", description, "\n", sep = "")
+}
+cat("- Report generated: ", lb_meta("generated_at"), "\n", sep = "")
+cat("- Minimum timing: ", lb_meta("min_seconds"), " s (shorter timings are excluded and flagged)\n\n",
+    sep = "")
+for (note in lb_meta("note")) cat("> ", note, "\n\n", sep = "")
+```
+
+## Availability of measurements
+
+One row per planned measurement unit (workload × dataset × CPUs × tool), including
+units that were skipped, failed or never attempted.
+
+```{r}
+#| results: asis
+summary <- lb_table("summary")
+lb_kable(summary, c("workload", "dataset", "cpus", "tool", "tool_version", "section",
+                    "evidence", "n_planned", "n_included", "n_missing", "median_seconds",
+                    "availability"))
+lb_download("summary")
+```
+
+## Reading this report
+
+This report is derived only from the immutable records of one campaign
+(`attempts/*/result.json`, verified through their receipts) and, optionally,
+read-only historical R results. Nothing was re-run and no record was changed.
+
+**Selection.** For each schedule entry the latest attempt (start sequence) is
+used; a failed final retry never falls back to an earlier success. Warm-ups and
+superseded retries are kept in the [attempt ledger](tables/attempts.csv) but never
+contribute samples.
+
+**Evidence tiers** of an included measurement:
+
+```{r}
+#| results: asis
+meta <- lb_table("report_meta")
+tiers <- meta[startsWith(meta$key, "tier:"), , drop = FALSE]
+tiers$tier <- sub("^tier:", "", tiers$key)
+lb_kable(data.frame(tier = tiers$tier, meaning = tiers$value))
+```
+
+A *validated* report includes only `validated` and `accepted_exception`
+measurements; a *performance-only* report also includes `unverified` and
+`execution_only` measurements, labelled as such. Failed or incomplete validation
+is never included.
+
+**Timing.** Times are the outer fresh-process interval measured by the
+orchestrator (`timing_boundary = process`), including interpreter and package
+start-up. Tool-reported inner intervals are shown separately and never mixed.
+Caches are uncontrolled (warm-cache behaviour).
+
+**Variability.** Every repetition is shown. Summaries give mean, sample SD
+(n − 1), coefficient of variation, median, quartiles and range; fewer than two
+samples give an empty SD, never zero.
+
+**Comparisons.** Cross-tool ratios appear only on the
+[validated comparisons](comparisons.qmd) page and only when the comparability
+gate passed (validated report, comparable attempts, same contract, dataset,
+campaign identity, timing boundary and run dimensions). All other timings are
+descriptive. CPU scaling is reported within one tool only.

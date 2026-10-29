@@ -1,0 +1,36 @@
+---
+title: "Historical results"
+engine: knitr
+---
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+sources <- lb_table("historical_sources")
+```
+
+```{r}
+#| results: asis
+if (is.null(sources) || !nrow(sources)) {
+  cat("_No historical results were imported into this report._ Use ",
+      "`lidarbench report --historical SOURCE` with a directory of legacy per-run CSVs or ",
+      "a `lidarbench.legacy-r-campaign/1` export.\n\n", sep = "")
+} else {
+  cat("::: {.callout-important}\nHistorical R results are imported read-only and are ",
+      "**descriptive only**. Their task IDs are kept verbatim and are **not** mapped onto ",
+      "lidarbench workload contracts; legacy per-run CSVs have no campaign identity and no ",
+      "validation. They never enter comparisons, speedups or the campaign tables. ",
+      "The published historical site is not modified.\n:::\n\n", sep = "")
+  cat("## Sources\n\n")
+  lb_kable(sources)
+  cat("## Summary\n\nOne row per source, host, task, run, tool and tool version ",
+      "(versions and machines are never pooled).\n\n", sep = "")
+  lb_kable(lb_table("historical_summary"),
+           c("source_kind", "legacy_campaign_id", "host", "legacy_task_id", "run_id", "tool",
+             "tool_version", "cores", "n_records", "n_included", "n_failed", "median_seconds",
+             "sd_seconds", "min_seconds", "max_seconds", "validation_statuses",
+             "timing_precision"))
+  lb_download("historical_summary")
+  lb_download("historical_attempts", "Download every historical record (historical_attempts.csv)")
+}
+```

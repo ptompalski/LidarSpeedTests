@@ -18,9 +18,10 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     - scratch: list or explicitly delete orphaned run-owned scratch
     - validate: validate outputs against a workload contract (outside any timing)
     - data: list, verify, register, prepare and download datasets
+    - report: prepare a report (tables + Quarto site) from an existing campaign
     - help: display help (implicit)
 
-    Additional commands (init, preflight, report, doctor) are placeholders
+    Additional commands (init, preflight, doctor) are placeholders
     and will be implemented in later phases.
     """
     subparsers = parser.add_subparsers(dest="command", help="command to run")
@@ -140,10 +141,9 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
 
     add_data_parser(subparsers)
 
-    subparsers.add_parser(
-        "report",
-        help="[PLACEHOLDER] generate a report from a campaign",
-    )
+    from lidarbench.reporting.commands import add_report_parser
+
+    add_report_parser(subparsers)
 
     subparsers.add_parser(
         "doctor",
@@ -283,8 +283,13 @@ def main(args: list[str] | None = None) -> int:
 
         return data_command(parsed)
 
+    if parsed.command == "report":
+        from lidarbench.reporting.commands import report_command_from_args
+
+        return report_command_from_args(parsed)
+
     # Placeholder commands
-    if parsed.command in ("init", "preflight", "report", "doctor"):
+    if parsed.command in ("init", "preflight", "doctor"):
         print(
             f"Error: '{parsed.command}' command is not yet implemented.",
             file=sys.stderr,

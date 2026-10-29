@@ -1,0 +1,57 @@
+# Quarto project of one lidarbench report (staged by `lidarbench report`).
+# Render from this directory: quarto render
+project:
+  type: website
+  output-dir: _site
+  render:
+    - index.qmd
+    - performance.qmd
+    - comparisons.qmd
+    - scaling.qmd
+    - resources.qmd
+    - issues.qmd
+    - environment.qmd
+    - historical.qmd
+    - downloads.qmd
+  resources:
+    - tables/
+    - figures/
+    - report-dataset.json
+    - summary.md
+execute:
+  freeze: false
+  cache: false
+  echo: false
+  warning: false
+  error: false
+website:
+  title: "LidarSpeedTests report"
+  navbar:
+    pinned: true
+    left:
+      - href: index.qmd
+        text: Overview
+      - text: Results
+        menu:
+          - href: performance.qmd
+            text: Performance
+          - href: comparisons.qmd
+            text: Validated comparisons
+          - href: scaling.qmd
+            text: CPU scaling
+          - href: resources.qmd
+            text: CPU and memory
+      - href: issues.qmd
+        text: Issues
+      - href: environment.qmd
+        text: Environment
+      - href: historical.qmd
+        text: Historical
+      - href: downloads.qmd
+        text: Downloads
+format:
+  html:
+    theme: sandstone
+    css: styles.css
+    toc: true
+editor: source

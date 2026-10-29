@@ -76,6 +76,10 @@ package-dir = { "" = "src" }
 where = ["src"]
 include = ["lidarbench*"]
 
+# Quarto/R templates staged by `lidarbench report`.
+[tool.setuptools.package-data]
+"lidarbench.reporting" = ["templates/*"]
+
 [tool.pytest.ini_options]
 minversion = "7.4"
 testpaths = ["tests/python"]

@@ -1,0 +1,21 @@
+---
+title: "Downloads"
+engine: knitr
+---
+
+Machine-readable tables (CSV: UTF-8, empty cell = missing, `true`/`false`).
+`report-dataset.json` lists every table with its columns, row count and SHA-256;
+`results-table.jsonl` is the unfiltered `lidarbench.results-table/1` export of
+every attempt. The raw campaign records stay unchanged in the campaign
+directory (`report.json` lists their SHA-256 digests).
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+index <- lb_table("table_index")
+if (!is.null(index) && nrow(index)) {
+  index$download <- paste0("[", basename(index$file), "](", index$file, ")")
+  lb_kable(index, c("download", "rows", "description", "sha256"))
+}
+cat("- [report-dataset.json](report-dataset.json)\n- [summary.md](summary.md)\n")
+```

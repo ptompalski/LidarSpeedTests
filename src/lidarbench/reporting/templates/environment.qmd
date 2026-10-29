@@ -1,0 +1,48 @@
+---
+title: "Environment"
+engine: knitr
+---
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+lb_banner()
+```
+
+Facts frozen in the campaign identity when it was created (operating system,
+hardware, tools, datasets) plus recorded-but-not-compared provenance.
+
+## Operating system and hardware
+
+```{r}
+#| results: asis
+environment <- lb_table("environment")
+lb_kable(environment)
+```
+
+## Tools
+
+```{r}
+#| results: asis
+lb_kable(lb_table("tools"))
+details <- lb_table("tool_details")
+if (!is.null(details) && nrow(details)) {
+  cat("### Tool details\n\n")
+  lb_kable(details[details$kind == "detail", c("tool", "key", "value"), drop = FALSE])
+  cat("Executable paths and SHA-256 digests: [tool_details.csv](tables/tool_details.csv)\n\n")
+}
+```
+
+## Datasets
+
+```{r}
+#| results: asis
+lb_kable(lb_table("datasets"))
+```
+
+## Workload implementations
+
+```{r}
+#| results: asis
+lb_kable(lb_table("implementations"))
+```

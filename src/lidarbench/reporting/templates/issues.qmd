@@ -1,0 +1,34 @@
+---
+title: "Issues"
+engine: knitr
+---
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+lb_banner()
+issues <- lb_table("issues")
+```
+
+Execution failures, skipped workloads, validation failures, unverified or not
+validated outputs, missing measurements and monitoring gaps, one row per
+occurrence (warm-ups and superseded retries included and marked). Included
+measurements can also appear here (for example `unverified_output`).
+
+```{r}
+#| results: asis
+if (is.null(issues) || !nrow(issues)) {
+  cat("_No issues were recorded._\n\n")
+} else {
+  counts <- as.data.frame(table(kind = issues$kind), stringsAsFactors = FALSE)
+  names(counts) <- c("kind", "count")
+  lb_kable(counts)
+  for (kind in sort(unique(issues$kind))) {
+    cat("## ", kind, "\n\n", sep = "")
+    lb_kable(issues[issues$kind == kind, , drop = FALSE],
+             c("scope", "phase", "workload", "dataset", "cpus", "tool", "repetition",
+               "attempt_id", "superseded", "detail"))
+  }
+}
+lb_download("issues")
+```

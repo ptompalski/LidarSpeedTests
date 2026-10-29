@@ -181,7 +181,11 @@ def collect_rows(campaign_path: Path) -> list[dict[str, Any]]:
     """
     store = CampaignStore(campaign_path)
     store.load()
-    infos = store.attempts()
+    return rows_for_attempts(store, store.attempts())
+
+
+def rows_for_attempts(store: CampaignStore, infos: Sequence[AttemptInfo]) -> list[dict[str, Any]]:
+    """Results rows of already verified attempts, with the ``superseded`` flag set."""
     rows = [attempt_row(info, store) for info in infos]
     latest: dict[str, int] = {}
     for row in rows:

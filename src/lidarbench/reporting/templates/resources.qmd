@@ -1,0 +1,40 @@
+---
+title: "CPU and memory"
+engine: knitr
+---
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+lb_banner()
+summary <- lb_table("summary")
+reps <- lb_table("repetitions")
+```
+
+Resource measurements of included repetitions with complete monitoring
+(`monitoring_status = available`). Partial, unavailable or disabled monitoring is
+counted (`n_partial_monitoring`, `n_monitoring_missing`) and never filled with
+zeros. Process-tree values belong to the benchmarked process and its children;
+whole-machine values include unrelated activity and the monitor itself. CPU time
+marked as a lower bound missed short-lived children. Brief peaks can be missed
+between samples.
+
+```{r}
+#| results: asis
+lb_kable(summary[summary$section != "no_measurements", , drop = FALSE],
+         c("workload", "dataset", "cpus", "tool", "n_included", "n_monitored",
+           "n_partial_monitoring", "n_monitoring_missing", "tree_cpu_seconds_mean",
+           "tree_cpu_seconds_sd", "tree_cpu_seconds_is_lower_bound", "tree_peak_rss_bytes_mean",
+           "tree_peak_rss_bytes_max", "machine_cpu_percent_mean", "machine_cpu_percent_sd",
+           "machine_memory_used_peak_bytes_max"))
+```
+
+```{r}
+#| fig-height: 6
+if (!is.null(reps) && nrow(reps)) lb_plot_resources(reps)
+```
+
+```{r}
+#| results: asis
+lb_download("repetitions", "Download per-repetition resources (repetitions.csv)")
+```

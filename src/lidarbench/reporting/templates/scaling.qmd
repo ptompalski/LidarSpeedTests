@@ -1,0 +1,35 @@
+---
+title: "CPU scaling"
+engine: knitr
+---
+
+```{r}
+#| results: asis
+source("lidarbench_report.R")
+lb_banner()
+scaling <- lb_table("scaling")
+```
+
+Within-tool scaling: the same tool, tool version, workload, dataset and campaign
+(machine), differing only in the number of CPUs requested.
+`scaling_ratio` = median time at the baseline CPU count / median time at this CPU
+count; `parallel_efficiency` = `scaling_ratio` × baseline CPUs / CPUs. Ratios are
+not computed when timing boundaries or execution modes differ. These are not
+cross-tool comparisons; `evidence` gives the weakest evidence tier involved.
+
+```{r}
+#| results: asis
+lb_kable(scaling, c("workload", "dataset", "tool", "tool_version", "cpus", "baseline_cpus",
+                    "n", "baseline_n", "evidence", "median_seconds", "sd_seconds",
+                    "scaling_ratio", "parallel_efficiency", "reasons"))
+```
+
+```{r}
+#| fig-height: 6
+if (!is.null(scaling) && nrow(scaling)) lb_plot_scaling(scaling)
+```
+
+```{r}
+#| results: asis
+lb_download("scaling")
+```

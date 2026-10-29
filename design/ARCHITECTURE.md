@@ -197,7 +197,7 @@ LidarSpeedTests/
 │   │   └── adapters/             # base.py, rscript.py (R bridge), lidr.py, lasr.py, cli.py, lastools.py, pylib.py
 │   ├── monitoring/               # base.py, psutil_backend.py, summary.py
 │   ├── validation/               # status model, structural.py, plugin protocol, r_bridge.py
-│   ├── reporting/                # compile.py, summarize.py, renderers/
+│   ├── reporting/                # dataset.py, legacy.py, output.py, site.py, templates/ (REPORTING.md)
 │   └── legacy/                   # read-only importers for exported legacy campaigns
 ├── bridges/
 │   └── r/                        # R side of the R bridge (NOT under R/, see §10.2)
@@ -262,7 +262,7 @@ published file has a SHA-256 digest recorded in its parent receipt.
 │   ├── result.json          # consolidated record (references the files above + their SHA-256)
 │   └── completed.json       # receipt: sha256(result.json); written last, exclusive create
 │   └── abandoned.json       # tombstone written on resume for an attempt with started.json but no completed.json
-└── reports/<report_id>/     # tables/, figures/, site/, build.json
+└── reports/<campaign>-<mode>-<UTC>/   # tables/, Quarto project, _site/, report.json (REPORTING.md)
 ```
 
 ## 7. Interfaces
@@ -530,6 +530,9 @@ tables, which are labelled. The reporting API offers no function that computes
 ratios or speedups across a failed gate; attempting one raises an error. This
 removes the possibility of presenting non-equivalent workloads as directly
 comparable.
+
+Report-time use of the gate (pairing, evidence tiers, scaling, exclusions)
+is described in [REPORTING.md](REPORTING.md) (Task 11).
 
 ### 8.4 Timing
 

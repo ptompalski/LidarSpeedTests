@@ -2,7 +2,7 @@
 
 **Permanent guidelines** for contributors and agents working on LidarSpeedTests 2.0.  
 **Status**: Active  
-**Last updated**: 2026-10-28
+**Last updated**: 2026-10-29
 
 ## Core Principles
 
@@ -171,6 +171,16 @@ Normative description: [design/DATASETS.md](design/DATASETS.md) (`src/lidarbench
 - `r-validation-v1`: calls existing R validation logic via bridge; supports numerical and performance-only modes.
 - A missing validator does not fail the campaign; attempts are marked `unverified` or `skipped` with reason.
 
+### 7a. Reporting
+
+Normative description: [design/REPORTING.md](design/REPORTING.md) (`src/lidarbench/reporting/`).
+
+- Reports are read-only derivations of one verified campaign; campaign record digests are compared before and after, and the output is always a new directory (never inside the campaign, never `docs/`).
+- Cross-tool ratios only through `validation.comparability.speedup()` (the gate); never compute ratios elsewhere. CPU scaling stays within one tool.
+- `execution_only` timings (no validation ran) appear only in performance-only reports, labelled, never in comparisons.
+- The aggregation layer is stdlib-only; Quarto/R are optional, probed at run time and reported as diagnostics. Pages read the tables and never recompute inclusion.
+- Historical R results are imported read-only and never mapped onto lidarbench workload contracts.
+
 ### 8. Monitor Backend Protocol
 
 - Monitor backends are loaded via entry points (`lidarbench.monitors`).
@@ -257,5 +267,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 - 2026-10-28: LAStools native adapter and declared accepted exceptions (Task 8; design/ADAPTERS.md §9).
 - 2026-10-28: PDAL adapter, `workloads-v2` suite and declared comparability classes (Task 9; design/ADAPTERS.md §10).
 - 2026-10-28: Dataset manifests, recipes, data roots and `lidarbench data` (Task 10; design/DATASETS.md).
+- 2026-10-29: Reporting dataset, `lidarbench report`, Quarto site and historical import (Task 11; design/REPORTING.md).
 
-**Last reviewed**: 2026-10-28
+**Last reviewed**: 2026-10-29

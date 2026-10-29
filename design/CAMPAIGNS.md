@@ -22,6 +22,7 @@ lidarbench resume CONFIG.toml                 # resume only; never creates a cam
 lidarbench run CONFIG.toml --tool synthetic --cpus 4 --phase measurement --limit 10
 lidarbench run CONFIG.toml --retry-failed     # new attempts for failed/timed-out entries
 lidarbench export WORKSPACE/campaigns/ID --format csv -o results.csv   # jsonl | csv | parquet
+lidarbench report WORKSPACE/campaigns/ID      # read-only report: tables + Quarto site (REPORTING.md)
 lidarbench lock status [WORKSPACE]            # workspace lock, or this user's machine lock
 lidarbench lock release --confirm [WORKSPACE] # only if the owner process is gone
 lidarbench scratch CONFIG.toml [--clean --confirm]   # orphaned run-owned scratch

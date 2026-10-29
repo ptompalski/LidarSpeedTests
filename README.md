@@ -51,6 +51,8 @@ uv run lidarbench check --json     # the same as a lidarbench.check/1 JSON docum
 uv run lidarbench run CONFIG.toml --dry-run   # schedule, resume decisions, planned commands
 uv run lidarbench run CONFIG.toml             # create or resume a campaign and execute it
 uv run lidarbench export WORKSPACE/campaigns/ID --format csv -o results.csv
+uv run lidarbench report WORKSPACE/campaigns/ID              # tables + Quarto site (read-only)
+uv run lidarbench report --historical _OLD/results -o REPORT_DIR   # historical R results only
 uv run lidarbench validate --workload pixel_metrics_1a --tool lasR --outputs OUT --input-dir TILES --epsg 2959
 uv run lidarbench data list        # registered datasets and recipes
 uv run lidarbench data verify --all --root petawawa-fresh=/path/to/fresh-root   # read-only, no R
@@ -146,6 +148,22 @@ labelled descriptive reports. It needs the optional `validation` extra
 (`pip install "lidarbench[validation]"`; included by `uv sync`). See
 [design/VALIDATION.md](design/VALIDATION.md) for which claims it establishes and
 which remain unverified.
+
+`lidarbench report` prepares a report from an existing campaign without
+running or changing anything. It writes a new directory with machine-readable
+tables (every attempt with its exclusion reason, per-unit summaries with all
+repetitions and their variability, validated cross-tool comparisons, CPU
+scaling, resource use, issues such as failures, skips, validation failures,
+unverified outputs and missing measurements, and the OS, hardware, tool and
+dataset identity), a Markdown summary and a Quarto website. Cross-tool speedups
+are computed only when the comparability gate passes; everything else is
+labelled descriptive. Rendering needs Quarto, R, `knitr` and `rmarkdown`
+(`ggplot2` for figures); when they are missing the command says what is
+missing and the tables are still complete. Historical R results can be added
+read-only with `--historical` (legacy per-run CSVs, or a campaign of the R
+harness exported with `bridges/r/export_legacy_campaign.R`); their task IDs are
+never mapped onto the new workload definitions. The published site in `docs/`
+is never touched. See [design/REPORTING.md](design/REPORTING.md).
 
 ## Benchmark pilot on prepared data
 
