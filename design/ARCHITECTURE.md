@@ -520,6 +520,19 @@ are true:
 2. `execution_status == succeeded` and `numerical_status == passed`. The
    following are excluded: `accepted_exception`, `unverified`, `diagnostic_only`.
 3. `boundary_difference_points == 0` (or the spec-defined equivalent).
+
+   Rules 2–3 depend on the campaign's frozen **comparability policy**
+   (`[validation] comparability`, part of identity). `strict` (default) applies
+   them as written. `edge-tolerant` (maintainer decision after the Task 13
+   pilot: each tool may produce slightly different output at the edges)
+   additionally accepts (a) `boundary_difference_points > 0` when the tool's
+   cell convention is declared and its values match the reference under that
+   convention, and (b) `accepted_exception` raised only by
+   `accept_known_extent_discrepancies` (outward extent of at most one cell per
+   edge). Undeclared conventions (`unverified`), other exceptions, failed or
+   diagnostic results stay excluded. Every accepted difference is listed with
+   the comparison (`accepted_differences`) and the policy is stated in the
+   report.
 4. Same dataset manifest digest, run dimensions (cores, storage pair) and
    campaign identity (same machine).
 5. Same timing-boundary kind (§8.4).

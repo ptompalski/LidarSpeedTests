@@ -278,6 +278,12 @@ fails the campaign: an exception is recorded as a warning and the attempt keeps
   workload's `epsg` parameter.
 * **Mode.** `validation_mode = "performance-only"` still checks artifacts and
   structure (no point decoding); numerical is `unverified`.
+* **Comparability policy.** `[validation] comparability` (`strict` default, or
+  `edge-tolerant`) is frozen in identity and applied at report time by the
+  gate (ARCHITECTURE.md §8.3). It never changes a verdict: validation reports
+  keep the strict attempt-level `comparability`, and `edge-tolerant` only lets
+  the gate accept declared boundary-point differences and the explicit
+  outward-extent exception, listing them per comparison.
 
 ### 8.1 Cost: what validation does and how it is bounded
 

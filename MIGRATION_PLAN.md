@@ -310,7 +310,7 @@ Task 11 acceptance criteria:
 - [x] Validated comparisons separate from descriptive results; gated speedups only.
 - [x] Repetitions and variability; raw records preserved; downloadable tables.
 - [x] Read-only historical import; works with unavailable tools/workloads; tested on synthetic records.
-- [ ] Validated comparisons on real campaigns (runner validation done; no pair passes the gate yet — comparability-policy decision, PILOT_REVIEW.md §12.5).
+- [x] Validated comparisons on real campaigns (edge-tolerant policy; 12/12 lidR/lasR/PDAL pairs in the confirmation pilot, PILOT_REVIEW.md §13).
 
 **Acceptance Criteria**:
 - Structural validation works on output artifacts.
@@ -356,11 +356,13 @@ times equal legacy); PDAL `readers.las threads = 1`; CPU pinning
 `measured_parallelism` and `cpu_budget_exceeded`; session-wide monitoring;
 supervisor-death guardian; tombstone digests; `lidarbench preflight`.
 
-Remaining before publishing cross-tool results: a comparability-policy decision
-(no tool pair passes the gate on these workloads: lidR and PDAL own boundary
-points differently, lasR is an accepted exception), lidR heap presizing
-decision, a full-scale validation memory check, Windows/macOS pilots, and the
-remaining contracts.
+Decisions (PILOT_REVIEW.md §13): the new frozen comparability policy
+`edge-tolerant` accepts declared edge differences (lidR/PDAL boundary-point
+ownership, lasR outward extent); with it all 12 lidR/lasR/PDAL pairs pass the
+gate in `pilot-t13-20261029-004-edge-tolerant` (LAStools stays descriptive).
+lidR keeps R's default heap; the full-scale memory check is not needed.
+Remaining: Windows/macOS pilots and the remaining contracts; the full campaign
+awaits approval.
 
 ### Phase 7: Preflight and Doctor Commands
 

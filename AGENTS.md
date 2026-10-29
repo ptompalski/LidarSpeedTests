@@ -178,6 +178,7 @@ Normative description: [design/REPORTING.md](design/REPORTING.md) (`src/lidarben
 
 - Reports are read-only derivations of one verified campaign; campaign record digests are compared before and after, and the output is always a new directory (never inside the campaign, never `docs/`).
 - Cross-tool ratios only through `validation.comparability.speedup()` (the gate); never compute ratios elsewhere. CPU scaling stays within one tool.
+- The gate applies the campaign's frozen `[validation] comparability` policy (`strict` default; `edge-tolerant` accepts only declared boundary-point differences and the `accept_known_extent_discrepancies` exception, listed per comparison). Never relax it at report time or for `unverified` results.
 - `execution_only` timings (no validation ran) appear only in performance-only reports, labelled, never in comparisons.
 - The aggregation layer is stdlib-only; Quarto/R are optional, probed at run time and reported as diagnostics. Pages read the tables and never recompute inclusion.
 - Historical R results are imported read-only and never mapped onto lidarbench workload contracts.

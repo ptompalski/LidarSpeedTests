@@ -11,8 +11,11 @@ comparisons <- lb_table("comparisons")
 ```
 
 A ratio is shown only when both tools' included measurements passed the
-comparability gate: validated report mode, every attempt `comparable`
-(numerically validated, matched definition, zero boundary differences), the same
+comparability gate: validated report mode, every attempt `comparable` under the
+campaign's frozen comparability policy (`strict`: numerically validated, matched
+definition, zero boundary differences; `edge-tolerant`: also declared
+boundary-point differences and the explicit outward-extent exception, listed in
+`accepted_differences`), the same
 workload contract and digest, equivalence group, dataset digest, campaign
 identity (same machine), timing boundary and run dimensions (CPUs, execution
 mode). `speedup_a_vs_b` = time of *b* / time of *a* (how many times faster *a*
@@ -28,7 +31,7 @@ if (!nrow(ok)) {
 } else {
   lb_kable(ok, c("workload", "dataset", "cpus", "tool_a", "tool_b", "n_a", "n_b",
                  "median_a_seconds", "median_b_seconds", "speedup_a_vs_b_median",
-                 "speedup_a_vs_b_mean"))
+                 "speedup_a_vs_b_mean", "comparability_policy", "accepted_differences"))
 }
 ```
 

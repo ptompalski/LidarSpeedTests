@@ -1,7 +1,8 @@
 # Task 13 — End-to-end pilot review
 
 Status: pilot completed 2026-10-29 on Linux; follow-up changes and a validated
-pilot in §12 (supersedes the verdict of §1 and the priorities of §10). Campaign
+pilot in §12 (supersedes the verdict of §1 and the priorities of §10); maintainer
+decisions, the edge-tolerant comparability policy and the final readiness in §13. Campaign
 `pilot-t13-20261029-001`, identity
 `e5c0234437b52ba03e53b97dcaa2d9a657a0da304d4b12a720f8f29fbf73a9e9`.
 Example configuration: [`configs/examples/pilot-campaign.toml`](../configs/examples/pilot-campaign.toml).
@@ -414,3 +415,37 @@ gate under the current contracts (§12.2). Windows and macOS remain unverified.
    macOS without pinning).
 5. Remaining contracts (TIN DEM, nine-band metrics, normalization, treetops)
    and the R `validation-v1` bridge.
+
+## 13. Maintainer decisions and confirmation (2026-10-29)
+
+| Open item (§12.5) | Decision | Implementation |
+|---|---|---|
+| 1. Comparability policy | Accept that each tool may produce slightly different output at the edges | New frozen policy `[validation] comparability = "edge-tolerant"` (default stays `strict`; commit `d729950`, ARCHITECTURE.md §8.3). It accepts only declared boundary-point ownership differences and the `accept_known_extent_discrepancies` exception; every owned cell value must still match the independent reference. Undeclared conventions (LAStools, `unverified`), other exceptions and failures stay descriptive. Accepted differences are listed per comparison (`accepted_differences`) and the policy is stated in every report. |
+| 2. lidR heap presizing | Keep R's default settings | Nothing changed; the ~2 s first-call GC cost of lidR at 1 CPU stays inside its inner interval (documented in §12.2). |
+| 3. Full-scale validation memory | Not needed: the full density-50 benchmark has already run on this machine | Not tested separately. Python validation keeps at most one fully decoded tile (plus a small LRU), cached edge strips and ≤ 1 GiB of references; a 50 M-point tile decodes to ~1.2 GB of float64 XYZ. |
+
+Confirmation campaign `pilot-t13-20261029-004-edge-tolerant` (same matrix,
+data, tools and seed as §12, plus `comparability = "edge-tolerant"`; preflight
+ready; another interactive session used part of one core during the run, so
+its timings are not used here): all 64 entries succeeded; outcomes as in §12.2.
+The validated report now has **12 of 12 lidR/lasR/PDAL pairs comparable**
+(2 workloads × 2 CPU counts × 3 pairs), each listing its accepted differences:
+
+| Tool | Accepted difference (both CPU counts) |
+|---|---|
+| lidR | 6 points owned by a different cell than the contract partition (`lidr_buffered_clamp`) |
+| lasR | accepted outward extent (one extra cell east/north) |
+| PDAL | 1 000 (`pixel_metrics_1a`) / 19 721 (`generate_DSM1`) points owned differently (`pdal_binmode_floor`, upward-Y edges) |
+
+LAStools remains descriptive only (`unverified`: its cell convention is
+undeclared). Ratios exist in the pilot report's `comparisons` table; per the
+project rule no ranking is published from pilot data.
+
+**Readiness.** LidarSpeedTests 2.0 is ready, on Linux, for the full campaign
+with validated per-tool timings, enforced CPU budgets, complete resource
+accounting, crash safety and gated cross-tool comparisons for lidR, lasR and
+PDAL under the edge-tolerant policy (LAStools descriptive). Remaining before a
+cross-platform claim: Windows and macOS runs. Remaining scope: contracts for
+the other legacy workloads (TIN DEM, nine-band metrics, normalization,
+treetops) and the R `validation-v1` bridge. The full campaign is not started
+without the maintainer's approval.

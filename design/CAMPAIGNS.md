@@ -45,7 +45,8 @@ cooldown, cache policy, CPU pinning (`scheduling.cpu_affinity = "pinned"` (defau
 or `"none"`, EXECUTION.md §7), monitoring, scratch roots/retention, validation
 mode, validation settings (`[validation] suite` (default: the checkout's
 `workloads/workloads-v3`), `accept_known_extent_discrepancies` (default false),
-`reuse_identical_outputs` (default true); VALIDATION.md §8) and integrity
+`reuse_identical_outputs` (default true), `comparability` (`strict` default or
+`edge-tolerant`, ARCHITECTURE.md §8.3); VALIDATION.md §8) and integrity
 options. Unknown keys and wrong types are errors with the key named.
 Every default is resolved and frozen (`identity/config.json`). Configs are data;
 nothing is evaluated.

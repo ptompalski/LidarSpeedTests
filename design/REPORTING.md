@@ -69,7 +69,7 @@ CSV: UTF-8, `\n`, fixed column order, empty cell = missing (never 0),
 | `attempts` | attempt (warm-ups, retries, failures, skips, abandoned) | all `lidarbench.results-table/1` columns + `execution_mode`, `contract_tool`, `declared_comparability`, `verdict_source`, `validation_report`, `contract_key/digest`, `verdict_artifacts/structural/numerical`, `boundary_difference_points`, `outcome`, `comparability(_reasons)`, `evidence_tier`, `short_duration`, `report_included`, `exclusion` |
 | `summary` | planned measurement unit (workload × dataset × CPUs × tool, from the frozen schedule) | tool version, `section` (`validated`/`descriptive`/`no_measurements`), weakest `evidence`, `availability`; counts: planned, attempts, selected, not attempted, included, missing, failed, timed out, interrupted, skipped, missing outputs, validation failed/incomplete, per tier, short, warm-ups; timing mean, SD, CV, median, quartiles, min, max; tool-reported inner time and start-up overhead; monitored counts and process-tree CPU s, exact CPU s (`process_cpu_seconds`: max of `rusage` and the sampled tree), mean measured parallelism, `n_cpu_budget_exceeded`, peak RSS, whole-machine CPU % and memory peak |
 | `repetitions` | included measurement | the samples behind `summary` (timing, inner timing, resources, tool position, evidence tier) |
-| `comparisons` | pair of tools with included measurements in the same workload/dataset/CPUs | gate result, reasons; ratios **only** if the gate passed |
+| `comparisons` | pair of tools with included measurements in the same workload/dataset/CPUs | gate result, `comparability_policy`, `accepted_differences` (edge differences accepted under `edge-tolerant`), reasons; ratios **only** if the gate passed |
 | `scaling` | tool × CPU count, for series with ≥ 2 CPU counts | median vs the smallest CPU count, scaling ratio, parallel efficiency, weakest evidence |
 | `issues` | problem occurrence | `tool_unavailable`, `monitoring_disabled`, `not_attempted`, `incomplete_record`, `interrupted`, `execution_failed`, `timed_out`, `skipped_*`, `missing_outputs`, `validation_failed`, `validation_incomplete`, `invalid_validation_record`, `unverified_output`, `outputs_not_validated`, `accepted_exception`, `short_timing`, `missing_timing`, `monitoring_partial`, `monitoring_missing`, `cpu_budget_exceeded` (included attempt whose CPU time exceeds `cpus × elapsed × 1.10 + 0.1 s`) |
 | `environment` | key | OS, release, architecture, CPU model, logical/physical CPUs, RAM, Python; campaign settings; schedule RNG/seed; provenance (host, platform, git) |
@@ -118,7 +118,10 @@ weaker tier puts it in the *descriptive* section.
 
 Cross-tool ratios use only `validation.comparability.speedup()`, which raises
 unless `comparison_gate()` passes (ARCHITECTURE.md §8.3): validated report
-mode; every included attempt `comparable`; the same contract key, digest and
+mode; every included attempt `comparable` under the campaign's frozen
+comparability policy (`strict`, or `edge-tolerant`, which accepts declared
+boundary-point differences and the explicit outward-extent exception and lists
+them; campaigns without the setting are `strict`); the same contract key, digest and
 equivalence group (from the validation reports; no report ⇒ refused); the
 same dataset digest, campaign identity (one machine), timing boundary and run
 dimensions (CPUs, execution mode). Mixed boundaries or modes within one tool's
