@@ -125,6 +125,17 @@ enforced by the machine lock); a tool uses only its own internal parallelism
 one per physical core. After each launched attempt (and its untimed validation)
 the runner pauses `cooldown_s` (interruptible).
 
+On an interactive terminal (stderr is a TTY, `TERM` is not `dumb`; not with
+`--dry-run` or `--json`) `lidarbench run` draws a live line while each attempt's
+process runs ([`campaign/progress.py`](../src/lidarbench/campaign/progress.py)):
+position, tool, workload, CPUs, a bar of the attempt's required expected outputs
+that exist (one raster per tile for the tile workloads), elapsed time, ETA and
+timeout. A daemon thread `stat`s only the declared output paths about once per
+second (no reads, nothing recorded). It runs in the runner process, outside the
+attempt's process tree. The count can run ahead of finished tiles for tools
+that create a raster when they start a tile. Redirected output keeps the plain
+log lines.
+
 ## 5. Store layout and records
 
 ```text

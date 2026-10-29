@@ -80,7 +80,9 @@ skips completed entries, retries interrupted ones, and retries failures only
 with `--retry-failed`. Each attempt records execution status separately from
 structural and numerical validation, so execution success alone never means
 the results are numerically valid. Inputs are hashed once per run, never
-inside a timed attempt. See [design/CAMPAIGNS.md](design/CAMPAIGNS.md) and
+inside a timed attempt. On an interactive terminal, `run` shows a live
+per-attempt progress bar (outputs written so far, elapsed time, ETA, timeout).
+See [design/CAMPAIGNS.md](design/CAMPAIGNS.md) and
 [configs/examples/synthetic-campaign.toml](configs/examples/synthetic-campaign.toml).
 
 [uv](https://docs.astral.sh/uv/) manages the Python environment: `uv.lock` pins

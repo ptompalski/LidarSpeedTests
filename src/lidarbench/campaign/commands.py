@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from lidarbench.campaign.identity import IdentityError
+from lidarbench.campaign.progress import terminal_progress_for
 from lidarbench.campaign.results import FORMATS, collect_rows, render_rows, write_results
 from lidarbench.campaign.runner import (
     CampaignRunner,
@@ -118,6 +119,8 @@ def run_command(
         )
         options = RunOptions(selection, retry_failed, allow_dirty, require_existing)
         runner_kwargs.setdefault("report", lambda line: print(line, file=err, flush=True))
+        if not dry_run and not as_json:
+            runner_kwargs.setdefault("progress", terminal_progress_for(err))
         runner = CampaignRunner(config, options=options, **runner_kwargs)
         summary = runner.dry_run() if dry_run else runner.run()
     except LockHeldError as exc:

@@ -60,6 +60,7 @@ from lidarbench.campaign.identity import (
     resolve_tools,
     tree_problems,
 )
+from lidarbench.campaign.progress import ProgressFactory, no_progress
 from lidarbench.campaign.schedule import (
     ScheduleEntry,
     campaign_schedule,
@@ -436,6 +437,7 @@ class CampaignRunner:
         monitor_backend: MonitorBackend | str | None = "config",
         git_info: Callable[[], dict[str, Any]] = git_provenance,
         report: Callable[[str], None] | None = None,
+        progress: ProgressFactory | None = None,
         handle_signals: bool = True,
     ) -> None:
         """Configure a run.
@@ -451,6 +453,8 @@ class CampaignRunner:
                 explicit backend (``None`` disables monitoring).
             git_info: Provider of git provenance (testing hook).
             report: Progress callback (default: stderr).
+            progress: Live per-attempt display around each launched process
+                (default: none; ``lidarbench run`` uses a terminal bar on a TTY).
             handle_signals: Convert termination signals into cancellation.
         """
         self.config = config
@@ -462,6 +466,8 @@ class CampaignRunner:
         self._monitor_choice = monitor_backend
         self._git_info = git_info
         self._report = report or (lambda line: print(line, file=sys.stderr, flush=True))
+        self._progress = progress or no_progress
+        self._position = ""
         self._handle_signals = handle_signals
         self._warnings: list[str] = []
         self._validator: CampaignValidator | None = None
@@ -814,6 +820,7 @@ class CampaignRunner:
                 f"[{number}/{len(todo)}] #{entry.schedule_index} {entry.entry_key} "
                 f"({decision.action})"
             )
+            self._position = f"[{number}/{len(todo)}]"
             outcome = self._attempt(run_id, decision, identity, guard, backend)
             summary.statuses[outcome.status] = summary.statuses.get(outcome.status, 0) + 1
             self._report(f"    -> {outcome.status}")
@@ -994,18 +1001,22 @@ class CampaignRunner:
         if not plan.ready:
             state.status = str(plan.status)
             return
+        timeout_s = cfg.timeout_for(workload)
+        label = f"{self._position} {tool.config.id} {workload.id} {entry.cpus} cpu".strip()
+        required = [a.path for a in plan.expected_outputs if a.required]
         try:
-            execution = execute_plan(
-                plan,
-                inv,
-                attempt_dir,
-                timeout_s=cfg.timeout_for(workload),
-                cancel=self.cancel,
-                monitor_backend=backend,
-                monitor_required=cfg.monitoring.required,
-                thread_budget=self._budget(entry.cpus, state.threading_model),
-                adapter=tool.adapter,
-            )
+            with self._progress(label, required, timeout_s):
+                execution = execute_plan(
+                    plan,
+                    inv,
+                    attempt_dir,
+                    timeout_s=timeout_s,
+                    cancel=self.cancel,
+                    monitor_backend=backend,
+                    monitor_required=cfg.monitoring.required,
+                    thread_budget=self._budget(entry.cpus, state.threading_model),
+                    adapter=tool.adapter,
+                )
         except ExecutionInterrupted as exc:
             state.process = exc.result
             state.status = "interrupted"
