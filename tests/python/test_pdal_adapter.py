@@ -168,7 +168,7 @@ def test_declared_classification_of_every_tool():
     for contract in SUITE.contracts.values():
         assert contract.declared_comparability("lasR") == "strictly_comparable"
         assert contract.declared_comparability("lidR") == "functionally_comparable"
-        assert contract.declared_comparability("lastools") == "non_comparable"
+        assert contract.declared_comparability("lastools") == "functionally_comparable"
         assert contract.declared_comparability("pdal") == "functionally_comparable"
         assert contract.declared_comparability("unknown") == "unsupported"
 

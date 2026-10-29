@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib.metadata import entry_points
 from typing import Any, Protocol, runtime_checkable
 
@@ -224,6 +224,12 @@ class CellStatisticValidator:
         except InputError as exc:
             return ArtifactNumerical(Status.FAILED, [f"input cannot support a reference: {exc}"])
         statistic = contract.statistic
+        tolerance = contract.tolerance
+        if implementation.value_precision is not None:
+            # The tool declares that it rounds values to this quantum (contract-level).
+            tolerance = replace(
+                tolerance, absolute=tolerance.absolute + implementation.value_precision / 2
+            )
         contract_ref = entry.references[base]
         reference = entry.references[convention]
         boundary: int | None = entry.boundaries[convention] if declared else None
@@ -236,7 +242,7 @@ class CellStatisticValidator:
         actual = structure.core(raster.values[0])
         encode = dtype.type if dtype.kind == "f" else None
         primary = compare_band(
-            actual, reference, contract.tolerance, grid, tuple(sorted(set(sentinels))), encode
+            actual, reference, tolerance, grid, tuple(sorted(set(sentinels))), encode
         )
         detail: dict[str, Any] = {
             "reference": {
@@ -250,13 +256,15 @@ class CellStatisticValidator:
                 "cache": cache_state,
             },
             "tolerance": {
-                "absolute": contract.tolerance.absolute,
-                "relative": contract.tolerance.relative,
+                "absolute": tolerance.absolute,
+                "relative": tolerance.relative,
+                "contract_absolute": contract.tolerance.absolute,
+                "value_precision": implementation.value_precision,
             },
             "comparison": primary.to_record(),
         }
         if declared and implementation.cell_ownership != contract.raster.cell_ownership:
-            versus_contract = compare_band(actual, contract_ref, contract.tolerance, grid)
+            versus_contract = compare_band(actual, contract_ref, tolerance, grid)
             detail["contract_convention_comparison"] = {
                 "convention": contract.raster.cell_ownership,
                 "passed": versus_contract.passed,
@@ -281,6 +289,11 @@ class CellStatisticValidator:
             )
         if not primary.passed:
             return ArtifactNumerical(Status.FAILED, reasons, boundary, detail)
+        if implementation.value_precision is not None:
+            reasons.append(
+                f"values compared within the declared output precision of "
+                f"{implementation.value_precision} (tolerance widened by half of it)"
+            )
         if boundary:
             reasons.append(
                 f"{boundary} point(s) are owned by a different cell under "

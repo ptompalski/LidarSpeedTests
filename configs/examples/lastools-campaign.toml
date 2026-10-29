@@ -11,9 +11,10 @@
 # vendor's .exe binaries (lascanopy64.exe, lasgrid64.exe); other systems use
 # the vendor's native binaries (lascanopy64, lasgrid64) when they exist.
 #
-# Successful LAStools execution is not validation. Native cell ownership and
-# numerical conventions are not established, so LAStools timings are descriptive
-# only and never comparable with lidR/lasR (WORKLOADS.md).
+# Successful LAStools execution is not validation. From workloads-v4 the contracts
+# declare the LAStools cell rule (upward-Y floor edges, as PDAL binmode) and the
+# 0.01 m precision of lascanopy averages, so validated LAStools outputs are
+# functionally comparable; up to workloads-v3 they were descriptive only.
 schema = "lidarbench.campaign-config/1"
 campaign_id = "lastools-example-001"
 description = "LAStools, mean metric and maximum DSM"

@@ -519,6 +519,6 @@ class TestRetainedScratchAndIdentity:
         frozen = json.loads(
             (summary.campaign_path / "identity" / "config.json").read_text(encoding="utf-8")
         )
-        assert frozen["validation"]["suite"].endswith("workloads-v3")
+        assert frozen["validation"]["suite"].endswith("workloads-v4")
         assert frozen["validation"]["accept_known_extent_discrepancies"] is False
         assert frozen["scheduling"]["cpu_affinity"] == "pinned"

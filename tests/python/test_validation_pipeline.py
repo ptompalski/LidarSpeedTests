@@ -365,7 +365,9 @@ def test_undeclared_tool_convention_is_unverified(scene, tmp_path):
     out = simulate(
         scene_dir, clouds, tmp_path / "out", MEAN, name="{stem}_avg.tif", descriptions=[]
     )
-    v = run(scene_dir, out, MEAN, "lastools").verdicts
+    # LAStools' convention is undeclared up to workloads-v3 (declared from v4).
+    v3_mean = load_suite(default_suite_dir("workloads-v3")).get("pixel_metrics_1a")
+    v = run(scene_dir, out, v3_mean, "lastools").verdicts
     assert v.numerical.status is Status.UNVERIFIED
     assert "agrees" in v.numerical.reasons[0]
     assert v.boundary_difference_points is None
@@ -564,3 +566,34 @@ def test_cli_validate(scene, tmp_path, capsys):
     (out / "west.tif").unlink()
     assert cli_main(args) == 1
     assert "artifacts   failed" in capsys.readouterr().out
+
+
+def _with_precision(contract, tool: str, precision: float):
+    import dataclasses
+
+    impl = dataclasses.replace(contract.implementation(tool), value_precision=precision)
+    return dataclasses.replace(contract, implementations={**contract.implementations, tool: impl})
+
+
+def test_declared_value_precision_widens_the_tolerance_by_half_a_quantum(scene, tmp_path):
+    scene_dir, clouds = scene
+    rounded = simulate(
+        scene_dir,
+        clouds,
+        tmp_path / "rounded",
+        MEAN,
+        edit=lambda stem, arr: np.round(arr, 2),
+        dtype="float64",
+    )
+    # Without a declaration, centimetre rounding exceeds the contract tolerance.
+    assert run(scene_dir, rounded, MEAN, "lasR").verdicts.numerical.status is Status.FAILED
+    declared = _with_precision(MEAN, "lasR", 0.01)
+    report = run(scene_dir, rounded, declared, "lasR")
+    assert report.verdicts.outcome is Outcome.VALIDATED, report.verdicts.to_record()
+    assert any("declared output precision of 0.01" in r for r in report.verdicts.numerical.reasons)
+    detail = report.to_record()["artifacts"][0]["numerical"]["tolerance"]
+    assert detail["value_precision"] == 0.01
+    assert detail["absolute"] == pytest.approx(MEAN.tolerance.absolute + 0.005)
+    # More than half a quantum away still fails.
+    off = simulate(scene_dir, clouds, tmp_path / "off", MEAN, edit=_bump(0.006), dtype="float64")
+    assert run(scene_dir, off, declared, "lasR").verdicts.numerical.status is Status.FAILED

@@ -27,7 +27,7 @@ def _data(name: str = "pixel_metrics_1a") -> dict:
 
 def test_suite_defines_the_two_initial_workloads():
     suite = load_suite(SUITE)
-    assert suite.name == "workloads-v3"
+    assert suite.name == "workloads-v4"
     assert sorted(suite.contracts) == ["generate_DSM1", "pixel_metrics_1a"]
     mean = suite.get("pixel_metrics_1a")
     assert (mean.statistic, mean.raster.resolution, mean.raster.bands) == (
@@ -44,8 +44,8 @@ def test_suite_defines_the_two_initial_workloads():
         assert contract.implementation("lidR").cell_ownership == "lidr_buffered_clamp"
         assert contract.implementation("lasR").cell_ownership == "right_down"
         lastools = contract.implementation("lastools")
-        assert lastools.equivalence == "non_comparable"
-        assert not lastools.ownership_declared
+        assert lastools.equivalence == "matched_definition"
+        assert lastools.cell_ownership == "pdal_binmode_floor"
         assert contract.implementation("pdal").cell_ownership == "pdal_binmode_floor"
 
 
@@ -66,9 +66,10 @@ def test_matrix_matches_workloads_md():
         assert {t: i.status for t, i in contract.implementations.items()} == dict.fromkeys(
             ("lidR", "lasR", "lastools", "pdal"), ImplementationStatus.RUNNABLE
         )
+        # workloads-v4 declares the LAStools convention (non_comparable up to v3).
         assert {
             t for t, i in contract.implementations.items() if i.equivalence == "matched_definition"
-        } == {"lidR", "lasR", "pdal"}
+        } == {"lidR", "lasR", "pdal", "lastools"}
     assert suite.get("pixel_metrics_1a").implementation("lastools").artifacts == ("{stem}_avg.tif",)
 
 
@@ -182,3 +183,30 @@ def test_v3_differs_from_v2_only_by_tfw_sidecars():
         assert new.raster == old.raster and new.tolerance == old.tolerance
         assert new.digest != old.digest
         assert new.is_ignored_sidecar("298000_5093000_avg.tfw")
+
+
+def test_v4_declares_lastools_convention_and_precision_only():
+    """workloads-v4 = workloads-v3 + the LAStools cell rule and centimetre precision (mean)."""
+    v3 = load_suite(default_suite_dir("workloads-v3"))
+    v4 = load_suite(default_suite_dir("workloads-v4"))
+    for workload_id, old in v3.contracts.items():
+        new = v4.get(workload_id)
+        assert new.equivalence_group == f"workloads-v4/{workload_id}"
+        assert new.raster == old.raster and new.tolerance == old.tolerance
+        assert new.ignored_sidecars == old.ignored_sidecars
+        for tool in ("lidR", "lasR", "pdal"):
+            assert new.implementation(tool) == old.implementation(tool)
+        assert old.declared_comparability("lastools") == "non_comparable"
+        assert new.declared_comparability("lastools") == "functionally_comparable"
+    assert v4.get("pixel_metrics_1a").implementation("lastools").value_precision == 0.01
+    assert v4.get("generate_DSM1").implementation("lastools").value_precision is None
+
+
+def test_value_precision_must_be_a_positive_float():
+    data = _data()
+    data["implementations"]["lastools"]["value_precision"] = 0
+    with pytest.raises(ContractError, match="value_precision"):
+        parse_contract(data)
+    data["implementations"]["lastools"]["value_precision"] = 0.01
+    assert parse_contract(data).implementation("lastools").value_precision == 0.01
+    assert "value_precision" in parse_contract(data).record["implementations"]["lastools"]

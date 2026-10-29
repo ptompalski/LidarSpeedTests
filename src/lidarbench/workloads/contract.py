@@ -29,7 +29,7 @@ from lidarbench.core.canonical import digest
 from lidarbench.execution.adapters.base import WORKLOAD_ID_PATTERN, ImplementationStatus
 
 CONTRACT_SCHEMA = "lidarbench.workload/1"
-DEFAULT_SUITE = "workloads-v3"
+DEFAULT_SUITE = "workloads-v4"
 
 SUITE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 TOOL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -190,6 +190,9 @@ class Implementation:
     band_names: str
     note: str = ""
     reason: str = ""
+    value_precision: float | None = None
+    """Declared output quantum of the tool's values (for example 0.01 m when the tool
+    rounds to centimetres); the numerical tolerance is widened by half of it."""
 
     def expected_names(self, stem: str) -> tuple[str, ...]:
         """Primary artifact file names expected for one input tile stem."""
@@ -268,7 +271,16 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
     table = _table(
         value,
         where,
-        {"status", "equivalence", "artifacts", "cell_ownership", "band_names", "note", "reason"},
+        {
+            "status",
+            "equivalence",
+            "artifacts",
+            "cell_ownership",
+            "band_names",
+            "note",
+            "reason",
+            "value_precision",
+        },
         ("status", "equivalence"),
     )
     _str(tool, where, TOOL_PATTERN)
@@ -302,6 +314,11 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
     )
     band_names = _choice(table.get("band_names", "not_required"), f"{where}.band_names", BAND_NAMES)
     note = _str(table["note"], f"{where}.note") if "note" in table else ""
+    precision = (
+        _float(table["value_precision"], f"{where}.value_precision", positive=True)
+        if "value_precision" in table
+        else None
+    )
     return Implementation(
         tool=tool,
         status=status,
@@ -311,6 +328,7 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
         band_names=band_names,
         note=note,
         reason=reason,
+        value_precision=precision,
     )
 
 
@@ -497,6 +515,11 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
                 "band_names": impl.band_names,
                 **({"note": impl.note} if impl.note else {}),
                 **({"reason": impl.reason} if impl.reason else {}),
+                **(
+                    {"value_precision": impl.value_precision}
+                    if impl.value_precision is not None
+                    else {}
+                ),
             }
             for tool, impl in implementations.items()
         },

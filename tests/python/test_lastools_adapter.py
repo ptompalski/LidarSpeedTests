@@ -165,7 +165,10 @@ def test_pinned_templates_match_legacy_calls_and_contracts(workload_id):
     assert (workload.command, workload.args) == _legacy_lastools_call(workload_id)
     impl = load_suite(default_suite_dir()).get(workload_id).implementation("lastools")
     assert impl is not None and impl.status is ImplementationStatus.RUNNABLE
-    assert impl.equivalence == "non_comparable"
+    # workloads-v4 declares the upward-Y floor rule (and 0.01 m precision for the mean).
+    assert impl.equivalence == "matched_definition"
+    assert impl.cell_ownership == "pdal_binmode_floor"
+    assert impl.value_precision == (0.01 if workload_id == "pixel_metrics_1a" else None)
     assert list(impl.artifacts) == [workload.artifact_pattern]
     assert workload.buffer == 20.0 and "-buffered" in workload.args
     assert workload.args[workload.args.index("-buffered") + 1] == "20"
