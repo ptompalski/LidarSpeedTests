@@ -3,13 +3,14 @@
 See ``design/ADAPTERS.md`` for the contract. Adapters are discovered through the
 ``lidarbench.adapters`` entry-point group (:class:`AdapterRegistry`).
 
-``lidr`` and ``lasr`` run R packages through the R bridge (:mod:`.rscript`).
-The ``cli``, ``lastools`` and ``pylib`` modules are placeholders for later
-phases and are not registered.
+``lidr`` and ``lasr`` run R packages through the R bridge (:mod:`.rscript`);
+``lastools`` runs native LAStools executables (:mod:`.lastools`). The ``cli``
+and ``pylib`` modules are placeholders for later phases and are not registered.
 """
 
 from lidarbench.execution.adapters.base import (
     ADAPTER_SCHEMA,
+    AcceptedException,
     ArtifactKind,
     ArtifactSpec,
     Availability,
@@ -38,6 +39,7 @@ from lidarbench.execution.adapters.registry import (
 __all__ = [
     "ADAPTER_SCHEMA",
     "ENTRY_POINT_GROUP",
+    "AcceptedException",
     "AdapterLoadFailure",
     "AdapterRegistry",
     "ArtifactKind",

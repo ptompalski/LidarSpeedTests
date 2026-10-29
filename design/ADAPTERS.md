@@ -21,7 +21,7 @@ tool-neutral. Adding an adapter never requires editing the core.
 | 5 | Which environment variables and threading model? | `CommandSpec.env`, `WorkloadSupport.threading` |
 | 6 | Which outputs are expected; which tool facts to record? | `expected_outputs(Invocation)`, `invocation_metadata(Invocation)`, `ToolIdentity.details` |
 | 7 | Why is something unavailable or unsupported? | `Availability.reason/detail`, `WorkloadSupport.reason`, `UnsupportedCombinationError` |
-| 8 | Did the finished run really succeed, and what did the tool report? (optional) | `interpret(Invocation, ProcessResult) -> Interpretation` |
+| 8 | Did the finished run really succeed, and what did the tool report? (optional) | `interpret(Invocation, ProcessResult) -> Interpretation`, `AcceptedException` |
 
 Adapters **must not**:
 
@@ -130,6 +130,7 @@ gives the absolute path where a config file will be written.
 | `cwd: Path` | Absolute; normally `invocation.work_dir`. |
 | `env: Mapping[str, str]` | **Delta** applied over the orchestrator's environment and recorded. The orchestrator's own environment is never changed. |
 | `config_files: tuple[ConfigFile, ...]` | Text files (`name`, `content`) written by the orchestrator into `work_dir` before launch, with exclusive create and UTF-8. Names must be portable file components. |
+| `accepted_exceptions: tuple[str, ...]` | Names of the `AcceptedException`s that `interpret()` may report for this command (`^[a-z][a-z0-9_]*$`). Declared before launch, recorded in `invocation.json`, and normally non-empty only under an explicit opt-in. Default empty. |
 
 There is no shell. Paths with spaces, quotes, `;`, `$`, `%` or `*` reach the tool
 unchanged, without quoting. Never build a command string.
@@ -151,9 +152,21 @@ so the exit code alone decides. An `Interpretation` has:
 | `warnings` | Appended to the attempt warnings. |
 | `tool_timing: ToolTiming` | Inner workload interval from the tool's own wall clock (`start_wall_ns`, `end_wall_ns`, `clock`, `boundary`, `marks`). The orchestrator derives `workload_elapsed_ns`, `startup_overhead_ns` and `shutdown_overhead_ns` against the outer process interval. The timed interval stays the outer one. |
 | `details` | JSON-ready tool facts recorded in `execution.json`. |
+| `accepted_exception: AcceptedException` | A named, documented tool behaviour under an explicit opt-in: `name`, `exit_code` (the raw status it covers, `>= 0`), `policy` (the opt-in) and `evidence` (the recognized output lines). |
 
 If `interpret()` raises, returns the wrong type or returns details that are not
 JSON, the attempt fails (`adapter interpretation failed: ...`). Fail closed.
+
+An accepted exception is the **only** way a nonzero exit can count as
+`succeeded`, and the engine honours it only if all of these hold: the command
+declared the name in `CommandSpec.accepted_exceptions`, `failure_reason` is
+`None`, and the process exited by itself (no timeout, cancellation, signal or
+engine error) with exactly `exit_code`. Otherwise the attempt fails and the
+reason says why. `execution.json` and `result.json` record it as
+`accepted_exception` (with `raw_exit_code`). The raw process record keeps its
+own `failed` verdict and exit code, and the results table has an
+`accepted_exception` column. An exception with `exit_code` 0 only labels the
+attempt. Exceptions say nothing about validation or comparability.
 
 ### ArtifactSpec
 
@@ -242,12 +255,97 @@ use `interpret()` to read the bridge's result record. R warnings during the
 workload, R errors, missing records and version drift all fail the attempt.
 They also report R's inner workload interval. See [R_BRIDGE.md](R_BRIDGE.md).
 
-## 9. Not yet implemented
+## 9. LAStools adapter (`lastools`)
 
-- Real adapters `cli`, `lastools`, `pylib` and `pdal`. The modules exist as
-  placeholders and are not registered.
-- LAStools-specific `interpret()` rules (`ERROR`/`FATAL` log parsing, cutoff
-  exception) arrive with the LAStools adapter.
+`execution/adapters/lastools.py` runs the native LAStools binaries as fresh
+processes from argument vectors (example:
+[configs/examples/lastools-campaign.toml](../configs/examples/lastools-campaign.toml)).
+Nothing is downloaded, installed or licensed.
+
+**Discovery.** The `bin_dir` option, else `$LIDARBENCH_LASTOOLS_BIN`, else the
+first `PATH` directory that holds a workload command. All commands then come
+from that one directory. On Windows the commands are `<name>.exe`; elsewhere
+they are the vendor's suffix-less native binaries. A missing directory is
+`misconfigured`; no command is `not_installed`. Commands are never assumed to
+exist: a workload whose command is missing, not executable or unidentifiable
+is declared `unsupported` with the reason, and the others stay runnable.
+
+**Version and identity.** `<command> -version` (argv, timeout
+`version_timeout_s`, default 30 s) must exit 0 with exactly one
+`LAStools … version <build>` line. Only the build number is kept
+(`ToolIdentity.version`, `details["version.<command>"]`). The licensing part of
+the banner can contain licensee details and changes between identical queries,
+so it is never recorded and never quoted in errors. Mixed builds in one
+directory are `misconfigured`; `expected_version` refuses other builds
+(`version_unsupported`). The executables are hashed by the campaign identity.
+License files are not read, hashed or recorded.
+
+**Workloads.** Threading model `native_threads` (`-cores N`, 1 or more).
+
+| Workload | Command | Artifact | Arguments (from `R/0_setup.R`) |
+|---|---|---|---|
+| `pixel_metrics_1a` | `lascanopy64` | `{stem}_avg.tif` | `-i <inputs> -step 20 -avg -odir <out> -otif -cores N -buffered 20 -use_orig_bb -height_cutoff <cutoff> -grid_ll 0 0 -no_data -9999 -no_kml` |
+| `generate_DSM1` | `lasgrid64` | `{stem}.tif` | `-i <inputs> -highest -otif -odir <out> -step 1 -cores N -buffered 20 -use_orig_bb -no_data -9999 -no_kml` |
+
+The templates are pinned in Python; a test compares them with `R/0_setup.R` and
+the artifact names with the workload contracts. A changed template needs a new
+workload version. Placeholders are a closed set (`{inputs}` expands to one
+argument per tile, `{output}`, `{cores}`, `{height_cutoff}`). As in the legacy
+harness, an `epsg` workload parameter appends `-epsg N` (metadata, no
+reprojection). The adapter always appends `-fail`, so LAStools fails instead of
+running unlicensed (in the legacy harness this flag came only with the EPSG).
+The height cutoff is not a parameter. It is a port of
+`benchmark_height_cutoff()`: the smallest header minimum Z of all inputs, minus
+at least one unit, formatted like R `format(digits = 17)`. Golden values from
+R are tested. Unreadable headers fail planning. The environment follows the
+legacy harness: thread caps of 1, with `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT`
+set to N. On Windows, a command line longer than 32,766 characters is
+`unsupported`, because the pinned call passes every tile with `-i`. Other
+legacy LAStools tasks are declared `unsupported` with reasons.
+
+**Interpretation (conservative).** stdout and stderr lines are read as the
+legacy harness read them. The attempt fails on any of these:
+
+1. a nonzero exit, unless it is the accepted exception below;
+2. any `ERROR`/`FATAL` line, even with exit 0 (a multi-core parent can exit 0
+   after a child failed);
+3. an `unlicensed` notice (outputs could be perturbed);
+4. any `WARNING:` line outside the accepted exception. The legacy harness kept
+   these as diagnostics that blocked validation; here they fail execution;
+5. a missing or empty expected artifact (hidden child failures).
+
+Licensing lines are withheld from failure reasons; the raw logs stay in the
+attempt. LAStools reports no inner timing, so `tool_timing` is `null`.
+
+**Cutoff-warning exception.** `accept_known_cutoff_warning = true` (tool
+option, default `false`, part of the campaign identity) declares
+`lascanopy_all_values_above_height_cutoff` for `pixel_metrics_1a` commands
+only. The full three-line block must match: a finite ordered Z range for a
+supplied input, above the cutoff passed after the single `-height_cutoff`, the
+same reported cutoff, and the exact `lasheight` suggestion. Raw status 1 is
+accepted only if every warning is recognized and no error occurred. Status 0
+with recognized warnings is labelled the same way. The recorded policy is
+`lastools.accept_known_cutoff_warning`. This is a port of
+`benchmark_lastools_cutoff_warnings()` (README.md, WORKLOADS.md).
+
+**Validation.** The `workloads-v1` contracts declare LAStools `non_comparable`
+with `undeclared` cell ownership. Execution success therefore never makes
+LAStools timings comparable: at best they are `unverified` and descriptive
+only. LAStools also writes a `.tfw` world file beside every GeoTIFF. The
+`workloads-v1` contracts do not list `*.tfw` as an ignored sidecar, so artifact
+validation currently reports these files as unexpected. The legacy validator
+counted only primary extensions. Changing this needs a new contract version.
+
+Integration tests (`tests/python/test_lastools_integration.py`) run only when
+an installation is found, for example
+`LIDARBENCH_LASTOOLS_BIN=/path/to/LAStools/bin uv run pytest tests/python/test_lastools_integration.py`.
+
+## 10. Not yet implemented
+
+- Real adapters `cli`, `pylib` and `pdal`. The modules exist as placeholders
+  and are not registered.
+- LAStools `normalization`, `pixel_metrics_2` and `generate_DEM` (no
+  `workloads-v1` contract yet).
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
 - Equivalence data covers only the `workloads-v1` contracts in `workloads/`.

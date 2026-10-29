@@ -41,6 +41,7 @@ ADAPTER_SCHEMA = "lidarbench.adapter/1"
 
 ADAPTER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 WORKLOAD_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+EXCEPTION_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
 
 ParameterValue = str | int | float | bool
 MetadataValue = str | int | float | bool | None
@@ -252,6 +253,11 @@ class CommandSpec:
     env: Mapping[str, str] = field(default_factory=dict)
     """Environment *delta* applied on top of the orchestrator environment."""
     config_files: tuple[ConfigFile, ...] = ()
+    accepted_exceptions: tuple[str, ...] = ()
+    """Names of :class:`AcceptedException` s that :meth:`ToolAdapter.interpret` may
+    report for this command. Declared before launch (and recorded with the plan),
+    normally only when an explicit, frozen opt-in enables them. Empty by default:
+    no nonzero exit status can then be accepted."""
 
 
 @dataclass(frozen=True)
@@ -297,11 +303,55 @@ class ToolTiming:
 
 
 @dataclass(frozen=True)
+class AcceptedException:
+    """A named, documented tool behaviour accepted under an explicit opt-in policy.
+
+    The only way an interpretation can accept a nonzero exit status. The
+    orchestrator honours it only when the name was declared beforehand in
+    :attr:`CommandSpec.accepted_exceptions`, the interpretation has no failure,
+    and the process exited by itself with exactly :attr:`exit_code`. The raw exit
+    status and the evidence are always recorded.
+    """
+
+    name: str
+    """Stable identifier, for example ``lascanopy_all_values_above_height_cutoff``."""
+    exit_code: int
+    """The raw exit status this exception covers (``0`` records an exception
+    without changing the status)."""
+    policy: str
+    """The opt-in that authorizes it, for example ``lastools.accept_known_cutoff_warning``."""
+    evidence: tuple[str, ...]
+    """The tool output lines that were recognized (non-empty)."""
+
+    def __post_init__(self) -> None:
+        if not EXCEPTION_NAME_PATTERN.match(self.name):
+            raise ValueError(f"invalid exception name: {self.name!r}")
+        if isinstance(self.exit_code, bool) or not isinstance(self.exit_code, int):
+            raise ValueError("exit_code must be an integer")
+        if self.exit_code < 0:
+            raise ValueError("a signal termination can never be an accepted exception")
+        if not self.policy:
+            raise ValueError("an accepted exception needs the authorizing policy")
+        if not self.evidence or not all(isinstance(e, str) for e in self.evidence):
+            raise ValueError("an accepted exception needs its evidence lines")
+
+    def to_record(self) -> dict[str, Any]:
+        """JSON-ready representation."""
+        return {
+            "name": self.name,
+            "exit_code": self.exit_code,
+            "policy": self.policy,
+            "evidence": list(self.evidence),
+        }
+
+
+@dataclass(frozen=True)
 class Interpretation:
     """Tool-specific reading of a finished process (see :meth:`ToolAdapter.interpret`).
 
-    Interpretation can only make an attempt *fail*: a process that did not exit
-    cleanly is never turned into a success.
+    Interpretation can make an attempt *fail*. The single, narrow exception is an
+    :class:`AcceptedException` that the command declared before launch; nothing
+    else turns a process that did not exit with status 0 into a success.
     """
 
     failure_reason: str | None = None
@@ -310,6 +360,8 @@ class Interpretation:
     tool_timing: ToolTiming | None = None
     details: Mapping[str, Any] = field(default_factory=dict)
     """JSON-ready tool facts recorded with the attempt (versions, applied settings)."""
+    accepted_exception: AcceptedException | None = None
+    """A declared, documented exception (see :class:`AcceptedException`)."""
 
 
 def argv_value(value: ParameterValue | os.PathLike[str]) -> str:
@@ -402,8 +454,10 @@ class ToolAdapter(ABC):
         Called by the orchestrator only for processes that exited by themselves
         (any exit code), before ``work_dir`` is cleaned up. Use it to read a
         tool's own result record or logs, report warnings and an inner workload
-        interval, and reject runs whose exit code hides a failure. The default
-        returns ``None`` (exit code alone decides).
+        interval, and reject runs whose exit code hides a failure. A nonzero exit
+        can only be accepted through an :class:`AcceptedException` declared in
+        :attr:`CommandSpec.accepted_exceptions`. The default returns ``None``
+        (exit code alone decides).
         """
         return None
 

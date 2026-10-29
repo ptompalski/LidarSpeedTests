@@ -39,8 +39,9 @@ verifier may leave no final status record.
 The Python orchestrator `lidarbench` is being built beside the R harness (see
 [design/ARCHITECTURE.md](design/ARCHITECTURE.md) and
 [MIGRATION_PLAN.md](MIGRATION_PLAN.md)). It runs campaigns with the `lidr` and
-`lasr` adapters (lidR and lasR through `Rscript`) for the mean-elevation and
-maximum-DSM workloads, and with a deterministic `synthetic` test adapter.
+`lasr` adapters (lidR and lasR through `Rscript`) and the `lastools` adapter
+(native LAStools) for the mean-elevation and maximum-DSM workloads, and with a
+deterministic `synthetic` test adapter.
 
 ```sh
 uv sync                            # create .venv/ from uv.lock (install uv: https://docs.astral.sh/uv/)
@@ -85,6 +86,20 @@ warnings during a workload fail the attempt. lasR inputs need `.lax` indexes
 the R workload time and the start-up overhead are reported separately. See
 [design/R_BRIDGE.md](design/R_BRIDGE.md) and
 [configs/examples/r-campaign.toml](configs/examples/r-campaign.toml).
+
+The `lastools` adapter runs the native LAStools binaries (`lascanopy64`,
+`lasgrid64`; `.exe` on Windows) for the same two workloads, with the legacy
+arguments from `R/0_setup.R`. lidarbench never downloads, installs or licenses
+LAStools. Set the `bin_dir` tool option or `LIDARBENCH_LASTOOLS_BIN`, or put the
+LAStools `bin` directory on `PATH`. Missing commands are reported per workload
+as unsupported. Identity records the build number (for example `260914`) and
+the binaries' SHA-256, never the banner's licensing text. Nonzero exits,
+`ERROR`/`FATAL` lines, unlicensed notices, unrecognized warnings and missing
+outputs fail the attempt. The documented `lascanopy` cutoff warning is
+accepted only with `accept_known_cutoff_warning = true` (default `false`).
+LAStools results stay unverified and non-comparable with lidR/lasR. See
+[design/ADAPTERS.md](design/ADAPTERS.md) §9 and
+[configs/examples/lastools-campaign.toml](configs/examples/lastools-campaign.toml).
 
 The process execution engine (`lidarbench.execution.attempt.execute_plan`) runs
 a planned command as a fresh process with timeouts, cancellation, whole-tree

@@ -125,6 +125,15 @@ Normative description: [design/R_BRIDGE.md](design/R_BRIDGE.md). lidR and lasR a
 - lasR inputs must have `.lax` indexes (lasR would otherwise write them into the protected input tree).
 - Changing a pinned call needs a new workload version; the bridge and adapter must change together.
 
+### 5a. LAStools Adapter
+
+Normative description: [design/ADAPTERS.md](design/ADAPTERS.md) §9 (`execution/adapters/lastools.py`).
+
+- Discovery: `bin_dir` option → `$LIDARBENCH_LASTOOLS_BIN` → first `PATH` directory with a workload command. `.exe` names on Windows only. Never download, install, license or hard-code LAStools locations.
+- Argument templates are pinned from `R/0_setup.R` (a test parses the R file). The height cutoff is derived from the input headers, never configured. `-fail` is always appended.
+- Identity keeps only the build number from `-version`. Never record, hash or quote licensing text or license files.
+- `interpret()` fails on nonzero exits, `ERROR`/`FATAL`, unlicensed notices, any unrecognized `WARNING:` line and missing/empty outputs. The only accepted exception is the opt-in (`accept_known_cutoff_warning`, default false) lascanopy cutoff warning for `pixel_metrics_1a`, declared through `CommandSpec.accepted_exceptions`.
+
 ### 6. Configuration and Validation
 
 - Campaign configuration is TOML (human-editable, version-controlled).
@@ -225,5 +234,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 - 2026-10-28: Config validation uses strict stdlib dataclasses instead of Pydantic (Task 5; ARCHITECTURE.md D1).
 - 2026-10-28: Validation framework and workload contracts (Task 6; design/VALIDATION.md).
 - 2026-10-28: lidR/lasR adapters through the R bridge and the adapter `interpret()` hook (Task 7; design/R_BRIDGE.md).
+- 2026-10-28: LAStools native adapter and declared accepted exceptions (Task 8; design/ADAPTERS.md §9).
 
 **Last reviewed**: 2026-10-28

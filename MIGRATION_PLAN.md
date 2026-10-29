@@ -109,14 +109,35 @@ Task 7 acceptance criteria:
 - [x] Mocked-command tests; optional real-R integration tests compare outputs with the independent validator (lidR validated but descriptive only; lasR `accepted_exception` only under the extent policy; neither comparable).
 - [ ] Verified natively on Windows and macOS.
 
+**Progress — Task 8 (LAStools adapter) ✅ DONE**: a native `lastools` adapter
+runs `lascanopy64`/`lasgrid64` (`.exe` on Windows) as fresh processes from
+argument vectors through the same `plan_invocation` → `execute_plan` → campaign
+path as the R adapters. Discovery uses the `bin_dir` option,
+`$LIDARBENCH_LASTOOLS_BIN` or `PATH`, with per-command capability reporting.
+The `-version` banner is normalized to the build number; licensing text is
+never recorded. Argument templates are pinned from `R/0_setup.R`, and the
+height cutoff is ported from `benchmark_height_cutoff()`. Interpretation is
+conservative (nonzero exits, `ERROR`/`FATAL`, unlicensed notices,
+unrecognized warnings and incomplete outputs fail). A generic, pre-declared
+`AcceptedException` carries the opt-in lascanopy cutoff-warning exception,
+which is disabled by default. See [design/ADAPTERS.md](design/ADAPTERS.md) §9.
+
+Task 8 acceptance criteria:
+- [x] LAStools runs and is measured through the generic execution engine and the campaign runner (common `lidarbench.attempt/1` schema, `native_threads` / `-cores`).
+- [x] Missing installations or commands are `skipped_unavailable` / `unsupported` with reasons; nothing is downloaded, installed or licensed.
+- [x] Tests cover discovery, command construction, Windows `.exe` names, paths with spaces, missing executables, errors and expected artifacts; optional integration tests run with a real installation (260914 and 261023 on Linux).
+- [x] Cross-tool comparison stays conditional: LAStools contracts are `non_comparable` with undeclared cell ownership, so timings are descriptive only.
+- [ ] `workloads-v1` treats LAStools `.tfw` world files as unexpected artifacts; accepting them needs a new contract version.
+- [ ] Verified natively on Windows.
+
 **Key tasks**:
 - [x] Base adapter protocol and plugin discovery.
 - Generic CLI adapter with configurable success rules.
-- LAStools adapter with version/banner normalization and cutoff-warning exception.
+- [x] LAStools adapter with version/banner normalization and cutoff-warning exception.
 - [x] R bridge (Rscript) adapter for lidR/lasR.
 - Python library adapter (pylib) for Python tools.
 - [x] Process launch, timeout, tree termination, log capture.
-- Path templating (inputs, outputs, cores, height_cutoff).
+- [x] Path templating (inputs, outputs, cores, height_cutoff) for LAStools.
 
 **Acceptance Criteria**:
 - Adapters are loaded via entry points.

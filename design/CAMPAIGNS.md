@@ -150,7 +150,10 @@ adapter reports an inner workload interval (for example the R bridge,
 [R_BRIDGE.md](R_BRIDGE.md) §7), `result.json` has `tool_timing` with
 `workload_elapsed_ns`, `startup_overhead_ns`, `shutdown_overhead_ns` and the
 marks. Otherwise `tool_timing` is `null`. `timing` remains the outer
-fresh-process interval.
+fresh-process interval. A declared accepted exception (ADAPTERS.md §3, for
+example the LAStools cutoff warning) is recorded as `accepted_exception` in
+`result.json` and as its name in the results table. `exit_code` stays the raw
+status. `invocation.json` lists the exceptions the command declared.
 
 ## 6. Resume, retries and interruption
 

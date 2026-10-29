@@ -284,8 +284,9 @@ files), `expected_outputs(invocation) -> list[ArtifactSpec]` and
 `invocation_metadata()`. The core-side `plan_invocation()` turns these into a
 ready command or a `skipped_*` plan. The optional `interpret(invocation,
 process) -> Interpretation` reads tool-specific results after the process has
-exited (untimed). It can only fail an attempt, and it can report an inner
-workload interval (`ToolTiming`). The per-attempt timeout is part of process
+exited (untimed). It can fail an attempt and report an inner workload
+interval (`ToolTiming`). Its only way to accept a nonzero exit is a named
+`AcceptedException` that the command declared before launch. The per-attempt timeout is part of process
 execution. The original sketch is kept for context:
 
 ```python
@@ -309,8 +310,9 @@ class ToolAdapter(Protocol):
   **named** accepted exceptions.
 - Built-ins:
   - `cli`: generic argv tool with configurable success rules;
-  - `lastools`: a `cli` specialization with version and banner normalization, and
-    the cutoff policy;
+  - `lastools` (**implemented**, Task 8; ADAPTERS.md §9): native binaries with
+    executable discovery, build-number normalization, conservative log/output
+    interpretation and the opt-in cutoff exception;
   - `rscript`: the R bridge;
   - `pylib`: runs `python -m <module>` in a configured interpreter or virtual
     environment, so benchmarked libraries never load into the orchestrator.

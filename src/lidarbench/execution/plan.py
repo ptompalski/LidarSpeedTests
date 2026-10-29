@@ -19,6 +19,7 @@ from pathlib import Path
 
 from lidarbench.core.platform import PlatformInfo
 from lidarbench.execution.adapters.base import (
+    EXCEPTION_NAME_PATTERN,
     ArtifactSpec,
     Availability,
     CommandSpec,
@@ -117,6 +118,11 @@ def validate_command_spec(spec: CommandSpec) -> None:
     for cfg in spec.config_files:
         if not isinstance(cfg.content, str):
             raise AdapterContractError(f"config file {cfg.name} content must be str")
+    if not isinstance(spec.accepted_exceptions, tuple):
+        raise AdapterContractError("accepted_exceptions must be a tuple of names")
+    for name in spec.accepted_exceptions:
+        if not isinstance(name, str) or not EXCEPTION_NAME_PATTERN.match(name):
+            raise AdapterContractError(f"invalid accepted exception name: {name!r}")
 
 
 def _skip(

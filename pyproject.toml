@@ -47,11 +47,12 @@ dev = [
 lidarbench = "lidarbench.cli:main"
 
 # Entry-point name must equal the adapter's adapter_id. Remaining real tool
-# adapters (cli, lastools, pylib) are registered when they are implemented.
+# adapters (cli, pylib) are registered when they are implemented.
 [project.entry-points."lidarbench.adapters"]
 synthetic = "lidarbench.execution.adapters.synthetic:SyntheticAdapter"
 lidr = "lidarbench.execution.adapters.lidr:LidRAdapter"
 lasr = "lidarbench.execution.adapters.lasr:LasRAdapter"
+lastools = "lidarbench.execution.adapters.lastools:LastoolsAdapter"
 
 [project.entry-points."lidarbench.monitors"]
 psutil = "lidarbench.monitoring.psutil_backend:PsutilBackend"

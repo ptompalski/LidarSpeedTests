@@ -1079,6 +1079,7 @@ class CampaignRunner:
             "skip_reason": plan.reason if plan and not plan.ready else None,
             "launched": bool(process is not None and process.launched),
             "exit_code": process.exit_code if process else None,
+            "accepted_exception": (state.execution.accepted_exception if state.execution else None),
             "timing": timing,
             "tool_timing": state.execution.tool_timing if state.execution else None,
             "monitoring_status": monitoring_status,
@@ -1168,6 +1169,7 @@ def _invocation_record(
                     {"name": c.name, "sha256": sha256_bytes(c.content.encode("utf-8"))}
                     for c in command.config_files
                 ],
+                "accepted_exceptions": list(command.accepted_exceptions),
             }
         ),
     }

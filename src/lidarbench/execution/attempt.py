@@ -27,7 +27,14 @@ from pathlib import Path
 from typing import Any
 
 from lidarbench.core.clock import Instant, now
-from lidarbench.execution.adapters.base import Interpretation, Invocation, ToolAdapter, ToolTiming
+from lidarbench.execution.adapters.base import (
+    AcceptedException,
+    CommandSpec,
+    Interpretation,
+    Invocation,
+    ToolAdapter,
+    ToolTiming,
+)
 from lidarbench.execution.plan import InvocationPlan, write_config_files
 from lidarbench.execution.process import (
     CancellationToken,
@@ -85,6 +92,8 @@ class AttemptExecution:
     metadata: dict[str, Any] = field(default_factory=dict)
     interpretation: dict[str, Any] | None = None
     """Adapter interpretation record (``None`` when no adapter interpreted the run)."""
+    accepted_exception: dict[str, Any] | None = None
+    """Declared exception applied to this run (raw exit status kept in ``process``)."""
 
     @property
     def tool_timing(self) -> dict[str, Any] | None:
@@ -93,11 +102,21 @@ class AttemptExecution:
 
     @property
     def execution_status(self) -> ExecutionStatus:
-        """``succeeded`` only if the process itself succeeded and no phase failed."""
+        """``succeeded`` only if the process itself succeeded and no phase failed.
+
+        The one exception is a declared :class:`AcceptedException` whose exit
+        status equals the raw exit status of a process that exited by itself.
+        """
         if self.process is None:
             return ExecutionStatus.FAILED
         if self.failure_phase is not None and self.process.succeeded:
             return ExecutionStatus.FAILED
+        if (
+            self.failure_phase is None
+            and self.accepted_exception is not None
+            and _exit_matches(self.process, self.accepted_exception.get("exit_code"))
+        ):
+            return ExecutionStatus.SUCCEEDED
         return self.process.execution_status
 
     @property
@@ -123,8 +142,22 @@ class AttemptExecution:
             "warnings": list(self.warnings),
             "metadata": dict(self.metadata),
             "interpretation": self.interpretation,
+            "accepted_exception": self.accepted_exception,
             "process": self.process.to_record() if self.process else None,
         }
+
+
+def _exit_matches(process: ProcessResult, exit_code: Any) -> bool:
+    """Whether a process exited by itself, cleanly supervised, with ``exit_code``."""
+    return (
+        process.outcome is ProcessOutcome.EXITED
+        and isinstance(exit_code, int)
+        and not isinstance(exit_code, bool)
+        and exit_code >= 0
+        and process.exit_code == exit_code
+        and not process.exceptions
+        and process.end is not None
+    )
 
 
 class _Phases:
@@ -213,24 +246,33 @@ def _timing_record(timing: ToolTiming, process: ProcessResult) -> dict[str, Any]
 
 def _interpret(
     adapter: ToolAdapter, invocation: Invocation, process: ProcessResult
-) -> tuple[dict[str, Any], str | None, list[str]]:
-    """Run the adapter's interpretation; returns (record, failure_reason, warnings).
+) -> tuple[dict[str, Any], str | None, list[str], AcceptedException | None]:
+    """Run the adapter's interpretation.
 
-    Any defect (exception, wrong type, non-JSON details) is a failure: an
-    unreadable interpretation never lets an attempt count as succeeded.
+    Returns (record, failure_reason, warnings, accepted exception). Any defect
+    (exception, wrong type, non-JSON details) is a failure: an unreadable
+    interpretation never lets an attempt count as succeeded.
     """
     try:
         result = adapter.interpret(invocation, process)
         if result is None:
-            return {"adapter_id": adapter.adapter_id, "provided": False}, None, []
+            return {"adapter_id": adapter.adapter_id, "provided": False}, None, [], None
         if not isinstance(result, Interpretation):
             raise TypeError(f"interpret returned {type(result).__name__}, not Interpretation")
+        accepted = result.accepted_exception
+        if accepted is not None and not isinstance(accepted, AcceptedException):
+            raise TypeError(f"accepted_exception is {type(accepted).__name__}")
         details = json.loads(json.dumps(dict(result.details), allow_nan=False))
         warnings = [str(w) for w in result.warnings]
         timing = _timing_record(result.tool_timing, process) if result.tool_timing else None
     except Exception as exc:
         reason = f"adapter interpretation failed: {type(exc).__name__}: {exc}"
-        return {"adapter_id": adapter.adapter_id, "provided": False, "error": reason}, reason, []
+        return (
+            {"adapter_id": adapter.adapter_id, "provided": False, "error": reason},
+            reason,
+            [],
+            None,
+        )
     if timing is not None and timing["within_outer_interval"] is False:
         warnings.append(
             "tool-reported workload interval lies partly outside the outer process interval "
@@ -243,8 +285,26 @@ def _interpret(
         "warnings": warnings,
         "tool_timing": timing,
         "details": details,
+        "accepted_exception": accepted.to_record() if accepted else None,
     }
-    return record, result.failure_reason, warnings
+    return record, result.failure_reason, warnings, accepted
+
+
+def _accept(
+    accepted: AcceptedException, command: CommandSpec, process: ProcessResult
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Check an accepted exception against the declaration and the raw process."""
+    if accepted.name not in command.accepted_exceptions:
+        return None, (
+            f"adapter reported exception {accepted.name!r}, which the command did not declare "
+            f"(declared: {list(command.accepted_exceptions)}); not accepted"
+        )
+    if not _exit_matches(process, accepted.exit_code):
+        return None, (
+            f"exception {accepted.name!r} covers exit status {accepted.exit_code}, but the "
+            f"process {process.outcome} with status {process.exit_code}; not accepted"
+        )
+    return {**accepted.to_record(), "raw_exit_code": process.exit_code}, None
 
 
 def execute_plan(
@@ -387,16 +447,24 @@ def execute_plan(
         )
 
     interpretation: dict[str, Any] | None = None
+    accepted_record: dict[str, Any] | None = None
     failure_phase: str | None = None
     failure_reason: str | None = None
     if adapter is not None and process.outcome is ProcessOutcome.EXITED:
         with phases.run("interpretation"):
-            interpretation, objection, extra = _interpret(adapter, invocation, process)
+            interpretation, objection, extra, accepted = _interpret(adapter, invocation, process)
+            if objection is None and accepted is not None:
+                accepted_record, objection = _accept(accepted, plan.command, process)
         warnings.extend(extra)
         if objection is not None:
             # A failed process keeps its own status; the reason explains it.
             failure_phase = "interpretation" if process.succeeded else "process"
             failure_reason = objection
+        elif accepted_record is not None:
+            warnings.append(
+                f"accepted exception {accepted_record['name']} under "
+                f"{accepted_record['policy']} (raw exit status {process.exit_code})"
+            )
 
     with phases.run("output_check"):
         outputs = _check_outputs(plan)
@@ -407,4 +475,5 @@ def execute_plan(
         failure_phase=failure_phase,
         failure_reason=failure_reason,
         interpretation=interpretation,
+        accepted_exception=accepted_record,
     )

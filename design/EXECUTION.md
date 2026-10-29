@@ -83,8 +83,13 @@ A process that exits on its own just before a timeout or cancellation is
 classified by its exit instant, not by when the engine noticed. Nothing is ever
 retried automatically. `AttemptExecution` is never `succeeded` when the process
 was not launched. An adapter's `interpret()` objection (or a defective
-interpretation) makes a clean exit `failed` (`failure_phase = "interpretation"`);
-it can never make a failed process succeed.
+interpretation) makes a clean exit `failed` (`failure_phase = "interpretation"`).
+The single exception to "nonzero is failed" is a named `AcceptedException`
+that the command declared before launch (`CommandSpec.accepted_exceptions`,
+normally enabled only by an explicit opt-in such as the LAStools cutoff-warning
+policy). It applies only to a process that exited by itself with exactly the
+declared status, and it is recorded with the raw exit code (ADAPTERS.md §3).
+Timeouts, cancellations, signals and engine errors can never be accepted.
 
 ## 5. Process-tree control
 
