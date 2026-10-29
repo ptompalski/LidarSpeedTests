@@ -219,7 +219,9 @@ is 0. An unknown `--adapter` ID exits with 2.
 - Real adapters (`cli`, `lastools`, `rscript`, `pylib`, `pdal`). The modules exist
   as placeholders and are not registered.
 - `interpret(ProcessResult)` (tool-specific success rules such as LAStools
-  `ERROR`/`FATAL` log parsing) arrives with process execution (`execution/process.py`).
+  `ERROR`/`FATAL` log parsing) arrives with the LAStools adapter. Process
+  execution ([EXECUTION.md](EXECUTION.md)) currently treats only a clean exit 0
+  as success.
 - Per-tool configuration (installation paths from the machine config) arrives with
   configuration loading. Adapter constructors currently take optional overrides only.
 - Workload specs and equivalence data (`workloads/workloads-v1/*.toml`); see Phase 4.

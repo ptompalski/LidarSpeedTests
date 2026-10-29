@@ -139,8 +139,8 @@ A missing `completed.json` means the attempt is incomplete; resumption skips it 
 
 - Monitor backends are loaded via entry points (`lidarbench.monitors`).
 - Default backend is `psutil` (whole-machine, process-tree sampling in separate process).
-- Monitors run as independent sampler processes with ready/stop file handshakes.
-- Monitor samples are written to CSV with timestamp, CPU, memory and optional process-tree fields.
+- Monitors run as independent sampler processes with a JSON-lines ready/attach/stop handshake over stdin/stdout.
+- Whole-machine and process-tree samples are written to separate CSV files with interval start/end (monotonic + wall ns); missing values are empty cells, never 0.
 - Monitor summary includes peak, average, per-phase breakdowns and optional custom aggregations.
 
 ## Reviewing and Approval

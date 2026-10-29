@@ -72,13 +72,30 @@ Task 3 acceptance criteria:
 - [x] Unsupported and blocked workload combinations are explicit, with reasons.
 - [x] Tests cover discovery, capability reporting, argv construction and paths with spaces.
 
+**Progress — Task 4 (process execution engine) ✅ DONE**: `run_process()` and
+`execute_plan()` launch adapter commands as fresh processes (argv, no shell),
+time them with `perf_counter_ns` from just before launch to the OS-reported
+exit, capture logs/exit codes/exceptions, enforce timeouts and cancellation,
+and terminate whole process trees (POSIX sessions + `killpg`; Windows Job
+Objects with suspended launch; psutil fallback). The default `psutil` monitor
+samples whole-machine and process-tree metrics in a separate process, kept in
+separate files and summary sections; missing values stay `null`. Monitor
+start, input verification and output checks are outside the timed interval.
+See [design/EXECUTION.md](design/EXECUTION.md).
+
+Task 4 acceptance criteria:
+- [x] The same API works on Windows, Linux and macOS (strategy recorded per result).
+- [x] No failed, timed-out, cancelled or unlaunched process can be recorded as succeeded (derived status, tested exhaustively).
+- [x] Tests cover completion, non-zero exits, timeouts, cancellation, child processes, paths with spaces and monitoring failures.
+- [ ] Verified natively on Windows and macOS CI runners (Linux verified locally).
+
 **Key tasks**:
 - [x] Base adapter protocol and plugin discovery.
 - Generic CLI adapter with configurable success rules.
 - LAStools adapter with version/banner normalization and cutoff-warning exception.
 - R bridge (Rscript) adapter for lidR/lasR.
 - Python library adapter (pylib) for Python tools.
-- Process launch, timeout, tree termination, log capture.
+- [x] Process launch, timeout, tree termination, log capture.
 - Path templating (inputs, outputs, cores, height_cutoff).
 
 **Acceptance Criteria**:

@@ -368,14 +368,23 @@ class Validator(Protocol):
 ```python
 class MonitorBackend(Protocol):
     name: str                          # "psutil"
-    scopes: set[Literal["whole-machine", "process-tree"]]
-    def probe(self) -> Availability: ...
-    def start(self, attempt_dir, scope, interval, root_pid=None) -> MonitorHandle: ...
+    scopes: frozenset[Scope]           # whole-machine, process-tree
+    def probe(self) -> tuple[bool, str]: ...
+    def start(self, monitor_dir, attempt_id) -> MonitorHandle: ...
+
+class MonitorHandle(Protocol):
+    def attach(self, pid, launch: Instant) -> None: ...   # never raises
+    def stop(self) -> MonitorReport: ...                   # never raises
 ```
 
 - It runs as a separate sampler **process** (`python -m lidarbench.monitoring.sampler`)
-  with ready/stop file handshakes, as in the R design. It writes CSV samples with
-  explicit units and interval start/end in monotonic and wall time.
+  with a JSON-lines handshake: `ready` on its stdout, `attach`/`stop` on its
+  stdin (end of stdin also stops it, so it cannot outlive the orchestrator).
+  This replaces the R ready/stop files: it needs no polling and adds no file
+  latency to the attach inside the timed interval. Each scope is written to its
+  own CSV (`machine-samples.csv`, `process-tree-samples.csv`) with explicit
+  units and interval start/end in monotonic and wall time. Details and
+  limitations: [EXECUTION.md](EXECUTION.md).
 - Summary logic ports `benchmark_monitor_summary()`: time-weighted means,
   peaks, coverage fraction and `available`/`partial`.
 - Scopes:
@@ -587,7 +596,7 @@ comparable.
 - `psutil` is the only non-stdlib core dependency. It ships wheels for all
   three OSes.
 - The sampler process is started before and stopped after the timed call,
-  using the ready/stop handshake and a timeout kill. Samples are bound to
+  using the ready/attach/stop handshake and a timeout kill. Samples are bound to
   `attempt_id`, with checksums in `monitor/summary.json`.
 - Attempt fields: `monitoring_status` (`disabled`, `available`, `partial`,
   `unavailable` + reason), `scope`, `platform` and coverage.
@@ -669,6 +678,12 @@ The R guards are ported and extended:
 - Ctrl+C: the runner terminates the child tree, writes the attempt as
   `interrupted` (if it can) and releases locks. The next resume tombstones any
   remaining partial attempt.
+- Implemented in `execution/process.py`, `execution/process_tree.py` and
+  `execution/attempt.py`. The Windows child is created suspended and resumed
+  only after it is in the Job Object. The timed interval ends when the OS
+  reports the exit (reaper thread), not at a poll. See
+  [EXECUTION.md](EXECUTION.md) for the status rules, phase boundaries and
+  known limitations of process-tree monitoring.
 
 ## 10. Disposition of existing components
 

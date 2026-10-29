@@ -52,6 +52,12 @@ why a workload is unsupported or blocked. Only the deterministic `synthetic` tes
 adapter exists so far. New tools are added as plugins; see
 [design/ADAPTERS.md](design/ADAPTERS.md).
 
+The process execution engine (`lidarbench.execution.attempt.execute_plan`) runs
+a planned command as a fresh process with timeouts, cancellation, whole-tree
+cleanup and `psutil` monitoring of the process tree and the whole machine. See
+[design/EXECUTION.md](design/EXECUTION.md) for what is timed, measured, and the
+known monitoring limitations.
+
 ## Benchmark pilot on prepared data
 
 The benchmark pilot is separate from preparation's `--pilot` stage. It stages
