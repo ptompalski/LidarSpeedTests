@@ -16,6 +16,7 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     - export: write a verified results table (JSONL, CSV or Parquet)
     - lock: show or explicitly release a stale lock
     - scratch: list or explicitly delete orphaned run-owned scratch
+    - validate: validate outputs against a workload contract (outside any timing)
     - help: display help (implicit)
 
     Additional commands (init, preflight, report, doctor) are placeholders
@@ -101,6 +102,38 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
     lock.add_argument(
         "--force", action="store_true", help="also release a lock that cannot be verified"
     )
+
+    validate = subparsers.add_parser(
+        "validate",
+        help="validate tool outputs against a workload contract (untimed)",
+        description=(
+            "Checks artifacts, raster structure and values against an independent "
+            "reference. Exit 0: validated; 3: descriptive only (accepted exception or "
+            "unverified); 1: failed or incomplete; 2: usage error."
+        ),
+    )
+    validate.add_argument("--workload", required=True, help="contract id, e.g. pixel_metrics_1a")
+    validate.add_argument("--tool", required=True, help="implementation name, e.g. lidR")
+    validate.add_argument("--outputs", required=True, help="directory containing the outputs")
+    validate.add_argument(
+        "--input", action="append", metavar="FILE", help="input tile (repeatable)"
+    )
+    validate.add_argument("--input-dir", metavar="DIR", help="all *.las/*.laz tiles in DIR")
+    validate.add_argument("--suite", help="workload suite directory (default: workloads-v1)")
+    validate.add_argument("--epsg", type=int, help="declared horizontal CRS of the inputs")
+    validate.add_argument("--mode", default="numerical", choices=("numerical", "performance-only"))
+    validate.add_argument(
+        "--execution-status",
+        default="succeeded",
+        help="execution status of the attempt (outputs are inspected only if 'succeeded')",
+    )
+    validate.add_argument(
+        "--accept-known-extent-discrepancies",
+        action="store_true",
+        help="opt-in: accept outward extension by at most one cell per edge (accepted_exception)",
+    )
+    validate.add_argument("-o", "--report", help="write the JSON report to this new file")
+    validate.add_argument("--json", action="store_true", help="print the full JSON report")
 
     subparsers.add_parser(
         "report",
@@ -222,6 +255,25 @@ def main(args: list[str] | None = None) -> int:
 
         return scratch_command(parsed.config, clean=parsed.clean, confirm=parsed.confirm)
 
+    if parsed.command == "validate":
+        from lidarbench.validation.commands import validate_command
+
+        return validate_command(
+            workload=parsed.workload,
+            tool=parsed.tool,
+            outputs=parsed.outputs,
+            input_files=parsed.input,
+            input_dir=parsed.input_dir,
+            suite=parsed.suite,
+            epsg=parsed.epsg,
+            mode=parsed.mode,
+            execution_status=parsed.execution_status,
+            accept_known_extent_discrepancies=parsed.accept_known_extent_discrepancies,
+            report_path=parsed.report,
+            as_json=parsed.json,
+        )
+
+    # Placeholder commands
     if parsed.command in ("init", "preflight", "report", "doctor"):
         print(
             f"Error: '{parsed.command}' command is not yet implemented.",

@@ -1,0 +1,245 @@
+# Output validation (`lidarbench validate`, `lidarbench.validation-report/1`)
+
+**Status**: Task 6 — framework plus two rigorous reference implementations  
+**Code**: `src/lidarbench/validation/`, `src/lidarbench/workloads/`, `workloads/workloads-v1/`  
+**Related**: [ARCHITECTURE.md](ARCHITECTURE.md) §7.3 and §8, [../WORKLOADS.md](../WORKLOADS.md)
+
+Validation decides whether the outputs of one finished attempt satisfy its
+workload contract. It is independent of timed processing: it runs after the
+timed interval has ended, never launches a benchmarked tool, never modifies an
+output or input, and never resamples, crops, repairs, fills or normalizes a
+product to make it agree.
+
+## 1. Workload contracts (`lidarbench.workload/1`)
+
+Contracts are TOML data in `workloads/<suite>/<id>.toml`, loaded by
+`lidarbench.workloads.load_suite()` with the same strict rules as campaign
+configuration: unknown keys are errors, nothing is coerced (`20` is not
+`20.0`), and every error names its key. Each contract has a content digest
+(`WorkloadContract.digest`). Changing a definition requires a new suite.
+
+A contract declares, tool-neutrally: the population (all points, original Z,
+finite XYZ, metre units), the tiling and buffer, the raster product
+(resolution, zero origin, outward-snapped header extent, cell ownership, bands,
+NoData semantics, forbidden sentinel values), the reference method and
+statistic, and the numerical tolerance. Per tool it declares the implementation
+status (`runnable`, `diagnostic_only`, `unsupported`, `blocked`), the
+*declared* equivalence (`matched_definition` or `non_comparable`), exact
+primary artifact names (`{stem}.tif`, `{stem}_avg.tif`), the tool's cell
+ownership convention and whether band names are part of the contract.
+
+Initial contracts (values from WORKLOADS.md):
+
+| Contract | Statistic | Grid | lidR | lasR | LAStools |
+|---|---|---|---|---|---|
+| `pixel_metrics_1a` | mean original Z, band `z_mean` | 20 m | matched, `lidr_buffered_clamp` | matched, `right_down` | non-comparable, `undeclared`, `{stem}_avg.tif` |
+| `generate_DSM1` | max original Z | 1 m | matched, `lidr_buffered_clamp` | matched, `right_down` | non-comparable, `undeclared` |
+
+Both use a 20 m buffer and `|actual − reference| ≤ 2e-6 + 2e-7·|reference|`.
+
+### Cell ownership conventions
+
+* **`right_down`** (the contract partition): on the zero-origin grid, column
+  `i` owns `i·r ≤ X < (i+1)·r` and row `j` owns `j·r < Y ≤ (j+1)·r`, on every
+  edge including a tile's outer edges. Every point belongs to exactly one
+  cell, so neighbouring tiles never count a point twice or drop it. This is
+  the interior-edge rule of WORKLOADS.md ("rightward X, downward Y") applied
+  uniformly. Observed pinned lasR behaviour matches it.
+* **`lidr_buffered_clamp`**: `right_down` on interior edges, but a point
+  exactly on the core raster's maximum-X / minimum-Y edge is clamped into the
+  last column / bottom row when pinned lidR's buffered raster layout does not
+  extend past that edge. This mirrors `benchmark_reference_cells()` in
+  `R/1_functions.R` (layout edges rounded half away from zero).
+* **`undeclared`**: the convention has not been established (native LAStools).
+
+Indices are computed with `floor`/`ceil` and then corrected by exact
+comparison with the float64 edges `i·r`, so a point exactly on an edge is
+assigned by the convention, never by division rounding (tested against an
+exact rational oracle, including the neighbouring floats of each edge).
+
+## 2. Levels and statuses
+
+| Level | Question | Statuses |
+|---|---|---|
+| execution | Did the process run and exit successfully? (runner) | `succeeded`, `failed`, `timed_out`, `interrupted`, `skipped_unsupported`, `skipped_blocked`, `skipped_unavailable` |
+| artifacts | Is every required file present, a regular non-empty file with the right format signature, completely decodable, with no unexpected product? | `passed`, `failed`, `unavailable`, `not_run` |
+| structural | GeoTIFF driver, band count/names/order, numeric type, only NoData-value masking, north-up axis-aligned geometry, exact resolution, zero-origin alignment, exact expected extent, CRS identity and metre units, no infinite values | `passed`, `failed`, `unavailable`, `unsupported`, `not_run` |
+| numerical | Do values and NoData masks match an independent reference within tolerance? | `passed`, `accepted_exception`, `failed`, `unverified`, `unavailable`, `unsupported`, `not_applicable`, `not_run` |
+| comparability | May this timing enter a cross-tool comparison? (derived) | `comparable`, `descriptive_only`, `diagnostic_only`, `excluded` |
+
+Meaning of the non-binary statuses:
+
+* `unverified` — everything checkable passed, but the numerical claim cannot
+  be established: `performance-only` mode, an `undeclared` tool convention, a
+  `diagnostic_only` implementation, or an unknown/undeclared CRS.
+* `unavailable` — a validator or optional dependency is not usable on this
+  machine (for example rasterio or laspy not installed).
+* `unsupported` — no implementation in the contract, or no validator provides
+  the contract's reference method.
+* `not_run` — a prerequisite level did not pass; the reason names it.
+* `accepted_exception` — passed only under a frozen opt-in policy.
+
+**Fail-closed invariant** (`AttemptVerdicts`, enforced at construction and
+tested over every combination of statuses): a level can be `passed` or
+`accepted_exception` only if execution succeeded and every earlier level
+`passed`. `validated_performance` is true only when all three levels
+`passed`. Outputs of failed, timed-out or interrupted executions are never
+inspected.
+
+Derived outcomes and report inclusion:
+
+| Outcome | `validated` report | `performance-only` report |
+|---|---|---|
+| `validated` | included | included |
+| `accepted_exception` | included, labelled | included, labelled |
+| `unverified` (structure passed; numerical `unverified`/`unavailable`/`unsupported`/`not_applicable`) | excluded | included, labelled `unverified (…)` |
+| `validation_failed`, `validation_incomplete`, `execution_failed`, `unsupported`, `blocked`, `unavailable` | excluded | excluded |
+
+An attempt is `comparable` only if it is `validated`, its implementation is
+`runnable` with declared `matched_definition`, `boundary_difference_points == 0`
+and the mode is `numerical`. The pairwise gate
+(`lidarbench.validation.comparison_gate`, `speedup`) additionally requires the
+same contract and digest, equivalence group, dataset digest, campaign identity,
+timing boundary and run dimensions, a `validated` report and two different
+tools. `speedup()` raises `NotComparableError` across a failed gate; there is
+no other ratio function.
+
+## 3. Reference calculation (`cell-statistic/1`)
+
+For each input tile:
+
+1. The manifest is read with the stdlib header reader
+   (`lidarbench.datasets.lasheader`): unique stems, finite non-degenerate
+   header XY bounds and a non-zero count are required.
+2. The population is the tile plus every tile whose header bounds intersect the
+   tile bounds grown by the 20 m buffer, restricted to that closed rectangle.
+   Every contributing file is decoded completely (laspy); the decoded count must
+   equal the header count, uncompressed payload sizes must match the header,
+   XYZ must be finite and every point must lie within its own header bounds
+   (± half a coordinate unit). Input bytes are hashed (SHA-256) before decoding
+   and re-checked afterwards; any change fails validation.
+3. The expected grid is the tile's header XY bounds snapped outward to the
+   zero-origin grid.
+4. Each point is assigned to its owned core cell under the **tool's declared
+   convention**; the per-cell mean (float64 accumulation) or maximum is the
+   reference. Empty cells are NoData.
+5. Ownership is also computed under the contract partition;
+   `boundary_difference_points` counts points owned differently. For a tool
+   whose convention differs, the product is additionally compared with the
+   contract-partition reference and the result is recorded
+   (`contract_convention_comparison`) — the discrepancy is measured, not hidden.
+
+Comparison: NoData is read from each file's metadata, compared in the storage
+type, and decoded to NaN together with stored NaN. Masks must match
+**exactly**; every co-occupied value must be within tolerance. A legitimate
+reference value that equals (after rounding to the storage type) the file's
+NoData value or a forbidden sentinel (-9999, -1000000) fails, because NoData and
+data become indistinguishable. Failures list counts, the maximum error and up to
+ten example cells with coordinates.
+
+Only decoding uses third-party code (rasterio/GDAL for GeoTIFF, laspy for
+LAS/LAZ); no processing algorithm from any package is used as the authority.
+
+### Explicit policy: `accept_known_extent_discrepancies`
+
+Off by default. When enabled, a raster may extend **outward** by at most one
+cell per edge with the full expected core present. Values are then compared
+through an in-memory index window onto the expected core (no resampling, no
+copy of the file), the extension is recorded with its extent delta and the best
+possible numerical status is `accepted_exception`. Inward truncation, larger
+extensions, shifts and different resolution or alignment still fail. Values in
+the extra cells are not a claim about the contract.
+
+## 4. What validation establishes, and what it does not
+
+Each report lists these per attempt under `claims`.
+
+**Established when the respective level passes**
+
+| Claim | Level |
+|---|---|
+| Every input tile has exactly its declared primary artifact(s); each is a non-empty regular file with the correct format signature and decodes completely; nothing unexpected (halo exports, duplicates, extra primaries) is present. Declared sidecars (`*.aux.xml`, `*.vrt`) never satisfy a requirement. | artifacts |
+| Each raster is a north-up GeoTIFF on the zero-origin grid with the contract resolution, the expected outward-snapped extent of its tile (or an explicitly accepted outward extension), the required band layout, NoData expressed only as a NoData value, no infinite values, and the declared CRS in metres. | structural |
+| Every owned cell value and the complete NoData mask equal an independent float64 mean/max of the original Z of all points, including buffered points from neighbouring tiles, under the tool's declared cell convention, within `2e-6 + 2e-7·|reference|`. | numerical `passed` |
+| The tool's cell ownership equals the contract partition for every point of these inputs (`boundary_difference_points == 0`). | numerical `passed` + boundary 0 |
+
+**Not established (remain unverified)**
+
+* Behaviour on inputs other than those validated: a passed fixture or dataset
+  is not a general proof of equivalence or correctness.
+* LAStools numerical conventions (cell ownership, cutoff comparison, encoding):
+  `undeclared`, so native outputs are at best `unverified`, even when the
+  diagnostic comparison agrees.
+* That pinned lidR's real clamping rule is exactly the mirrored R reference
+  rule in general; it is established only where outputs pass (the real-tool
+  fixture integration test passes for both workloads).
+* Vertical datum and units of Z (used as supplied); data provenance; the CRS
+  when none is declared (numerical status is capped at `unverified`).
+* Anything about timing quality; validation never measures or adjusts timings.
+* Workloads other than `pixel_metrics_1a` and `generate_DSM1` (terrain/TIN,
+  nine-band metrics, normalization, treetops): no Python reference exists yet;
+  they are `unsupported` here and remain with the R `validation-v1` path.
+* Parity with every R `validation-v1` rule: the surface-support policy
+  (`accept_known_surface_discrepancies`) is not implemented, so the Python
+  validator is stricter there.
+
+## 5. Observed results on the synthetic fixtures
+
+`tests/python/validation_fixtures.py` writes two neighbouring 100 m tiles
+(stdlib LAS writer) with points exactly on interior edges, the shared tile
+edge, the south/north edges and corners; an east tile whose fractional header
+minimum (X0+100.37) makes its first snapped column depend on points stored in
+the west file; a deliberately empty 20 m cell; negative, zero, very large,
+many-decimal and duplicate-XY Z values. `test_validation_r_integration.py`
+runs the exact pinned lidR 4.3.3 / lasR 0.21.2 calls from `R/0_setup.R` on them
+(untimed) and validates the persisted GeoTIFFs:
+
+| Tool | Result | Comparability |
+|---|---|---|
+| lidR (both workloads) | `validated` under `lidr_buffered_clamp`; boundary points differ from the contract partition; the contract-partition diagnostic fails | `descriptive_only` |
+| lasR (both workloads) | strict: structural `failed` (one extra cell east and north); with the extent policy: `accepted_exception`, `boundary_difference_points = 0` | `descriptive_only` |
+
+These reproduce what WORKLOADS.md documents from the R validators. Unit tests
+cover each failure mode with oracle-generated GeoTIFFs: tolerance edges,
+float32 storage, zero-filled empty cells, missing cells, sentinel collisions,
+missing neighbours, missing/truncated/extra artifacts, CRS, resolution,
+alignment, extent, band names, infinite values, integer encoding, header/
+payload mismatches, degenerate inputs, inputs changing during validation,
+missing backends, unsupported and blocked implementations.
+
+## 6. Usage
+
+```sh
+uv sync                                   # dev environment includes the validation extra
+pip install "lidarbench[validation]"      # numpy, rasterio (bundles GDAL), laspy[lazrs]
+uv run lidarbench validate --workload pixel_metrics_1a --tool lasR \
+    --outputs OUT_DIR --input-dir TILES_DIR --epsg 2959 [-o report.json]
+```
+
+Exit codes: `0` validated; `3` descriptive only (accepted exception or
+unverified); `1` failed, incomplete or not run; `2` usage/contract error.
+Reports are written once (an existing report path is refused).
+`uv run pytest tests/python -m "not integration"` skips the R-based tests.
+
+## 7. Extending
+
+* **New workload**: add `workloads/<suite>/<id>.toml`. If its reference method
+  already exists, nothing else is needed.
+* **New reference method**: implement the `ReferenceValidator` protocol
+  (`name`, `version`, `level`, `applicable()`, `probe()`, `validate_artifact()`)
+  and register it under the `lidarbench.validators` entry point (name = 
+  validator name). Missing dependencies must be reported by `probe()`.
+* **New tool convention**: add it to `CELL_OWNERSHIP` with an exact
+  assignment in `validation/grid.py` and an oracle test.
+
+## 8. Not yet done
+
+* The campaign runner does not call the validator yet: attempts still record
+  `structural_status = not_run` and `numerical_status = not_run|unverified`.
+  Wiring it in (before scratch cleanup, writing `validation/*.json` into the
+  attempt) needs the real lidR/lasR/LAStools adapters and the
+  campaign-to-contract tool mapping.
+* Contracts are not yet part of campaign identity (their digest is in each
+  report).
+* The R `validation-v1` bridge and Python references for the remaining
+  workloads.

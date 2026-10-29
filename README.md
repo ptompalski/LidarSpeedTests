@@ -48,6 +48,7 @@ uv run lidarbench check --json     # the same as a lidarbench.check/1 JSON docum
 uv run lidarbench run CONFIG.toml --dry-run   # schedule, resume decisions, planned commands
 uv run lidarbench run CONFIG.toml             # create or resume a campaign and execute it
 uv run lidarbench export WORKSPACE/campaigns/ID --format csv -o results.csv
+uv run lidarbench validate --workload pixel_metrics_1a --tool lasR --outputs OUT --input-dir TILES --epsg 2959
 uv run pytest tests/python         # Python test suite
 ```
 
@@ -78,6 +79,17 @@ a planned command as a fresh process with timeouts, cancellation, whole-tree
 cleanup and `psutil` monitoring of the process tree and the whole machine. See
 [design/EXECUTION.md](design/EXECUTION.md) for what is timed, measured, and the
 known monitoring limitations.
+
+`lidarbench validate` checks tool outputs against a workload contract
+(`workloads/workloads-v1/*.toml`) outside any timing, with separate verdicts for
+artifacts, raster structure (CRS, grid, alignment, extent, bands) and values,
+compared with independent Python references. Only the mean-elevation (20 m) and
+maximum-elevation (1 m) workloads have references so far. Failed or incomplete
+validation is never reported as validated; unverified results can only appear in
+labelled descriptive reports. It needs the optional `validation` extra
+(`pip install "lidarbench[validation]"`; included by `uv sync`). See
+[design/VALIDATION.md](design/VALIDATION.md) for which claims it establishes and
+which remain unverified.
 
 ## Benchmark pilot on prepared data
 

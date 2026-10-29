@@ -1,7 +1,7 @@
 # LidarSpeedTests 2.0 — Migration Plan
 
 **Status**: In progress  
-**Version**: Task 1 (Python package bootstrap) ✅ **DONE**; Task 3 (tool adapter interface) ✅ **DONE**; Task 4 (process execution) ✅ **DONE**; Task 5 (campaign management) ✅ **DONE**  
+**Version**: Task 1 (Python package bootstrap) ✅ **DONE**; Task 3 (tool adapter interface) ✅ **DONE**; Task 4 (process execution) ✅ **DONE**; Task 5 (campaign management) ✅ **DONE**; Task 6 (validation framework) ✅ **DONE** (two workloads)  
 **Branch**: `feature/cross-platform-benchmark`  
 **Related**: [ARCHITECTURE.md](design/ARCHITECTURE.md), [AGENTS.md](AGENTS.md)
 
@@ -164,10 +164,32 @@ Task 5 acceptance criteria:
 
 **Objective**: Validate results and compile campaign reports.
 
+**Progress — Task 6 (validation framework) ✅ DONE for two workloads**: tool-neutral
+workload contracts in TOML (`lidarbench.workload/1`, `workloads/workloads-v1/`
+for `pixel_metrics_1a` and `generate_DSM1`) with declared implementation status,
+equivalence, artifact names and cell-ownership conventions; separate verdicts for
+execution, artifacts, structure and numerical agreement, plus derived
+comparability and report inclusion, with a fail-closed invariant; a stdlib
+inventory and LAS header reader; structural raster checks (CRS, resolution,
+alignment, extent, bands, NoData encoding); independent Python references
+(per-cell mean/max of original Z with neighbour buffers and exact edge
+ownership); an explicit, recorded extent policy; a pairwise comparability gate;
+`lidarbench validate`. Geospatial decoding uses the optional `validation` extra.
+See [design/VALIDATION.md](design/VALIDATION.md).
+
+Task 6 acceptance criteria:
+- [x] Distinct statuses for execution, artifacts, structure, numerical, comparability, and unsupported/unavailable/unverified outcomes.
+- [x] Failed or incomplete validation can never be a validated performance result (exhaustively tested); unverified results only enter labelled descriptive reports.
+- [x] Independent Python references for mean Z at 20 m and max Z at 1 m; no output is resampled, cropped, repaired or normalized.
+- [x] Synthetic fixtures: empty cells, neighbouring tiles, boundary points, unusual Z, missing data, floating-point tolerances.
+- [x] Unit tests and real lidR/lasR integration tests; documented established vs unverified claims.
+- [ ] Runner integration (validate before scratch cleanup, write `validation/*.json`) — needs real tool adapters.
+- [ ] Contract digests in campaign identity; references for the remaining workloads; R `validation-v1` bridge.
+
 **Key tasks**:
-- Structural validator (Python): artifact inventory, file format sniffing.
+- [x] Structural validator (Python): artifact inventory, file format sniffing, raster geometry/CRS checks.
 - R validation bridge: call existing `benchmark_validate_artifacts()` in numerical or performance-only mode.
-- Numerical, structural and comparability verdicts as separate fields.
+- [x] Numerical, structural and comparability verdicts as separate fields.
 - Report compilation: select latest attempt per key, apply exclusion reasons, compute summaries.
 - Report renderers: static HTML/Markdown; optional Quarto integration.
 - Legacy result importer.

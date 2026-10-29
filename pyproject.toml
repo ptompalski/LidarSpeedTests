@@ -38,6 +38,9 @@ dev = [
     "black>=23.0.0",
     "mypy>=1.7.0",
     "types-psutil>=5.9.0",
+    "numpy>=1.26",
+    "rasterio>=1.3",
+    "laspy[lazrs]>=2.5",
 ]
 
 [project.scripts]
@@ -51,9 +54,16 @@ synthetic = "lidarbench.execution.adapters.synthetic:SyntheticAdapter"
 [project.entry-points."lidarbench.monitors"]
 psutil = "lidarbench.monitoring.psutil_backend:PsutilBackend"
 
+# Numerical reference validators; the entry-point name must equal the validator's name.
 [project.entry-points."lidarbench.validators"]
-structural = "lidarbench.validation.structural:StructuralValidator"
-r-validation = "lidarbench.validation.r_bridge:RValidationBridge"
+cell-statistic = "lidarbench.validation.validators:CellStatisticValidator"
+
+[project.optional-dependencies]
+validation = [
+    "laspy[lazrs]>=2.5",
+    "numpy>=1.26",
+    "rasterio>=1.3",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -138,3 +148,7 @@ no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
+
+[[tool.mypy.overrides]]
+module = ["rasterio", "laspy"]
+ignore_missing_imports = true

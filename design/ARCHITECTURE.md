@@ -358,10 +358,14 @@ class Validator(Protocol):
   `performance-only` mode. The JSON output keeps the existing fields: `status`,
   `structural_checks_passed`, per-artifact detail, `boundary_difference_points`,
   extent deltas and exception reasons.
-- Future optional validators (for example `py-geo` using rasterio/laspy) live in
-  optional extras. The core never requires them. A Python reimplementation of
-  numerical references is acceptable only after it passes parity tests against
-  `r-validation-v1` on the shared fixtures.
+- **Implemented (Task 6)**: workload contracts as TOML (`lidarbench.workload/1`,
+  `workloads/workloads-v1/`), a stdlib artifact inventory, structural raster
+  checks and the `cell-statistic` numerical reference validator for
+  `pixel_metrics_1a` and `generate_DSM1`, decoding through the optional
+  `validation` extra (numpy, rasterio, laspy). The core imports none of them.
+  Parity with the legacy R rules is checked by running the pinned lidR/lasR
+  calls on shared synthetic fixtures (`test_validation_r_integration.py`), not
+  by trusting either side alone. See [VALIDATION.md](VALIDATION.md).
 
 ### 7.4 Monitor backend
 
@@ -441,13 +445,19 @@ Unknown keys are errors. Every resolved value, including defaults, is written to
 
 ## 8. Status model and comparability
 
-### 8.1 Four independent verdicts per attempt
+### 8.1 Independent verdicts per attempt
+
+Implemented in `lidarbench.validation.status` (Task 6); see
+[VALIDATION.md](VALIDATION.md). A level can only pass if every earlier level
+passed (enforced at construction).
+
 
 | Field | Values | Producer |
 |---|---|---|
 | `execution_status` | `succeeded`, `failed`, `timed_out`, `interrupted`, `skipped_unsupported`, `skipped_blocked`, `skipped_unavailable` | adapter `interpret()` + runner |
-| `structural_status` | `passed`, `failed`, `not_run` | structural validator(s) |
-| `numerical_status` | `passed`, `accepted_exception`, `failed`, `unverified`, `not_applicable`, `not_run` | numerical validator per frozen `validation_mode`; `performance-only` ⇒ `unverified` |
+| `artifacts` | `passed`, `failed`, `unavailable`, `not_run` | artifact inventory + decoding |
+| `structural_status` | `passed`, `failed`, `unavailable`, `unsupported`, `not_run` | structural (geospatial) checks |
+| `numerical_status` | `passed`, `accepted_exception`, `failed`, `unverified`, `unavailable`, `unsupported`, `not_applicable`, `not_run` | numerical validator per frozen `validation_mode`; `performance-only` ⇒ `unverified` |
 | `comparability` | computed at report time: `comparable`, `descriptive_only`, `diagnostic_only`, `excluded` (+ reason) | reporting, from contract + equivalence registry + verdicts |
 
 Mapping from the legacy R fields:
@@ -798,9 +808,9 @@ The 2.0 design avoids the problem in three ways:
 2. Default `timing_boundary` for headline tables: `process` (uniform across all
    tools) or `workload` (closest to legacy R timings)? The proposal reports both
    and uses `process` for cross-tool tables.
-3. Should a Python numerical validator (rasterio/laspy) be planned for parity
-   with `r-validation-v1`, or should R remain the numerical authority
-   indefinitely?
+3. ~~Python numerical validator?~~ Started in Task 6 for two workloads
+   ([VALIDATION.md](VALIDATION.md)); R `validation-v1` remains the authority for
+   the others until Python references exist.
 4. Which additional tools should be included in the first extensibility
    milestone (for example PDAL CLI, a Python library such as `laspy`/`pdal`
    bindings)? No installation is performed without authorization.

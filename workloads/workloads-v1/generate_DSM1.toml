@@ -1,0 +1,68 @@
+# Workload contract (lidarbench.workload/1). See pixel_metrics_1a.toml for the layout.
+schema = "lidarbench.workload/1"
+suite = "workloads-v1"
+id = "generate_DSM1"
+title = "Maximum original elevation at 1 m"
+description = """
+Highest original (unnormalized) Z of all points, all classes and returns, in each
+owned 1 m cell. No interpolation, subcircle spreading or NA filling: empty cells are
+NoData. This is a surface-elevation DSM, not a canopy height model."""
+
+[population]
+input = "original"
+points = "all"
+z = "original"
+require_finite_xyz = true
+horizontal_units = "metre"
+
+[spatial]
+tiling = "per_input_file"
+buffer = 20.0
+
+[raster]
+resolution = 1.0
+origin = [0.0, 0.0]
+extent = "header_bounds_snapped_outward"
+cell_ownership = "right_down"
+empty_cells = "nodata"
+bands = []                    # single band; band description is tool-specific
+nodata_source = "file_metadata"
+forbidden_values = [-9999.0, -1000000.0]
+
+[reference]
+method = "cell_statistic"
+statistic = "max"
+
+[tolerance]
+absolute = 2e-6
+relative = 2e-7
+
+[artifacts]
+ignored_sidecars = ["*.aux.xml", "*.vrt"]
+
+[equivalence]
+group = "workloads-v1/generate_DSM1"
+
+[implementations.lidR]
+status = "runnable"
+equivalence = "matched_definition"
+artifacts = ["{stem}.tif"]
+cell_ownership = "lidr_buffered_clamp"
+band_names = "not_required"
+note = "lidR::rasterize_canopy(res = 1, p2r(subcircle = 0, na.fill = NULL)); catalog buffer 20, chunk 0."
+
+[implementations.lasR]
+status = "runnable"
+equivalence = "matched_definition"
+artifacts = ["{stem}.tif"]
+cell_ownership = "right_down"
+band_names = "not_required"
+note = "lasR dsm(1, tin = FALSE); buffer 20, chunk 0."
+
+[implementations.lastools]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "undeclared"
+band_names = "not_required"
+note = "lasgrid -highest -step 1; native cell ownership and encoding are not verified."

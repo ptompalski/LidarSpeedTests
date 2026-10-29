@@ -1,0 +1,71 @@
+# Workload contract (lidarbench.workload/1). Tool-neutral definition of WHAT is
+# computed, the declared per-tool implementations and how outputs are validated.
+# Source of truth for the definition: WORKLOADS.md (workloads-v1). Changing any
+# value here changes the contract digest; a different definition needs a new suite.
+schema = "lidarbench.workload/1"
+suite = "workloads-v1"
+id = "pixel_metrics_1a"
+title = "Mean original elevation at 20 m"
+description = """
+Arithmetic mean of the original (unnormalized) Z of all points in each owned 20 m
+cell. No return, class, height or duplicate filter. Empty cells are NoData, never
+zero. One single-band raster per input tile."""
+
+[population]
+input = "original"            # unnormalized inputs, original datum, no conversion
+points = "all"                # no return/class/threshold filter, no deduplication
+z = "original"
+require_finite_xyz = true
+horizontal_units = "metre"    # required for "20 m" to have that meaning
+
+[spatial]
+tiling = "per_input_file"     # one output per input tile; tiles are never merged
+buffer = 20.0                 # neighbouring-file buffer; contributes only to owned cells
+
+[raster]
+resolution = 20.0
+origin = [0.0, 0.0]
+extent = "header_bounds_snapped_outward"
+cell_ownership = "right_down"
+empty_cells = "nodata"
+bands = ["z_mean"]
+nodata_source = "file_metadata"
+forbidden_values = [-9999.0, -1000000.0]   # tool NoData sentinels; a colliding value fails
+
+[reference]
+method = "cell_statistic"
+statistic = "mean"
+
+[tolerance]
+absolute = 2e-6               # |actual - reference| <= absolute + relative * |reference|
+relative = 2e-7
+
+[artifacts]
+ignored_sidecars = ["*.aux.xml", "*.vrt"]
+
+[equivalence]
+group = "workloads-v1/pixel_metrics_1a"
+
+[implementations.lidR]
+status = "runnable"
+equivalence = "matched_definition"
+artifacts = ["{stem}.tif"]
+cell_ownership = "lidr_buffered_clamp"
+band_names = "required"
+note = "lidR::pixel_metrics(~list(z_mean = mean(Z)), res = 20, start = c(0, 0)); catalog buffer 20, chunk 0."
+
+[implementations.lasR]
+status = "runnable"
+equivalence = "matched_definition"
+artifacts = ["{stem}.tif"]
+cell_ownership = "right_down"
+band_names = "required"
+note = "lasR rasterize(20, 'z_mean'); buffer 20, chunk 0. Float32 arithmetic."
+
+[implementations.lastools]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}_avg.tif"]
+cell_ownership = "undeclared"
+band_names = "not_required"
+note = "lascanopy -avg -step 20 -height_cutoff below every header Min Z; native cell ownership, cutoff comparison and encoding are not verified."

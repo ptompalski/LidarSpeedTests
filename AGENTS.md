@@ -131,8 +131,10 @@ A missing `completed.json` means the attempt is incomplete; resumption skips it 
 
 ### 7. Validator Plugin Protocol
 
-- Validators are loaded via entry points (`lidarbench.validators`).
-- Each validator declares a name, level (structural/numerical) and applicability.
+- Validators are loaded via entry points (`lidarbench.validators`); the entry-point name equals the validator's `name`.
+- Each validator declares a name, version, level and applicability (`applicable(contract)`) and reports missing optional dependencies via `probe()` (→ `unavailable`), never an import error.
+- Validation runs outside timing and never resamples, crops, repairs, fills or normalizes outputs. A level may pass only if every earlier level passed (`AttemptVerdicts`). See `design/VALIDATION.md`.
+- numpy/rasterio/laspy are only imported lazily inside `validation/` modules, after probing; `import lidarbench.validation` must stay stdlib-only.
 - `structural-v1`: checks inventory, file existence, naming, optional format sniffing.
 - `r-validation-v1`: calls existing R validation logic via bridge; supports numerical and performance-only modes.
 - A missing validator does not fail the campaign; attempts are marked `unverified` or `skipped` with reason.
@@ -218,5 +220,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 **Document history**:
 - 2026-10-28: Initial version for Phase 1 (Package Bootstrap).
 - 2026-10-28: Config validation uses strict stdlib dataclasses instead of Pydantic (Task 5; ARCHITECTURE.md D1).
+- 2026-10-28: Validation framework and workload contracts (Task 6; design/VALIDATION.md).
 
 **Last reviewed**: 2026-10-28
