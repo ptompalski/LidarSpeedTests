@@ -770,7 +770,7 @@ The 2.0 design avoids the problem in three ways:
 | D9 | Plugin discovery through entry points; built-ins registered identically | hard-coded tool list (legacy) | proposed |
 | D10 | Legacy R harness frozen in place; relocation only after approval | immediate move to `legacy/` | proposed |
 | D11 | Package name `lidarbench`, CLI `lidarbench` | `lidarspeedtests`, `lst` | **open — needs owner decision** |
-| D12 | Environment tooling: `pyproject.toml` (PEP 621) + optional `uv.lock` for development; plain `pip install -e .` must work | Poetry, conda | proposed |
+| D12 | Environment tooling: `pyproject.toml` (PEP 621) + committed `uv.lock`; uv for development (`uv sync`, `uv run`), dev tools in the PEP 735 `dev` dependency group; plain `pip install -e .` must work | Poetry, conda | **accepted** (2026-10-28) |
 | D13 | Reports: Python compiles canonical tables; built-in static HTML/Markdown renderer; Quarto rendering optional | Quarto-only (requires R/Jupyter) | proposed |
 
 ## 14. Security and safety notes

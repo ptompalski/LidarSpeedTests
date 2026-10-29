@@ -24,6 +24,7 @@ This document defines the roadmap for migrating LidarSpeedTests from an R-only h
 - [x] Cross-platform utilities: path handling, platform detection, executable discovery.
 - [x] pytest test suite with unit, integration and platform-specific tests.
 - [x] `pip install -e .` succeeds without R, GDAL, PDAL or LAStools.
+- [x] uv-managed development environment: committed `uv.lock`, `uv sync` / `uv run` (D12).
 - [x] CLI works from arbitrary working directory.
 - [x] Type hints and Ruff linter configuration.
 - [x] ARCHITECTURE.md, MIGRATION_PLAN.md, AGENTS.md documentation.

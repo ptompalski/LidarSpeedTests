@@ -56,9 +56,11 @@
 ### Testing Requirements
 
 - **New code has tests**: 100% test coverage of new modules and functions is the goal.
-- **pytest passes**: Run `pytest tests/python/` before pushing.
-- **Linting passes**: Run `ruff check src/ tests/` and `black --check src/ tests/`.
-- **Type hints**: Use type hints on all public functions; `mypy` should not complain.
+- **Environment**: Use [uv](https://docs.astral.sh/uv/). `uv sync` creates `.venv/` from the committed `uv.lock`; prefix tools with `uv run`. Plain `pip install -e .` must keep working (ARCHITECTURE.md D12).
+- **Dependencies**: Change them with `uv add <pkg>` / `uv add --dev <pkg>` (or edit `pyproject.toml` and run `uv lock`), and commit `pyproject.toml` and `uv.lock` together.
+- **pytest passes**: Run `uv run pytest tests/python/` before pushing.
+- **Linting passes**: Run `uv run ruff check src/ tests/` and `uv run black --check src/ tests/`.
+- **Type hints**: Use type hints on all public functions; `uv run mypy src/` should not complain.
 - **Platform test markers**: Tests requiring specific OS use `@pytest.mark.platform` and skip gracefully on others.
 
 ### Code Style
@@ -170,19 +172,23 @@ git clone https://github.com/ptompalski/LidarSpeedTests.git
 cd LidarSpeedTests
 git checkout feature/cross-platform-benchmark
 
-# Set up Python environment
-python3.11 -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install --upgrade pip
-pip install -e ".[dev]"
+# Install uv once (no admin rights; see https://docs.astral.sh/uv/)
+curl -LsSf https://astral.sh/uv/install.sh | sh                    # Linux/macOS
+# powershell -c "irm https://astral.sh/uv/install.ps1 | iex"       # Windows
+
+# Create .venv/ with the locked dependencies and dev tools
+uv sync
 
 # Run tests
-pytest tests/python/ -v
+uv run pytest tests/python/ -v
 
 # Lint and format
-ruff check src/ tests/
-black --check src/ tests/
-mypy src/
+uv run ruff check src/ tests/
+uv run black --check src/ tests/
+uv run mypy src/
+
+# Without uv (pip >= 25.1): python -m venv .venv, activate it, then
+# pip install -e . --group dev
 
 # Make changes, commit, push
 git add src/...

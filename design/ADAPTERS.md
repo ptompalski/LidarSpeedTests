@@ -171,7 +171,7 @@ so a virtual-environment interpreter keeps its environment.
 
    This works from any installed distribution, so third-party adapters need no
    change to `lidarbench` itself.
-3. Reinstall (`pip install -e .`) and run `lidarbench check` to confirm
+3. Re-sync (`uv sync`, or `pip install -e .`) and run `lidarbench check` to confirm
    detection, version and declared workloads.
 4. Test with `plan_invocation()`, using paths that contain spaces. See
    `tests/python/adapter_fakes.py` for Rscript, native and PDAL-style examples.

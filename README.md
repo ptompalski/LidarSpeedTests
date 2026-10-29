@@ -41,10 +41,16 @@ The Python orchestrator `lidarbench` is being built beside the R harness (see
 [MIGRATION_PLAN.md](MIGRATION_PLAN.md)); it does not run campaigns yet.
 
 ```sh
-pip install -e ".[dev]"
-lidarbench check            # OS facts and detected tool adapters
-lidarbench check --json     # the same as a lidarbench.check/1 JSON document
+uv sync                            # create .venv/ from uv.lock (install uv: https://docs.astral.sh/uv/)
+uv run lidarbench check            # OS facts and detected tool adapters
+uv run lidarbench check --json     # the same as a lidarbench.check/1 JSON document
+uv run pytest tests/python         # Python test suite
 ```
+
+[uv](https://docs.astral.sh/uv/) manages the Python environment: `uv.lock` pins
+every Python dependency, the way `renv.lock` pins the R packages. Plain
+`pip install -e .` also works. The R environment is unchanged and still managed
+by renv.
 
 `check` lists each adapter's availability (with the reason when software is
 missing or the platform is unsupported), version and declared workloads, including
