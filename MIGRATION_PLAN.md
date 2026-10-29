@@ -127,7 +127,7 @@ Task 8 acceptance criteria:
 - [x] Missing installations or commands are `skipped_unavailable` / `unsupported` with reasons; nothing is downloaded, installed or licensed.
 - [x] Tests cover discovery, command construction, Windows `.exe` names, paths with spaces, missing executables, errors and expected artifacts; optional integration tests run with a real installation (260914 and 261023 on Linux).
 - [x] Cross-tool comparison stays conditional: LAStools contracts are `non_comparable` with undeclared cell ownership, so timings are descriptive only.
-- [ ] `workloads-v1` treats LAStools `.tfw` world files as unexpected artifacts; accepting them needs a new contract version.
+- [x] LAStools `.tfw` world files are ignored sidecars in the new default suite `workloads-v3` (v1/v2 frozen).
 - [ ] Verified natively on Windows.
 
 **Progress — Task 9 (PDAL adapter) ✅ DONE**: an independent `pdal` adapter
@@ -276,8 +276,9 @@ Task 6 acceptance criteria:
 - [x] Independent Python references for mean Z at 20 m and max Z at 1 m; no output is resampled, cropped, repaired or normalized.
 - [x] Synthetic fixtures: empty cells, neighbouring tiles, boundary points, unusual Z, missing data, floating-point tolerances.
 - [x] Unit tests and real lidR/lasR integration tests; documented established vs unverified claims.
-- [ ] Runner integration (validate before scratch cleanup, write `validation/*.json`) — needs real tool adapters.
-- [ ] Contract digests in campaign identity; references for the remaining workloads; R `validation-v1` bridge.
+- [x] Runner integration (validate before scratch cleanup, write `validation/report.json`, verdict reuse; Task 13 follow-up).
+- [x] Contract digests in campaign identity (Task 13 follow-up).
+- [ ] References for the remaining workloads; R `validation-v1` bridge.
 
 **Key tasks**:
 - [x] Structural validator (Python): artifact inventory, file format sniffing, raster geometry/CRS checks.
@@ -309,7 +310,7 @@ Task 11 acceptance criteria:
 - [x] Validated comparisons separate from descriptive results; gated speedups only.
 - [x] Repetitions and variability; raw records preserved; downloadable tables.
 - [x] Read-only historical import; works with unavailable tools/workloads; tested on synthetic records.
-- [ ] Validated comparisons on real campaigns (needs runner validation integration).
+- [ ] Validated comparisons on real campaigns (runner validation done; no pair passes the gate yet — comparability-policy decision, PILOT_REVIEW.md §12.5).
 
 **Acceptance Criteria**:
 - Structural validation works on output artifacts.
@@ -336,7 +337,7 @@ Task 13 acceptance criteria:
 - [x] Scheduling, execution, output inventories, monitoring, immutable records, interruption, crash recovery, resume and Quarto reporting verified on real tools and data.
 - [x] Differences from the legacy R harness analysed (timing boundaries, start-up overhead, thread budgets, spatial semantics).
 - [x] No performance winners declared; every cross-tool pair refused by the comparability gate (no validation reports).
-- [ ] Validation exercised in a pilot (needs runner validation integration; then repeat the pilot in `numerical` mode).
+- [x] Validation exercised in a pilot: `pilot-t13-20261029-002-validated` (numerical mode; PILOT_REVIEW.md §12).
 - [ ] Pilot repeated natively on Windows and macOS.
 
 Blockers found for a validated full campaign (PILOT_REVIEW.md §7, §10):
@@ -345,14 +346,33 @@ Blockers found for a validated full campaign (PILOT_REVIEW.md §7, §10):
 3. PDAL exceeds its thread budget (`readers.las` default `threads = 7`); budgets are configured, never enforced.
 4. lidR multisession workers (reparented to PID 1, same session) are invisible to process-tree monitoring and `rusage`; reports show lower-bound sampled CPU.
 
-Next priorities: runner validation integration → R bridge preload/timing policy →
-PDAL reader threads → session-based monitoring and exact CPU in reports →
-orphan protection after supervisor death → `lidarbench preflight` →
-Windows/macOS pilots; then a validated pilot before any full campaign.
+**Follow-up (done, PILOT_REVIEW.md §12)**: all four blockers and D5–D12 were
+fixed and verified in a validated pilot — runner validation with verdict reuse,
+shared references, edge-strip decoding and trusted digests (8 full validations,
+56 reuses); contracts frozen in identity and the new default suite
+`workloads-v3` (LAStools `.tfw` sidecars); R bridge namespace preload (lasR inner
+times equal legacy); PDAL `readers.las threads = 1`; CPU pinning
+(`scheduling.cpu_affinity`, default `pinned`) with `process_cpu_seconds`,
+`measured_parallelism` and `cpu_budget_exceeded`; session-wide monitoring;
+supervisor-death guardian; tombstone digests; `lidarbench preflight`.
+
+Remaining before publishing cross-tool results: a comparability-policy decision
+(no tool pair passes the gate on these workloads: lidR and PDAL own boundary
+points differently, lasR is an accepted exception), lidR heap presizing
+decision, a full-scale validation memory check, Windows/macOS pilots, and the
+remaining contracts.
 
 ### Phase 7: Preflight and Doctor Commands
 
 **Objective**: Pre-run validation and diagnostic tooling.
+
+**Progress**: `lidarbench preflight CONFIG [--hash] [--json]` ✅ (Task 13 follow-up;
+design/CAMPAIGNS.md §10): configuration, workspace and locks, scratch roots and
+free space, dataset headers, read-only inputs and `.lax` indexes, manifest
+checks (full SHA-256 with `--hash`), tool probes and per-unit plans, campaign
+state and identity, CPU counts, pinning support, load and memory, monitoring,
+validation suite/contracts/backends and reporting tools. `doctor` is still a
+placeholder.
 
 **Key tasks**:
 - Preflight: check configuration, stage inputs, verify tools, dry-run workloads.
@@ -427,7 +447,7 @@ Windows/macOS pilots; then a validated pilot before any full campaign.
 
 - ✅ Phase 1: Package installs and basic CLI works.
 - [x] Phase 5: A campaign can be executed end-to-end via Python (Task 13 pilot, performance-only, Linux).
-- [ ] Phase 5/6: A validated end-to-end campaign (runner validation integration; PILOT_REVIEW.md §10).
+- [x] Phase 5/6: A validated end-to-end campaign (Task 13 validated pilot, Linux; PILOT_REVIEW.md §12).
 - [ ] Phase 7: Reports from Python campaigns match legacy format.
 - [ ] Phase 8: New contributors can run and extend the benchmark without R knowledge.
 

@@ -354,7 +354,8 @@ systems are `platform_unsupported`. Probing runs `pdal --version` (must print
 one `pdal x.y.z` line), `pdal --drivers --showjson` (needs `readers.las`,
 `filters.merge`, `writers.gdal`) and `pdal --options writers.gdal --showjson`
 (needs `binmode`, `origin_x`, `origin_y`, `width`, `height`, `output_type`,
-`nodata`, `data_type`, `gdaldriver`, `override_srs`, `resolution`). PDAL older
+`nodata`, `data_type`, `gdaldriver`, `override_srs`, `resolution`); it also
+reads `pdal --options readers.las --showjson` to see whether `threads` exists. PDAL older
 than 2.5.0 (no `binmode`), a missing option or `expected_version` mismatch is
 `version_unsupported`; a missing stage is `misconfigured`. Identity records the
 version, the full version string, the `pdal` and launcher Python executables
@@ -364,7 +365,7 @@ version, the full version string, the `pdal` and launcher Python executables
 `ConfigFile`s (`pipeline-0001.json`, …) into the work directory:
 
 ```text
-readers.las(tile) [, readers.las(neighbour)… → filters.merge]
+readers.las(tile, threads=1) [, readers.las(neighbour, threads=1)… → filters.merge]
   → writers.gdal(binmode=true, output_type=mean|max, resolution=r,
                  origin_x, origin_y, width, height,      # header bounds snapped outward
                  nodata=-9999, data_type=double, gdaldriver=GTiff
@@ -389,7 +390,11 @@ no further pipeline starts and running ones are terminated. The launcher writes
 `execution_mode` (option, default `stream`, part of the identity) selects
 `--stream` (fail if PDAL cannot stream), `standard` (`--nostream`) or `prefer`
 (PDAL's choice, not recorded). Environment: thread caps of 1 and
-`GDAL_NUM_THREADS=1`. The timed interval is the launcher process (Python start-up
+`GDAL_NUM_THREADS=1`. Every `readers.las` stage sets `threads = 1`: its LAZ
+decompression pool defaults to 7, which made a "1 CPU" attempt use ~2.9 cores
+in the Task 13 pilot. The value (or "not set" for PDAL builds without the
+option) is in the identity details and the invocation metadata
+(`reader_threads`); the runner's CPU pinning enforces the budget regardless. The timed interval is the launcher process (Python start-up
 included). `tool_timing` reports the inner interval from the first `pdal` launch
 to the last exit.
 
@@ -457,5 +462,6 @@ installation validate the actual PDAL outputs:
 - LAStools `normalization`, `pixel_metrics_2` and `generate_DEM` (no contract yet).
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
-- Equivalence data covers only the contracts in `workloads/` (`workloads-v2` is
-  the default; `workloads-v1` is kept frozen and has no PDAL entry).
+- Equivalence data covers only the contracts in `workloads/` (`workloads-v3` is
+  the default; `workloads-v1` and `workloads-v2` are kept frozen; v1 has no PDAL
+  entry).

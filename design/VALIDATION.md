@@ -28,8 +28,10 @@ status (`runnable`, `diagnostic_only`, `unsupported`, `blocked`), the
 primary artifact names (`{stem}.tif`, `{stem}_avg.tif`), the tool's cell
 ownership convention and whether band names are part of the contract.
 
-Suites: `workloads-v1` (frozen, lidR/lasR/LAStools) and `workloads-v2` (the
-default): the same definitions plus the PDAL implementation. A new tool entry
+Suites: `workloads-v1` (frozen, lidR/lasR/LAStools), `workloads-v2` (frozen: the
+same definitions plus the PDAL implementation) and `workloads-v3` (the default:
+`workloads-v2` plus LAStools `*.tfw` world files as ignored sidecars, so that
+LAStools outputs are no longer `validation_failed` at the artifacts level). A new tool entry
 changes the contract digest, so it needs a new suite (the comparison gate
 requires equal digests). Contract values come from WORKLOADS.md:
 
@@ -252,14 +254,65 @@ Reports are written once (an existing report path is refused).
 * **New tool convention**: add it to `CELL_OWNERSHIP` with an exact
   assignment in `validation/grid.py` and an oracle test.
 
-## 8. Not yet done
+## 8. Validation in the campaign runner
 
-* The campaign runner does not call the validator yet: attempts still record
-  `structural_status = not_run` and `numerical_status = not_run|unverified`.
-  Wiring it in (before scratch cleanup, writing `validation/*.json` into the
-  attempt) needs the real lidR/lasR/LAStools adapters and the
-  campaign-to-contract tool mapping.
-* Contracts are not yet part of campaign identity (their digest is in each
-  report).
+The runner (`campaign/validation.py`) validates every attempt whose execution
+`succeeded`, after its outputs are inventoried and **before** its scratch
+directory is disposed, and publishes `validation/report.json` into the attempt
+so the report is covered by the attempt's digest chain (`result.json` lists it).
+`result.json` then carries `artifacts_status`, `structural_status`,
+`numerical_status` and a `validation` summary (outcome, comparability,
+duration, `reused_from`, reference-cache hits). Validation is untimed and never
+fails the campaign: an exception is recorded as a warning and the attempt keeps
+`not_run` verdicts. A failed or incomplete validation retains scratch under
+`retain = "on-failure"`.
+
+* **Contract.** The campaign's `[validation] suite` (default: the checkout's
+  `workloads/workloads-v3`) is frozen in identity: every workload's contract key
+  and digest is part of the `workloads` component. A contract whose digest
+  differs at run time is not used (the run would already refuse the changed
+  identity). Workloads without a contract (synthetic) are not validated.
+* **Tool mapping.** Each adapter declares `contract_tool` (`lidr`→`lidR`,
+  `lasr`→`lasR`, `lastools`, `pdal`).
+* **Policies and CRS.** `[validation] accept_known_extent_discrepancies` and the
+  workload's `epsg` parameter.
+* **Mode.** `validation_mode = "performance-only"` still checks artifacts and
+  structure (no point decoding); numerical is `unverified`.
+
+### 8.1 Cost: what validation does and how it is bounded
+
+Per attempt, validation (1) inventories the outputs (stdlib), (2) decodes every
+raster completely, (3) checks structure, and (4) for the numerical level decodes
+each tile plus every neighbour within the 20 m buffer, computes an independent
+float64 per-cell mean/max (numpy `bincount`/`maximum.at`, vectorised) under the
+contract's and the tool's cell conventions, and compares every cell and the
+NoData mask. On the Task 13 pilot pair (2 × ~1 M points) a full validation takes
+~1 s (≈0.25 s imports and probing); at density 10 (2 × ~10 M points) ~4.7 s and
+1.4 GB RSS. Cost grows with the points decoded.
+
+The legacy R validation was much slower because it read every attribute
+(`readLAS(select = "*")`), assembled data frames with `rbind`, computed the
+reference in an **interpreted per-cell R loop** (`split()` + `for` over every
+cell — ~1 M cells per tile for a 1 m DSM; TIN references via `sf`
+triangulation and point-in-polygon tests), re-hashed inputs, and repeated all of
+it for **every attempt**, including every repetition.
+
+The Python runner bounds the cost without weakening any check:
+
+| Measure | Effect |
+|---|---|
+| **Verdict reuse** (`[validation] reuse_identical_outputs = true`, default) | A validation is a deterministic function of the output bytes, input bytes, contract, tool implementation, policies, mode, EPSG and validator versions (`reuse_key`, `lidarbench.validation-reuse-key/1`). When every output of an attempt is byte-identical (SHA-256, from the output inventory) to an attempt already validated under the same key, its verdict is reused; the report records `reuse.source_attempt_id`, the source report's SHA-256 and the statement. Published reports are indexed on resume. Repetitions and CPU counts of deterministic tools cost one comparison. Requires `integrity.record_output_digests`. |
+| **Shared references** (`ReferenceCache`, 1 GiB LRU per run) | Per-tile references are keyed by contract digest, grid and the SHA-256 of every contributing input, and computed once for **all** declared conventions; tools and attempts sharing a convention reuse them. |
+| **Edge strips** (`PopulationLoader`) | A neighbour whose interior does not overlap the tile contributes only points within `buffer` of its own edges; those strips are cached, so each file is decoded at most about twice instead of once per neighbour visit. |
+| **Trusted input digests** | Inputs' SHA-256 come from the frozen identity (full hash at the start of the run, stat fingerprints around every entry and after validation) instead of hashing every input before and after each validation. |
+
+Remaining cost drivers: the first validation per workload × dataset ×
+convention still decodes the whole dataset (laspy/lazrs decoding is
+multi-threaded and runs between attempts, before the cooldown); output rasters
+are always decoded in full (structure needs them).
+
+## 9. Not yet done
+
 * The R `validation-v1` bridge and Python references for the remaining
-  workloads.
+  workloads (TIN surfaces, nine-band metrics, normalization, treetops).
+* LAStools cell ownership is undeclared, so its outputs stay `unverified`.

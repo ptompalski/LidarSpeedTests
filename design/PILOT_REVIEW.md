@@ -1,6 +1,7 @@
 # Task 13 — End-to-end pilot review
 
-Status: pilot completed 2026-10-29 on Linux. Campaign
+Status: pilot completed 2026-10-29 on Linux; follow-up changes and a validated
+pilot in §12 (supersedes the verdict of §1 and the priorities of §10). Campaign
 `pilot-t13-20261029-001`, identity
 `e5c0234437b52ba03e53b97dcaa2d9a657a0da304d4b12a720f8f29fbf73a9e9`.
 Example configuration: [`configs/examples/pilot-campaign.toml`](../configs/examples/pilot-campaign.toml).
@@ -282,3 +283,134 @@ uv run lidarbench report PILOT/workspace/campaigns/pilot-t13-20261029-001 --rend
 
 The diagnostic R and PDAL experiments of §6.3–6.4 are in
 `PILOT/experiments/` (outside any campaign; untimed by lidarbench).
+
+## 12. Follow-up: changes after the pilot and the validated pilot (2026-10-29)
+
+All §10 priorities except the Windows/macOS runs were implemented (commit
+`8e79008`) and verified with a second, **validated** pilot
+`pilot-t13-20261029-002-validated` (same machine, data, tools, matrix and seed;
+`validation_mode = "numerical"`, `accept_known_extent_discrepancies = true`,
+`cpu_affinity = "pinned"`, suite `workloads-v3`), a crash test campaign
+`pilot-t13-20261029-003-killtest`, and `lidarbench preflight`
+(34 checks ok before the run).
+
+### 12.1 Status of the defects
+
+| # | Change | Verified |
+|---|---|---|
+| D1 | Runner validates every succeeded attempt before scratch cleanup and seals `validation/report.json`; contracts (key, digest) frozen in identity; `[validation]` config (suite, extent policy, reuse) | 64/64 attempts with reports; reporting reads them (validated tier) |
+| D2 | R bridge preloads the namespaces the pinned calls load lazily (`sf`, `terra`; lidR also `glue`) in a new untimed `namespaces_preloaded` phase; records `preloaded_namespaces` and `workload_loaded_namespaces` (empty in every run) | lasR inner times = legacy (below) |
+| D3 | PDAL `readers.las threads = 1` (probed; recorded in identity and metadata) | PDAL CPU-s ≈ wall × CPUs |
+| D4 | `scheduling.cpu_affinity = "pinned"` (default): whole tree pinned to `cpus` logical CPUs, one per physical core, first core reserved; results report `process_cpu_seconds`, `measured_parallelism`, `cpu_budget_exceeded` | 0 of 48 measurements over budget; pinned CPUs `1` / `1 2` recorded |
+| D5 | POSIX monitoring follows the whole session (reparented `parallelly` workers, renv watchdog) | lidR 2-CPU CPU time 30.6 s (was 11.2 s) |
+| D6 | Guardian process kills watched tool sessions if the orchestrator dies (POSIX; Windows already has `KILL_ON_JOB_CLOSE`) | SIGKILL of the runner during a lidR 2-CPU attempt: main R, both workers and the renv watchdog gone within 2 s; empty outputs |
+| D7 | Reports use `process_cpu_seconds` (max of `rusage` and sampled tree) and list `cpu_budget_exceeded` issues | report rendered |
+| D8 | The legacy figure's axis label is replaced at render time ("Process wall time mean (s; outer fresh-process interval)"); caption names the boundary; `R/reporting.R` unchanged | figure checked |
+| D9 | Tombstones record the SHA-256 of every file left; those files become read-only and are verified on every read | kill test |
+| D10 | Scratch retained by policy is logged `retained_scratch`, not warned as orphaned | unit test |
+| D11 | Contracts in identity (done); LAStools `.tfw` accepted as sidecars in the new default suite `workloads-v3` (v2 frozen) | LAStools now `unverified`, not `validation_failed` |
+| D12 | `lidarbench preflight CONFIG [--hash] [--json]` (design/CAMPAIGNS.md §10) | pilot preflight: ready |
+
+### 12.2 Validated pilot results (descriptive; no ranking)
+
+All 64 entries succeeded. Validation outcomes per tool (16 attempts each):
+lidR `validated`, PDAL `validated` (real PDAL 2.10.2 matches the mirrored
+`pdal_binmode_floor` reference), lasR `accepted_exception` (one-cell extent
+policy), LAStools `unverified` (cell ownership undeclared). The validated report
+includes 36 measurements (lidR, lasR, PDAL). **No cross-tool comparison passed
+the gate**, by design: lidR and PDAL own boundary points differently from the
+contract partition (lidR 6 points; PDAL 1 000 points for the 20 m metric and
+19 721 for the 1 m DSM, upward-Y edges), and lasR is only an accepted
+exception. Speedups therefore remain unavailable on this data under the current
+contracts and policies.
+
+Medians in seconds; P1 = first pilot (unpinned, before the changes), P2 =
+validated pilot; *inner* = tool-reported interval.
+
+| Workload | Tool | CPUs | Outer P1 | Outer P2 | Inner P1 | Inner P2 | Legacy R | CPU-s P2 | Parallelism P2 |
+|---|---|---|---|---|---|---|---|---|---|
+| pixel_metrics_1a | lasR | 1 | 10.46 | 10.44 | 7.81 | **2.97** | 2.97 | 9.75 | 0.94 |
+| pixel_metrics_1a | lasR | 2 | 9.11 | 8.95 | 6.47 | **1.51** | 1.47 | 9.78 | 1.09 |
+| generate_DSM1 | lasR | 1 | 20.60 | 19.92 | 17.84 | **12.48** | 12.76 | 19.31 | 0.97 |
+| generate_DSM1 | lasR | 2 | 14.49 | 14.30 | 11.87 | **6.89** | 6.90 | 20.35 | 1.42 |
+| pixel_metrics_1a | lidR | 1 | 16.07 | 15.26 | 7.01 | 6.61 | 4.69 | 14.92 | 0.98 |
+| pixel_metrics_1a | lidR | 2 | 22.66 | 22.40 | 6.18 | 5.98 | 6.93 | 30.63 | 1.37 |
+| generate_DSM1 | lidR | 1 | 15.32 | 14.78 | 6.44 | 6.13 | 4.11 | 14.42 | 0.98 |
+| generate_DSM1 | lidR | 2 | 22.38 | 21.82 | 5.58 | 5.43 | 5.49 | 29.92 | 1.37 |
+| pixel_metrics_1a | PDAL | 1 | 1.90 | **4.27** | 1.77 | 4.13 | — | 4.25 | 1.00 |
+| pixel_metrics_1a | PDAL | 2 | 1.02 | **2.22** | 0.88 | 2.07 | — | 4.27 | 1.92 |
+| generate_DSM1 | PDAL | 1 | 2.00 | **4.36** | 1.86 | 4.22 | — | 4.34 | 1.00 |
+| generate_DSM1 | PDAL | 2 | 1.06 | **2.26** | 0.92 | 2.12 | — | 4.37 | 1.93 |
+| pixel_metrics_1a | LAStools | 1 / 2 | 3.69 / 1.88 | 3.70 / 1.89 | — | — | 3.88 / 2.07 | 3.68 / 3.69 | 1.00 / 1.96 |
+| generate_DSM1 | LAStools | 1 / 2 | 2.34 / 1.20 | 2.35 / 1.22 | — | — | 2.53 / 1.40 | 2.34 / 2.37 | 0.99 / 1.94 |
+
+* lasR's inner interval now reproduces the legacy boundary exactly; its outer
+  time is unchanged (the ~5 s namespace load moved before the inner interval).
+* PDAL's first-pilot timings were not 1- or 2-core numbers; pinned and with one
+  reader thread, it uses exactly its budget (parallelism 1.00 / 1.92).
+* lidR at 1 CPU still exceeds legacy by ~1.7–2 s inside the inner interval.
+  It is not namespace loading: most of it is garbage collection while the R heap
+  grows from its start-up size (2.6 s GC in the first call vs 0.5 s in the third;
+  `R_VSIZE=4G R_NSIZE=20M` removes it). Heap presizing changes R's runtime
+  configuration and was **not** applied; it needs a decision (§12.5).
+* LAStools is unchanged within noise; its outer times stay ~0.2 s below legacy.
+* Both pilots spent the same wall time (~15 min for 64 attempts, 5 s cooldown);
+  per-attempt bookkeeping including validation was 0.17 s median, ≤ 1 s.
+
+### 12.3 Validation: what it consists of and what it costs
+
+Per attempt: inventory of output files; complete decoding of every raster;
+structural checks (format, CRS, resolution, alignment, extent, bands, NoData);
+for the numerical level, decoding of the tile and every neighbour within the
+20 m buffer, an independent float64 per-cell mean/max under the contract's and
+the tool's cell convention, and a cell-by-cell value/NoData-mask comparison
+(design/VALIDATION.md §3, §8.1). Measured here: a full validation of the pilot
+pair takes ~0.2–0.8 s (~1 s cold including imports); at density 10 the 1 m DSM
+takes 4.7 s and 1.4 GB.
+
+The legacy R validation was slow because it read all point attributes, ran an
+interpreted per-cell R loop over ~1 M cells per tile for 1 m rasters (and `sf`
+triangulation for TIN references), re-hashed inputs and repeated everything for
+every attempt. The new runner keeps every check but bounds the work:
+
+* **verdict reuse for byte-identical outputs** (deterministic tools produce
+  identical bytes across repetitions and CPU counts — true for all four tools
+  here), recorded with the source attempt and report digest;
+* **shared per-tile references** for all declared conventions, keyed by input
+  digests, contract and grid;
+* **edge-strip caching**, so each input is decoded about once per workload
+  instead of once per neighbour visit;
+* **trusted input digests** from the frozen identity instead of hashing every
+  input twice per validation.
+
+Pilot effect: 8 full validations (one per tool × workload) took 2.2 s in total;
+the other 56 attempts reused verdicts in ~3 ms each, versus an estimated
+~64 s for 64 independent validations at ~1 s each. At full scale (100 tiles × 6 densities) the cost per
+tool × workload × dataset is roughly one decode of the dataset plus one
+reference, instead of one per attempt.
+
+### 12.4 Updated readiness
+
+LidarSpeedTests 2.0 is now **ready for a full campaign on Linux that produces
+validated per-tool timings** (lidR, PDAL validated; lasR as an explicit accepted
+exception; LAStools descriptive), with enforced CPU budgets, complete resource
+accounting and crash safety. It is **not yet able to publish cross-tool
+speedups** on these workloads, because no tool pair passes the comparability
+gate under the current contracts (§12.2). Windows and macOS remain unverified.
+
+### 12.5 Remaining decisions and work (priority order)
+
+1. **Comparability policy.** Decide whether functionally comparable pairs may
+   be compared when their boundary-point differences are declared and
+   reported, or whether new contract conventions are needed. Without this, no
+   speedup can be published. (Maintainer decision; a new suite if contracts
+   change.)
+2. **lidR heap presizing** (`R_VSIZE`/`R_NSIZE`) to remove first-call GC from
+   the inner interval — a runtime-configuration decision.
+3. **Full-scale validation memory**: the reference cache (1 GiB) and strip
+   cache should be checked on the 100-tile density-50 data before the full run
+   (one tool, one workload, `--limit`).
+4. Windows and macOS pilots (pinning on Windows, guardian not needed there;
+   macOS without pinning).
+5. Remaining contracts (TIN DEM, nine-band metrics, normalization, treetops)
+   and the R `validation-v1` bridge.

@@ -19,7 +19,7 @@ lidarbench report WORKSPACE/campaigns/ID --mode validated -o REPORT_DIR
 lidarbench report WORKSPACE/campaigns/ID --historical _OLD/results --historical r-export.json
 lidarbench report --historical _OLD/results -o REPORT_DIR      # historical-only report
 lidarbench report ... --render auto|always|never --quarto PATH --rscript PATH --no-renv
-lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v2 --include-raw
+lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v3 --include-raw
 ```
 
 | Option | Meaning |
@@ -28,7 +28,7 @@ lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v2 --include
 | `-o` | New report directory. Default `<workspace>/reports/<campaign>-<mode>-<UTC>`. An existing directory, a path inside the campaign, the repository root or `docs/` is refused. |
 | `--min-seconds` | Shorter timings are excluded and flagged (default 0.1 s, as in R). |
 | `--historical` | Directory of legacy per-run CSVs, or a `lidarbench.legacy-r-campaign/1` export (repeatable). |
-| `--suite` | Workload suite for the *declared* comparability labels (default `workloads/workloads-v2` of the checkout). |
+| `--suite` | Workload suite for the *declared* comparability labels (default `workloads/workloads-v3` of the checkout). |
 | `--render` | `auto` (default): render if Quarto, Rscript, `knitr` and `rmarkdown` are found, otherwise explain what is missing; `always`: exit 5 unless rendered; `never`. |
 | `--include-raw` | Also copy the verified campaign directory into `<report>/raw/`. |
 
@@ -67,11 +67,11 @@ CSV: UTF-8, `\n`, fixed column order, empty cell = missing (never 0),
 | Table | One row per | Content |
 |---|---|---|
 | `attempts` | attempt (warm-ups, retries, failures, skips, abandoned) | all `lidarbench.results-table/1` columns + `execution_mode`, `contract_tool`, `declared_comparability`, `verdict_source`, `validation_report`, `contract_key/digest`, `verdict_artifacts/structural/numerical`, `boundary_difference_points`, `outcome`, `comparability(_reasons)`, `evidence_tier`, `short_duration`, `report_included`, `exclusion` |
-| `summary` | planned measurement unit (workload × dataset × CPUs × tool, from the frozen schedule) | tool version, `section` (`validated`/`descriptive`/`no_measurements`), weakest `evidence`, `availability`; counts: planned, attempts, selected, not attempted, included, missing, failed, timed out, interrupted, skipped, missing outputs, validation failed/incomplete, per tier, short, warm-ups; timing mean, SD, CV, median, quartiles, min, max; tool-reported inner time and start-up overhead; monitored counts and process-tree CPU s, peak RSS, whole-machine CPU % and memory peak |
+| `summary` | planned measurement unit (workload × dataset × CPUs × tool, from the frozen schedule) | tool version, `section` (`validated`/`descriptive`/`no_measurements`), weakest `evidence`, `availability`; counts: planned, attempts, selected, not attempted, included, missing, failed, timed out, interrupted, skipped, missing outputs, validation failed/incomplete, per tier, short, warm-ups; timing mean, SD, CV, median, quartiles, min, max; tool-reported inner time and start-up overhead; monitored counts and process-tree CPU s, exact CPU s (`process_cpu_seconds`: max of `rusage` and the sampled tree), mean measured parallelism, `n_cpu_budget_exceeded`, peak RSS, whole-machine CPU % and memory peak |
 | `repetitions` | included measurement | the samples behind `summary` (timing, inner timing, resources, tool position, evidence tier) |
 | `comparisons` | pair of tools with included measurements in the same workload/dataset/CPUs | gate result, reasons; ratios **only** if the gate passed |
 | `scaling` | tool × CPU count, for series with ≥ 2 CPU counts | median vs the smallest CPU count, scaling ratio, parallel efficiency, weakest evidence |
-| `issues` | problem occurrence | `tool_unavailable`, `monitoring_disabled`, `not_attempted`, `incomplete_record`, `interrupted`, `execution_failed`, `timed_out`, `skipped_*`, `missing_outputs`, `validation_failed`, `validation_incomplete`, `invalid_validation_record`, `unverified_output`, `outputs_not_validated`, `accepted_exception`, `short_timing`, `missing_timing`, `monitoring_partial`, `monitoring_missing` |
+| `issues` | problem occurrence | `tool_unavailable`, `monitoring_disabled`, `not_attempted`, `incomplete_record`, `interrupted`, `execution_failed`, `timed_out`, `skipped_*`, `missing_outputs`, `validation_failed`, `validation_incomplete`, `invalid_validation_record`, `unverified_output`, `outputs_not_validated`, `accepted_exception`, `short_timing`, `missing_timing`, `monitoring_partial`, `monitoring_missing`, `cpu_budget_exceeded` (included attempt whose CPU time exceeds `cpus × elapsed × 1.10 + 0.1 s`) |
 | `environment` | key | OS, release, architecture, CPU model, logical/physical CPUs, RAM, Python; campaign settings; schedule RNG/seed; provenance (host, platform, git) |
 | `tools`, `tool_details` | tool / detail | availability, version, adapter; identity details (R and package versions, LAStools build, PDAL version …) and executable SHA-256 |
 | `datasets` | dataset | input/file counts, bytes, dataset digest, manifest ID/version/SHA-256 |
@@ -103,9 +103,13 @@ validation not eligible under the report mode; missing timing; timing below
 | `unverified` | artifacts and structure passed; numerical not established | excluded | included, descriptive |
 | `execution_only` | succeeded with all required outputs; **no validation level was run** (no validation report) | excluded | included, descriptive |
 
-`execution_only` exists because the runner does not call validators yet: every
-current attempt has `structural_status = not_run`, which the status model
-calls `validation_incomplete`. Those timings are shown only in performance-only
+`execution_only` covers attempts without a validation report: campaigns created
+before the runner validated outputs (every attempt has `structural_status =
+not_run`, which the status model calls `validation_incomplete`), workloads
+without a contract, and validation errors. The runner now writes
+`validation/report.json` for every succeeded attempt with a contract
+(VALIDATION.md §8); a reused verdict (`reuse.source_attempt_id`) is read like
+any other report. Those timings are shown only in performance-only
 reports, in their own tier, and never enter comparisons. A summary unit whose
 included measurements are all `validated` is in the *validated* section; any
 weaker tier puts it in the *descriptive* section.
@@ -154,7 +158,11 @@ Historical and Downloads. Pages read only `tables/*.csv` through
 recompute inclusion or ratios. Figures: every repetition as a point with the
 median, within-tool scaling lines and per-repetition CPU time / peak RSS. The
 mean ± SD figure is drawn by the legacy `benchmark_report_plot()` from the
-staged `R/reporting.R`, as on the legacy campaign site.
+staged `R/reporting.R`, as on the legacy campaign site; only its axis label is
+replaced at render time ("Process wall time mean (s; outer fresh-process
+interval)" instead of the legacy "Workload time mean", which described the
+in-session R interval), and the caption names the timing boundary. CPU figures
+use `process_cpu_seconds`.
 
 Rendering: Quarto from `--quarto`, `$QUARTO` or `PATH`; Rscript from
 `--rscript`, `$LIDARBENCH_RSCRIPT` or `PATH`. The probe activates the
@@ -200,9 +208,10 @@ run, tool and tool version (never pooled). Sources are recorded with SHA-256.
 
 ## 7. Limitations
 
-* Until the runner writes validation reports, Python campaigns have no
-  validated measurements; validated reports show availability and issues only,
-  and comparisons are refused with reasons.
+* Campaigns created before runner validation (for example the Task 13
+  performance-only pilot) have no validation reports; validated reports show
+  availability and issues only for them, and comparisons are refused with
+  reasons.
 * One campaign per report; cross-campaign or cross-machine comparisons are
   deliberately not offered.
 * Storage and tile-size views of the legacy site are not reproduced; the

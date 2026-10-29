@@ -41,8 +41,12 @@ Exit codes: `0` run ended normally (attempt failures are data, not errors),
 
 Datasets, workloads (with parameters, datasets and timeouts), tools (adapter +
 constructor options), CPU counts, repetitions, warm-ups, seed, tool order,
-cooldown, cache policy, monitoring, scratch roots/retention, validation mode and
-integrity options. Unknown keys and wrong types are errors with the key named.
+cooldown, cache policy, CPU pinning (`scheduling.cpu_affinity = "pinned"` (default)
+or `"none"`, EXECUTION.md §7), monitoring, scratch roots/retention, validation
+mode, validation settings (`[validation] suite` (default: the checkout's
+`workloads/workloads-v3`), `accept_known_extent_discrepancies` (default false),
+`reuse_identical_outputs` (default true); VALIDATION.md §8) and integrity
+options. Unknown keys and wrong types are errors with the key named.
 Every default is resolved and frozen (`identity/config.json`). Configs are data;
 nothing is evaluated.
 
@@ -68,7 +72,7 @@ describe warm-cache behaviour. Any cold-cache policy is rejected.
 |---|---|
 | `code` | lidarbench version, psutil version, SHA-256 of every package `.py` file |
 | `config` | fully resolved configuration (including absolute paths and defaults) |
-| `workloads` | selected workloads, parameters, effective timeouts, each tool's declared status/reason/threading range |
+| `workloads` | selected workloads, parameters, effective timeouts, the workload contract (suite, key, digest; `null` without a contract), each tool's declared status/reason/threading range |
 | `tools` | adapter class and module SHA-256, options, availability and reason, version, details, every executable's path/size/SHA-256 |
 | `datasets` | every file under each dataset directory (relative path, size, SHA-256) and the ordered input list; for manifest datasets also the manifest reference (ID, version, kind, location, `content_sha256`, `manifest_sha256`), and the files must equal the manifest |
 | `environment` | OS, release, architecture, CPU model, logical/physical CPUs, total RAM, Python implementation/version |
@@ -115,8 +119,10 @@ version (golden tests). R schedules cannot be reproduced bit-for-bit.
 
 Execution is strictly sequential (one attempt at a time on the machine,
 enforced by the machine lock); a tool uses only its own internal parallelism
-(`threads = cpus`, with BLAS/OpenMP thread caps from the adapter). After each
-launched attempt the runner pauses `cooldown_s` (interruptible).
+(`threads = cpus`, with BLAS/OpenMP thread caps from the adapter), and with
+`cpu_affinity = "pinned"` the whole tree is restricted to `cpus` logical CPUs,
+one per physical core. After each launched attempt (and its untimed validation)
+the runner pauses `cooldown_s` (interruptible).
 
 ## 5. Store layout and records
 
@@ -133,9 +139,12 @@ launched attempt the runner pauses `cooldown_s` (interruptible).
     started.json                lidarbench.attempt-started/1
     invocation.json             resolved argv, env delta, cwd, inputs, scratch, expected outputs
     execution.json stdout.log stderr.log monitor/   (execution engine, EXECUTION.md)
+    validation/report.json      lidarbench.validation-report/1 (succeeded attempts with a contract)
     result.json                 lidarbench.attempt/1 + SHA-256 of every file above
     completed.json              SHA-256 of result.json; written last
-    abandoned.json              tombstone (only for attempts that never completed)
+    abandoned.json              tombstone with the SHA-256 of every file left (only for
+                                attempts that never completed; those files become read-only
+                                and are verified on every read)
 ```
 
 Write-once publishing: pending file with exclusive create → `fsync` →
@@ -147,9 +156,12 @@ mismatch. Nothing is ever repaired or rewritten. A torn final line in
 `events.jsonl` is preserved and skipped.
 
 Every `result.json` has separate verdict fields: `execution_status`,
-`structural_status` (`not_run` until a structural validator runs) and
-`numerical_status` (`not_run`, or `unverified` in `performance-only` mode),
-plus a note that execution success does not imply numerical validity.
+`artifacts_status`, `structural_status` and `numerical_status` (taken from the
+attempt's validation report; `not_run` without one, `unverified` numerically in
+`performance-only` mode), a `validation` summary (report path, outcome,
+comparability, duration, `reused_from`), and a note that execution success does
+not imply numerical validity. Validation runs after the process, before scratch
+disposal, and is never timed (VALIDATION.md §8).
 Comparability is decided at report time (ARCHITECTURE.md §8).
 
 The runner passes the planning adapter to `execute_plan()`, so its optional
@@ -201,7 +213,8 @@ mount-free tree; failures are warnings recorded in the result and the campaign
 continues. Retention: `never` (default), `on-failure`, `always`. Orphans are
 deleted only by `lidarbench scratch --clean --confirm` under the workspace lock,
 when the marker proves ownership and the attempt already has a receipt or
-tombstone.
+tombstone. Scratch kept on purpose (`retain`, recorded in `result.json`) is
+logged as `retained_scratch`, not warned about as an orphan.
 
 Locks: `<workspace>/.lidarbench.lock` and a per-user machine lock
 (`$LIDARBENCH_STATE_DIR`, else `%LOCALAPPDATA%\lidarbench`,
@@ -219,8 +232,10 @@ a fixed column order (`lidarbench.results-table/1`, see
 `campaign/results.py:RESULT_COLUMNS`): entry fields, attempt reason,
 statuses, timing (`timing_boundary`, `elapsed_ns`; tool-reported
 `tool_workload_elapsed_ns` and `startup_overhead_ns`, empty when the tool
-reports no inner interval), monitoring summaries,
-structural/numerical status, output counts, `record_state`
+reports no inner interval), monitoring summaries, exact CPU
+(`process_cpu_seconds`, `measured_parallelism`, `cpu_budget_exceeded`,
+`cpu_affinity`), artifacts/structural/numerical status, `validation_outcome`,
+`validation_reused_from`, `validation_duration_ns`, output counts, `record_state`
 (`completed`/`abandoned`/`incomplete`) and `superseded`. Nothing is filtered or
 aggregated. CSV uses empty cells for null. Parquet needs the optional
 `pyarrow` package.
@@ -242,13 +257,17 @@ aggregated. CSV uses empty cells for null. Parquet needs the optional
 | Scratch orphans | in-memory ownership only | on-disk marker; explicit marker-proven cleanup |
 | Timing | `Sys.time()` around in-process R call | `perf_counter_ns` around a fresh process (`timing_boundary = process`); the R bridge also reports the legacy inner interval and start-up overhead (`tool_timing`) |
 | R warnings during a workload | diagnostics of a successful run | attempt fails (R bridge exit 3) |
+| Validation | every attempt, R reference loops | every succeeded attempt, vectorised; verdict reuse for byte-identical outputs, shared references, trusted input digests |
+| Thread budget | requested (env, plan, `concurrent_files`) | requested and enforced by CPU pinning (Linux, Windows) |
+| Orchestrator death | (in-process) | guardian kills the tool session (POSIX); Job Object (Windows) |
 
 ## 9. Limitations
 
-- Validators are not implemented yet: `structural_status`/`numerical_status`
-  stay `not_run`/`unverified`, and resume eligibility is an execution criterion.
-- Identity covers the lidarbench package and adapter modules, not
-  `workloads/` TOML (Phase 4). The R bridge files (`bridges/r/*.R`,
+- Resume eligibility is an execution criterion: a deterministic validation
+  failure is data, not a reason to rerun.
+- Identity covers the lidarbench package, adapter modules and the contracts'
+  digests; per-entry checks do not re-read the contract TOML files (a changed
+  contract is detected at the next run start). The R bridge files (`bridges/r/*.R`,
   `R/1_functions.R`, `R/0_setup.R`) and `renv.lock` are covered through the
   R tools' executables and identity details.
 - Stat fingerprints miss in-place edits that keep size and mtime until the next

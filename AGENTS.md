@@ -83,7 +83,7 @@
 
 ### 1. Workloads and Contracts
 
-- Workloads are defined in `workloads/<suite>/` as TOML files. `workloads-v2` (default) = the frozen `workloads-v1` definitions plus the PDAL implementation.
+- Workloads are defined in `workloads/<suite>/` as TOML files. `workloads-v3` (default) = `workloads-v2` (the frozen `workloads-v1` definitions plus the PDAL implementation) with LAStools `*.tfw` world files as ignored sidecars; v1 and v2 are frozen.
 - A workload spec is tool-neutral; implementations are tool-specific.
 - Equivalence (matched_definition, diagnostic_only, unsupported, blocked) is declared in the spec, not inferred.
 - Changing a workload spec or equivalence, including adding a tool's implementation, requires a new suite version (it changes the contract digest).
@@ -170,6 +170,7 @@ Normative description: [design/DATASETS.md](design/DATASETS.md) (`src/lidarbench
 - `structural-v1`: checks inventory, file existence, naming, optional format sniffing.
 - `r-validation-v1`: calls existing R validation logic via bridge; supports numerical and performance-only modes.
 - A missing validator does not fail the campaign; attempts are marked `unverified` or `skipped` with reason.
+- The runner validates every succeeded attempt before scratch cleanup and seals `validation/report.json` in the attempt (`campaign/validation.py`). Contracts are frozen in identity (`workloads` component). Verdicts are reused only for byte-identical outputs under an identical `reuse_key` (contract, tool, inputs, policies, mode, EPSG, validator versions), and the reuse is recorded; never reuse on anything weaker.
 
 ### 7a. Reporting
 
@@ -188,6 +189,12 @@ Normative description: [design/REPORTING.md](design/REPORTING.md) (`src/lidarben
 - Monitors run as independent sampler processes with a JSON-lines ready/attach/stop handshake over stdin/stdout.
 - Whole-machine and process-tree samples are written to separate CSV files with interval start/end (monotonic + wall ns); missing values are empty cells, never 0.
 - Monitor summary includes peak, average, per-phase breakdowns and optional custom aggregations.
+- On POSIX the process tree is the tool's whole session (helpers reparented away, e.g. R `parallelly` workers, are still sampled). Reports use `process_cpu_seconds` = max(exact `rusage`, sampled tree) and flag `cpu_budget_exceeded`.
+
+### 8a. Thread budgets and supervision
+
+- `scheduling.cpu_affinity = "pinned"` (default) pins each attempt's whole process tree to `cpus` logical CPUs, one per physical core, first core left to the orchestrator (`execution/affinity.py`; Linux `sched_setaffinity` before exec, Windows while suspended; macOS unsupported and recorded). Adapters must still request their budget (threads, `-cores`, PDAL `readers.las threads = 1`).
+- If the orchestrator dies, a guardian process (`execution/guardian.py`, POSIX) kills the watched tool sessions; on Windows the Job Object has `KILL_ON_JOB_CLOSE`.
 
 ## Reviewing and Approval
 
@@ -269,5 +276,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 - 2026-10-28: Dataset manifests, recipes, data roots and `lidarbench data` (Task 10; design/DATASETS.md).
 - 2026-10-29: Reporting dataset, `lidarbench report`, Quarto site and historical import (Task 11; design/REPORTING.md).
 - 2026-10-29: End-to-end pilot and readiness review (Task 13; design/PILOT_REVIEW.md).
+- 2026-10-29: Runner validation with verdict reuse, `workloads-v3`, CPU pinning, session monitoring, guardian, R namespace preload, PDAL reader threads, `lidarbench preflight` (Task 13 follow-up).
 
 **Last reviewed**: 2026-10-29

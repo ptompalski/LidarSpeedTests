@@ -111,7 +111,8 @@ def test_pilot_example_config_is_valid():
     assert config.cpu_counts == (1, 2)
     assert (config.scheduling.warmups, config.scheduling.repetitions) == (1, 3)
     assert config.scheduling.tool_order == "balanced"
-    assert config.validation_mode == "performance-only"
+    assert config.validation_mode == "numerical"
+    assert config.validation.accept_known_extent_discrepancies is True
 
 
 def test_validation_table_and_cpu_affinity(base):

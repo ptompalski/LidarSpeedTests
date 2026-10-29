@@ -9,14 +9,16 @@
 #
 # Use a small, verified two-tile dataset with .lax indexes (lasR refuses
 # unindexed inputs) and a read-only copy of it, so no tool can write into the
-# original files. Use a new campaign_id for every pilot. The runner does not
-# call validators yet: performance-only timings are descriptive and never
-# establish cross-tool speedups (design/PILOT_REVIEW.md §5).
+# original files. Use a new campaign_id for every pilot. Run
+# `lidarbench preflight` first. The runner validates every succeeded attempt
+# (untimed) against the frozen workloads-v3 contracts and reuses verdicts for
+# byte-identical outputs (design/VALIDATION.md §8). Each attempt is pinned to
+# `cpus` physical cores (scheduling.cpu_affinity; not available on macOS).
 schema = "lidarbench.campaign-config/1"
 campaign_id = "pilot-example-001"
 description = "Pilot: lidR, lasR, LAStools, PDAL; mean metric 20 m and max DSM 1 m; 1-2 CPUs"
 workspace = "/path/to/lidarbench-pilot/workspace"
-validation_mode = "performance-only"
+validation_mode = "numerical"
 cpu_counts = [1, 2]
 timeout_s = 1800
 
@@ -27,6 +29,7 @@ warmups = 1
 tool_order = "balanced"
 cooldown_s = 5.0
 cache_policy = "uncontrolled-warm"
+cpu_affinity = "pinned"          # enforce the CPU budget (default)
 
 [monitoring]
 enabled = true
@@ -37,6 +40,12 @@ required = true
 [scratch]
 roots = { local = "/path/to/lidarbench-pilot/scratch" }
 retain = "on-failure"
+
+[validation]
+# lasR rasters extend one cell east/north of the tile; accept that explicitly
+# (accepted_exception, never "passed"). Part of the campaign identity.
+accept_known_extent_discrepancies = true
+reuse_identical_outputs = true
 
 [integrity]
 record_output_digests = true

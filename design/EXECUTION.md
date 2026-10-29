@@ -119,6 +119,15 @@ Timeouts, cancellations, signals and engine errors can never be accepted.
   cancellation instead. Cleanup is interrupt-safe: a repeated Ctrl+C during the
   SIGTERM grace escalates straight to SIGKILL, and the tree is still reaped,
   the sampler stopped and the result produced.
+- **Supervisor death (POSIX).** If the orchestrator itself is killed
+  (`SIGKILL`, OOM killer), nothing else would stop the tool's session. A
+  guardian process (`python -m lidarbench.execution.guardian`, started once per
+  orchestrator process in its own session, outside every timed interval) is told
+  `watch <pgid>` after each launch and `release <pgid>` after the tree is gone;
+  when its stdin reaches EOF (the orchestrator exited, however it died) it sends
+  `SIGKILL` to every group still watched. Tools never inherit the pipe
+  (`close_fds`). On Windows the Job Object's `KILL_ON_JOB_CLOSE` does the same.
+  A guardian failure is a warning, never a failed attempt.
 
 ## 6. Monitoring (`psutil` backend)
 
@@ -126,6 +135,14 @@ A separate sampler process (`python -m lidarbench.monitoring.sampler`) is
 started and primed before the timed interval. Protocol: JSON lines; `ready` on
 stdout; `attach` (pid, orchestrator pid, launch instant) and `stop` on stdin;
 end of stdin also stops it. Samples are flushed row by row.
+
+Membership of the process tree: the root and its descendants, plus on POSIX
+every process of the root's **session** created after the launch (the root is a
+session leader). Helpers that are reparented away from the tree but stay in the
+session, such as R `parallelly`/`future` workers started through a shell or the
+renv watchdog, are therefore sampled (Task 13 pilot finding: lidR workers at
+2 CPUs were previously invisible). The capability `membership` records which
+rule applied.
 
 The two scopes are written to **separate files** and summarised in separate
 sections:
@@ -174,11 +191,30 @@ independent of sampling:
 - Windows Job Object: CPU of **every** process that ran in the job (including
   short-lived ones), process count, peak committed job memory, and I/O bytes.
 
-## 7. Thread budget and environment
+## 7. Thread budget, CPU pinning and environment
 
 `environment.thread_budget` records the **configured** request
-(`requested_threads`, `threading_model`). It is not a measurement; measured CPU
-use is in `monitoring.process_tree` and `process_accounting`. The record also
+(`requested_threads`, `threading_model`) and, when the budget is enforced, the
+`cpu_set` the tree is pinned to. Measured CPU use is in `monitoring.process_tree`
+and `process_accounting`.
+
+**Enforcement.** With `scheduling.cpu_affinity = "pinned"` (default) the
+runner restricts every attempt's whole process tree to `cpus` logical CPUs
+chosen by `execution/affinity.py`: one logical CPU per physical core in
+(package, core) order from sysfs (Linux), the first core left to the
+orchestrator and monitor when possible, SMT siblings only beyond the number of
+cores; the same set for every attempt of a budget. Linux applies it with
+`sched_setaffinity` in the child before `exec` (inherited by every descendant);
+Windows sets it while the process is still suspended; the psutil fallback sets
+it right after launch (children started earlier are not pinned); macOS has no
+affinity API and records `unsupported`. The outcome is in
+`process.cpu_affinity` (`status`, `cpus`, `method`, `verified`). Pinning caps
+tools whose internal pools exceed the budget (Task 13: PDAL's `readers.las`
+used ~2.9 cores at a 1-CPU budget). Adapters still request their budget
+(threads, `-cores`, PDAL `readers.las threads = 1`). The results table reports
+`process_cpu_seconds` (max of `rusage` and the sampled tree),
+`measured_parallelism` (CPU-s per wall-s) and `cpu_budget_exceeded`
+(`> cpus × elapsed × 1.10 + 0.1 s`). The record also
 contains logical/physical CPUs, the orchestrator's CPU affinity, the adapter's
 environment delta and the effective child values of thread-related variables
 (`OMP_*`, BLAS, `RCPP_PARALLEL_NUM_THREADS`, `GDAL_NUM_THREADS`, ...), each
@@ -192,10 +228,12 @@ marked `delta`, `inherited` or `unset`. The full environment is never recorded.
   (`exited_processes` flags such intervals). OS accounting partly compensates:
   Windows job accounting is complete; POSIX `wait4` covers only waited-for
   descendants.
-- **Re-parented descendants.** A grandchild whose parent exits before the
-  sampler or the engine observed it cannot be found by psutil (POSIX process
-  group and Windows job membership still cover it for termination unless it
-  also left the group).
+- **Re-parented descendants.** On POSIX they are sampled as session members;
+  `wait4` accounting still excludes them (the report uses the larger of the
+  sampled and the accounted CPU). On Windows a grandchild whose parent exits
+  before it was observed cannot be found by psutil (job membership still
+  covers it for termination).
+- **CPU pinning** is not available on macOS; the budget is then only requested.
 - **Process-group escape before observation (POSIX).** A descendant that calls
   `setsid` and whose ancestors all exit before the next descendant snapshot
   cannot be terminated. Linux child-subreaper and cgroup containment are
