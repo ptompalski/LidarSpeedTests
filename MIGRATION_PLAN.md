@@ -126,7 +126,7 @@ Task 8 acceptance criteria:
 - [x] LAStools runs and is measured through the generic execution engine and the campaign runner (common `lidarbench.attempt/1` schema, `native_threads` / `-cores`).
 - [x] Missing installations or commands are `skipped_unavailable` / `unsupported` with reasons; nothing is downloaded, installed or licensed.
 - [x] Tests cover discovery, command construction, Windows `.exe` names, paths with spaces, missing executables, errors and expected artifacts; optional integration tests run with a real installation (260914 and 261023 on Linux).
-- [x] Cross-tool comparison stays conditional: LAStools contracts are `non_comparable` with undeclared cell ownership, so timings are descriptive only.
+- [x] Cross-tool comparison stays conditional: up to `workloads-v3` LAStools contracts are `non_comparable` (undeclared cell ownership); `workloads-v4` declares its cell rule and centimetre precision from pilot evidence (PILOT_REVIEW.md §14).
 - [x] LAStools `.tfw` world files are ignored sidecars in the new default suite `workloads-v3` (v1/v2 frozen).
 - [ ] Verified natively on Windows.
 
@@ -310,7 +310,7 @@ Task 11 acceptance criteria:
 - [x] Validated comparisons separate from descriptive results; gated speedups only.
 - [x] Repetitions and variability; raw records preserved; downloadable tables.
 - [x] Read-only historical import; works with unavailable tools/workloads; tested on synthetic records.
-- [x] Validated comparisons on real campaigns (edge-tolerant policy; 12/12 lidR/lasR/PDAL pairs in the confirmation pilot, PILOT_REVIEW.md §13).
+- [x] Validated comparisons on real campaigns (edge-tolerant policy; 24/24 pairs of lidR, lasR, LAStools and PDAL with `workloads-v4`, PILOT_REVIEW.md §13–14).
 
 **Acceptance Criteria**:
 - Structural validation works on output artifacts.
@@ -361,6 +361,10 @@ Decisions (PILOT_REVIEW.md §13): the new frozen comparability policy
 ownership, lasR outward extent); with it all 12 lidR/lasR/PDAL pairs pass the
 gate in `pilot-t13-20261029-004-edge-tolerant` (LAStools stays descriptive).
 lidR keeps R's default heap; the full-scale memory check is not needed.
+LAStools (PILOT_REVIEW.md §14): its outputs matched the upward-Y floor rule
+(DSM exactly; mean within centimetre rounding), so the new default suite
+`workloads-v4` declares that rule and `value_precision = 0.01`; in
+`pilot-t13-20261029-005-v4` all 24 pairs of the four tools pass the gate.
 Remaining: Windows/macOS pilots and the remaining contracts; the full campaign
 awaits approval.
 

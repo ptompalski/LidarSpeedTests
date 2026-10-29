@@ -115,7 +115,8 @@ the binaries' SHA-256, never the banner's licensing text. Nonzero exits,
 `ERROR`/`FATAL` lines, unlicensed notices, unrecognized warnings and missing
 outputs fail the attempt. The documented `lascanopy` cutoff warning is
 accepted only with `accept_known_cutoff_warning = true` (default `false`).
-LAStools results stay unverified and non-comparable with lidR/lasR. See
+From the `workloads-v4` contracts LAStools outputs are validated against its
+declared cell rule (upward-Y floor) and centimetre output precision. See
 [design/ADAPTERS.md](design/ADAPTERS.md) §9 and
 [configs/examples/lastools-campaign.toml](configs/examples/lastools-campaign.toml).
 

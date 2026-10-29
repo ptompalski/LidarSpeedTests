@@ -328,13 +328,19 @@ with recognized warnings is labelled the same way. The recorded policy is
 `lastools.accept_known_cutoff_warning`. This is a port of
 `benchmark_lastools_cutoff_warnings()` (README.md, WORKLOADS.md).
 
-**Validation.** The `workloads-v1` contracts declare LAStools `non_comparable`
-with `undeclared` cell ownership. Execution success therefore never makes
-LAStools timings comparable: at best they are `unverified` and descriptive
-only. LAStools also writes a `.tfw` world file beside every GeoTIFF. The
-`workloads-v1` contracts do not list `*.tfw` as an ignored sidecar, so artifact
-validation currently reports these files as unexpected. The legacy validator
-counted only primary extensions. Changing this needs a new contract version.
+**Validation.** Up to `workloads-v3` the contracts declare LAStools
+`non_comparable` with `undeclared` cell ownership, so its outputs are at best
+`unverified` and descriptive only. `workloads-v3` accepts the `.tfw` world file
+LAStools writes beside every GeoTIFF as an ignored sidecar (v1/v2 report it as
+unexpected). `workloads-v4` (default) declares LAStools `matched_definition` with
+the upward-Y floor cell rule (`pdal_binmode_floor`, the rule PDAL binmode uses)
+and, for `lascanopy -avg`, `value_precision = 0.01` (averages are written
+rounded to centimetres; the tolerance is widened by 0.005). On the Task 13 pilot
+pair (LAStools 261023) `lasgrid -highest` matched that reference exactly and
+`lascanopy -avg` within ±0.005 m with an identical NoData mask, so LAStools
+outputs are validated and functionally comparable (PILOT_REVIEW.md §14). The
+declaration rests on this evidence: a different LAStools build is re-validated
+by every campaign.
 
 Integration tests (`tests/python/test_lastools_integration.py`) run only when
 an installation is found, for example
@@ -462,6 +468,6 @@ installation validate the actual PDAL outputs:
 - LAStools `normalization`, `pixel_metrics_2` and `generate_DEM` (no contract yet).
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
-- Equivalence data covers only the contracts in `workloads/` (`workloads-v3` is
-  the default; `workloads-v1` and `workloads-v2` are kept frozen; v1 has no PDAL
+- Equivalence data covers only the contracts in `workloads/` (`workloads-v4` is
+  the default; `workloads-v1` to `workloads-v3` are kept frozen; v1 has no PDAL
   entry).

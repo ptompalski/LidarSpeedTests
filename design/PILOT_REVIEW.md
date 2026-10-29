@@ -2,7 +2,8 @@
 
 Status: pilot completed 2026-10-29 on Linux; follow-up changes and a validated
 pilot in §12 (supersedes the verdict of §1 and the priorities of §10); maintainer
-decisions, the edge-tolerant comparability policy and the final readiness in §13. Campaign
+decisions, the edge-tolerant comparability policy and the final readiness in §13;
+LAStools declared and comparable from `workloads-v4` in §14. Campaign
 `pilot-t13-20261029-001`, identity
 `e5c0234437b52ba03e53b97dcaa2d9a657a0da304d4b12a720f8f29fbf73a9e9`.
 Example configuration: [`configs/examples/pilot-campaign.toml`](../configs/examples/pilot-campaign.toml).
@@ -437,8 +438,8 @@ The validated report now has **12 of 12 lidR/lasR/PDAL pairs comparable**
 | lasR | accepted outward extent (one extra cell east/north) |
 | PDAL | 1 000 (`pixel_metrics_1a`) / 19 721 (`generate_DSM1`) points owned differently (`pdal_binmode_floor`, upward-Y edges) |
 
-LAStools remains descriptive only (`unverified`: its cell convention is
-undeclared). Ratios exist in the pilot report's `comparisons` table; per the
+LAStools remained descriptive only here (`unverified`: its cell convention was
+undeclared up to `workloads-v3`; resolved in §14). Ratios exist in the pilot report's `comparisons` table; per the
 project rule no ranking is published from pilot data.
 
 **Readiness.** LidarSpeedTests 2.0 is ready, on Linux, for the full campaign
@@ -449,3 +450,47 @@ cross-platform claim: Windows and macOS runs. Remaining scope: contracts for
 the other legacy workloads (TIN DEM, nine-band metrics, normalization,
 treetops) and the R `validation-v1` bridge. The full campaign is not started
 without the maintainer's approval.
+
+## 14. LAStools: why it was excluded and what changed (2026-10-29)
+
+**Why excluded.** Up to `workloads-v3` the contracts declared LAStools
+`non_comparable` with `undeclared` cell ownership (inherited from the legacy
+harness, where its conventions were never established). The validator could
+then only compare LAStools against the contract's `right_down` reference as a
+diagnostic, so its numerical status was `unverified`, which never enters a
+validated report or the comparability gate (not even under `edge-tolerant`,
+which tolerates *declared* edge differences only). The diagnostic disagreed:
+DSM ~3 300 cells per tile NoData where the reference had a value (and nearly as
+many the other way round), mean metric nearly every cell off by up to 0.13 m.
+
+**Evidence.** The LAStools outputs were regenerated with the campaign's exact
+argv (LAStools 261023) and validated against every implemented convention:
+
+| Workload | `right_down` (contract) | `lidr_buffered_clamp` | `pdal_binmode_floor` (upward-Y floor) |
+|---|---|---|---|
+| `generate_DSM1` (`lasgrid -highest`) | failed (≈3 300 mask differences per tile, values up to 38 m) | failed | **all values and the NoData mask exact** |
+| `pixel_metrics_1a` (`lascanopy -avg`) | failed (≈2 470 values per tile, up to 0.13 m) | failed | mask exact; every value within **0.005 m** |
+
+Every `lascanopy -avg` value is a whole number of centimetres (residual ≤
+float32 rounding), i.e. LAStools writes averages rounded to 0.01 m.
+
+**Decision and change** (maintainer: count values within the declared
+precision as passed). New default suite `workloads-v4` (commit `a8ba3f5`; v3
+frozen): LAStools `matched_definition` with `cell_ownership =
+"pdal_binmode_floor"` for both workloads and, for `pixel_metrics_1a`, the new
+optional contract field `value_precision = 0.01`, which widens the absolute
+tolerance by half a quantum (0.005 m) and is part of the digest and stated in
+each report. LAStools becomes `functionally_comparable`, like PDAL.
+
+**Confirmation** (`pilot-t13-20261029-005-v4`, same set-up as §13 with
+`workloads-v4`; preflight ready): all 64 entries succeeded; LAStools DSM
+`validated`, LAStools mean `validated` numerically and labelled
+`accepted_exception` because of the opted-in lascanopy cutoff warning
+(execution level); all four tools included (48 measurements); **24 of 24 tool
+pairs** (6 pairs × 2 workloads × 2 CPU counts) pass the edge-tolerant gate.
+LAStools' accepted differences equal PDAL's (1 000 / 19 721 boundary points),
+as expected for the same cell rule.
+
+**Caveat.** The declaration rests on one LAStools build and one dataset. Every
+campaign re-validates its own outputs: a build that bins or rounds differently
+fails numerical validation and is excluded instead of being compared.

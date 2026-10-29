@@ -83,7 +83,7 @@
 
 ### 1. Workloads and Contracts
 
-- Workloads are defined in `workloads/<suite>/` as TOML files. `workloads-v3` (default) = `workloads-v2` (the frozen `workloads-v1` definitions plus the PDAL implementation) with LAStools `*.tfw` world files as ignored sidecars; v1 and v2 are frozen.
+- Workloads are defined in `workloads/<suite>/` as TOML files. `workloads-v4` (default) = `workloads-v3` (= `workloads-v2`, the frozen `workloads-v1` definitions plus PDAL, with LAStools `*.tfw` world files as ignored sidecars) plus the LAStools cell rule (`pdal_binmode_floor`, upward-Y floor) and the `value_precision = 0.01` of lascanopy averages; v1–v3 are frozen.
 - A workload spec is tool-neutral; implementations are tool-specific.
 - Equivalence (matched_definition, diagnostic_only, unsupported, blocked) is declared in the spec, not inferred.
 - Changing a workload spec or equivalence, including adding a tool's implementation, requires a new suite version (it changes the contract digest).
@@ -277,6 +277,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 - 2026-10-28: Dataset manifests, recipes, data roots and `lidarbench data` (Task 10; design/DATASETS.md).
 - 2026-10-29: Reporting dataset, `lidarbench report`, Quarto site and historical import (Task 11; design/REPORTING.md).
 - 2026-10-29: End-to-end pilot and readiness review (Task 13; design/PILOT_REVIEW.md).
-- 2026-10-29: Runner validation with verdict reuse, `workloads-v3`, CPU pinning, session monitoring, guardian, R namespace preload, PDAL reader threads, `lidarbench preflight` (Task 13 follow-up).
+- 2026-10-29: Runner validation with verdict reuse, `workloads-v3`/`-v4`, edge-tolerant comparability, CPU pinning, session monitoring, guardian, R namespace preload, PDAL reader threads, `lidarbench preflight` (Task 13 follow-up).
 
 **Last reviewed**: 2026-10-29

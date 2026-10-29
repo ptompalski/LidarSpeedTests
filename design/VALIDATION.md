@@ -29,16 +29,20 @@ primary artifact names (`{stem}.tif`, `{stem}_avg.tif`), the tool's cell
 ownership convention and whether band names are part of the contract.
 
 Suites: `workloads-v1` (frozen, lidR/lasR/LAStools), `workloads-v2` (frozen: the
-same definitions plus the PDAL implementation) and `workloads-v3` (the default:
+same definitions plus the PDAL implementation), `workloads-v3` (frozen:
 `workloads-v2` plus LAStools `*.tfw` world files as ignored sidecars, so that
-LAStools outputs are no longer `validation_failed` at the artifacts level). A new tool entry
+LAStools outputs are no longer `validation_failed` at the artifacts level) and
+`workloads-v4` (the default: `workloads-v3` plus the LAStools declaration below).
+An implementation may declare `value_precision` (an output quantum, for example
+0.01 m when a tool rounds its values); the absolute tolerance is then widened by
+half of it, the reports say so, and the value is part of the contract digest. A new tool entry
 changes the contract digest, so it needs a new suite (the comparison gate
 requires equal digests). Contract values come from WORKLOADS.md:
 
 | Contract | Statistic | Grid | lidR | lasR | LAStools | PDAL (v2) |
 |---|---|---|---|---|---|---|
-| `pixel_metrics_1a` | mean original Z, band `z_mean` | 20 m | matched, `lidr_buffered_clamp` | matched, `right_down` | non-comparable, `undeclared`, `{stem}_avg.tif` | matched, `pdal_binmode_floor`, band name not required |
-| `generate_DSM1` | max original Z | 1 m | matched, `lidr_buffered_clamp` | matched, `right_down` | non-comparable, `undeclared` | matched, `pdal_binmode_floor` |
+| `pixel_metrics_1a` | mean original Z, band `z_mean` | 20 m | matched, `lidr_buffered_clamp` | matched, `right_down` | v4: matched, `pdal_binmode_floor`, `value_precision = 0.01`, `{stem}_avg.tif` (≤ v3: non-comparable, `undeclared`) | matched, `pdal_binmode_floor`, band name not required |
+| `generate_DSM1` | max original Z | 1 m | matched, `lidr_buffered_clamp` | matched, `right_down` | v4: matched, `pdal_binmode_floor` (≤ v3: non-comparable, `undeclared`) | matched, `pdal_binmode_floor` |
 
 `WorkloadContract.declared_comparability(tool)` derives the declared class
 (reported under `implementation.declared_comparability`):
@@ -69,7 +73,7 @@ Both use a 20 m buffer and `|actual − reference| ≤ 2e-6 + 2e-7·|reference|`
   point on a horizontal edge belongs to the cell north of it, and points on the
   grid's north edge are outside the tile's raster (design/ADAPTERS.md §10). Near
   edges the assignment follows PDAL's division rounding, not exact rationals.
-* **`undeclared`**: the convention has not been established (native LAStools).
+* **`undeclared`**: the convention has not been established (LAStools up to `workloads-v3`).
 
 Indices are computed with `floor`/`ceil` and then corrected by exact
 comparison with the float64 edges `i·r`, so a point exactly on an edge is
@@ -186,9 +190,11 @@ Each report lists these per attempt under `claims`.
 
 * Behaviour on inputs other than those validated: a passed fixture or dataset
   is not a general proof of equivalence or correctness.
-* LAStools numerical conventions (cell ownership, cutoff comparison, encoding):
-  `undeclared`, so native outputs are at best `unverified`, even when the
-  diagnostic comparison agrees.
+* That every LAStools build bins by the upward-Y floor rule and rounds averages
+  to 0.01 m (declared in `workloads-v4` from LAStools 261023 on the Petawawa
+  pilot pair; each campaign re-validates its own build and fails it otherwise).
+  Up to `workloads-v3` LAStools conventions are `undeclared` and its outputs at
+  best `unverified`.
 * That real PDAL bins exactly by the mirrored `pdal_binmode_floor` rule. This
   comes from the PDAL source and holds only where
   `tests/python/test_pdal_integration.py` passes against an installed PDAL.
@@ -268,7 +274,7 @@ fails the campaign: an exception is recorded as a warning and the attempt keeps
 `retain = "on-failure"`.
 
 * **Contract.** The campaign's `[validation] suite` (default: the checkout's
-  `workloads/workloads-v3`) is frozen in identity: every workload's contract key
+  `workloads/workloads-v4`) is frozen in identity: every workload's contract key
   and digest is part of the `workloads` component. A contract whose digest
   differs at run time is not used (the run would already refuse the changed
   identity). Workloads without a contract (synthetic) are not validated.
@@ -321,4 +327,3 @@ are always decoded in full (structure needs them).
 
 * The R `validation-v1` bridge and Python references for the remaining
   workloads (TIN surfaces, nine-band metrics, normalization, treetops).
-* LAStools cell ownership is undeclared, so its outputs stay `unverified`.
