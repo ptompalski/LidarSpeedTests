@@ -1,0 +1,68 @@
+# Example campaign: PDAL JSON pipelines through the generic execution engine
+# (design/ADAPTERS.md §10).
+#
+#   uv run lidarbench check --adapter pdal
+#   lidarbench run configs/examples/pdal-campaign.toml --dry-run
+#   lidarbench run configs/examples/pdal-campaign.toml
+#
+# PDAL (>= 2.5.0, for writers.gdal binmode) is never downloaded or installed by
+# lidarbench. Point the adapter at an existing pdal with the executable option
+# below or $LIDARBENCH_PDAL, or put pdal on PATH (for example by activating its
+# conda environment, which also sets PROJ/GDAL data paths). On Windows use the
+# path of pdal.exe.
+#
+# Each attempt runs `pdal pipeline` once per tile (cpu_counts = concurrent
+# pipelines). PDAL owns points on horizontal cell edges differently from the
+# contract (upward Y), so its timings are "functionally comparable": validated
+# under its own convention, comparable only where no point lies on such an edge.
+schema = "lidarbench.campaign-config/1"
+campaign_id = "pdal-example-001"
+description = "PDAL, mean metric and maximum DSM"
+workspace = "/path/to/lidarbench-workspace"
+validation_mode = "performance-only"
+cpu_counts = [1, 4]                 # concurrent pdal pipeline processes
+timeout_s = 7200
+
+[scheduling]
+seed = 20261028
+repetitions = 3
+warmups = 1
+tool_order = "balanced"
+cooldown_s = 10.0
+cache_policy = "uncontrolled-warm"
+
+[monitoring]
+enabled = true
+backend = "psutil"
+interval_s = 0.5
+required = true
+
+[scratch]
+roots = { local = "/path/to/benchmark-scratch" }
+retain = "never"
+
+[integrity]
+record_output_digests = true
+verify_inputs_at_end = true
+
+[[datasets]]
+id = "tiles"
+path = "/path/to/input-tiles"
+include = ["*.laz"]
+
+[[workloads]]
+id = "pixel_metrics_1a"             # writers.gdal binmode, output_type mean, 20 m
+parameters = { epsg = 2959 }        # optional: writers.gdal override_srs (no reprojection)
+
+[[workloads]]
+id = "generate_DSM1"                # writers.gdal binmode, output_type max, 1 m
+parameters = { epsg = 2959 }
+
+[[tools]]
+id = "pdal"
+# execution_mode: "stream" (default; --stream, fails if PDAL cannot stream),
+# "standard" (--nostream, whole tiles in memory) or "prefer" (PDAL decides; the
+# mode used is then not recorded). Part of the campaign identity.
+options = { executable = "/path/to/conda/envs/pdal/bin/pdal", execution_mode = "stream" }
+# options = { executable = "C:/Users/me/miniforge3/envs/pdal/Library/bin/pdal.exe",
+#             expected_version = "2.8.4", version_timeout_s = 60.0 }

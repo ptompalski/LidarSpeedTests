@@ -29,7 +29,7 @@ from lidarbench.core.canonical import digest
 from lidarbench.execution.adapters.base import WORKLOAD_ID_PATTERN, ImplementationStatus
 
 CONTRACT_SCHEMA = "lidarbench.workload/1"
-DEFAULT_SUITE = "workloads-v1"
+DEFAULT_SUITE = "workloads-v2"
 
 SUITE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 TOOL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -44,6 +44,14 @@ CELL_OWNERSHIP = {
         "right_down on interior edges; a point exactly on the core raster's maximum X "
         "(minimum Y) edge is clamped into the last column (bottom row) only when the "
         "buffered layout does not extend past that edge (pinned lidR 4.3.3)."
+    ),
+    "pdal_binmode_floor": (
+        "PDAL writers.gdal binmode (>= 2.5.0) on a grid whose lower-left corner is the "
+        "tile's snapped (xmin, ymin): column floor((X - xmin) / r) and row "
+        "floor((Y - ymin) / r) counted upwards, evaluated in IEEE-754 binary64 exactly as "
+        "PDAL does. On exact edges: rightward X and upward Y, so a point on a horizontal "
+        "edge belongs to the cell north of it and a point on the grid's north edge is "
+        "outside the tile's raster."
     ),
     "undeclared": (
         "The tool's cell ownership has not been established; numerical agreement can be "
@@ -64,6 +72,13 @@ REFERENCE_METHODS = ("cell_statistic",)
 STATISTICS = ("mean", "max")
 EQUIVALENCE = ("matched_definition", "non_comparable")
 BAND_NAMES = ("required", "not_required")
+COMPARABILITY = (
+    "strictly_comparable",
+    "functionally_comparable",
+    "non_comparable",
+    "unsupported",
+)
+"""Declared classifications (:meth:`WorkloadContract.declared_comparability`)."""
 ARTIFACT_PLACEHOLDER = "{stem}"
 
 
@@ -220,6 +235,29 @@ class WorkloadContract:
     def implementation(self, tool: str) -> Implementation | None:
         """Declared implementation for ``tool`` (exact name), or ``None``."""
         return self.implementations.get(tool)
+
+    def declared_comparability(self, tool: str) -> str:
+        """Declared classification of ``tool``'s implementation (one of :data:`COMPARABILITY`).
+
+        Derived from the declaration only, never from results:
+
+        * ``strictly_comparable``: runnable, ``matched_definition`` and the
+          contract's own cell partition;
+        * ``functionally_comparable``: ``matched_definition`` with a different,
+          declared cell convention (same statistic and grid; edge points may be
+          owned differently, so per-attempt ``boundary_difference_points`` decides);
+        * ``non_comparable``: declared ``non_comparable`` (including
+          ``diagnostic_only``);
+        * ``unsupported``: no implementation, or status ``unsupported``/``blocked``.
+        """
+        impl = self.implementations.get(tool)
+        if impl is None or not impl.status.dispatchable:
+            return "unsupported"
+        if impl.equivalence != "matched_definition" or not impl.ownership_declared:
+            return "non_comparable"
+        if impl.cell_ownership == self.raster.cell_ownership:
+            return "strictly_comparable"
+        return "functionally_comparable"
 
     def is_ignored_sidecar(self, name: str) -> bool:
         """Whether ``name`` is an optional sidecar that is never a primary artifact."""

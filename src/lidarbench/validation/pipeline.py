@@ -148,6 +148,7 @@ class ValidationReport:
                     "status": impl.status.value,
                     "equivalence": impl.equivalence,
                     "cell_ownership": impl.cell_ownership,
+                    "declared_comparability": contract.declared_comparability(request.tool),
                     "artifacts": list(impl.artifacts),
                     "note": impl.note,
                 }

@@ -340,12 +340,122 @@ Integration tests (`tests/python/test_lastools_integration.py`) run only when
 an installation is found, for example
 `LIDARBENCH_LASTOOLS_BIN=/path/to/LAStools/bin uv run pytest tests/python/test_lastools_integration.py`.
 
-## 10. Not yet implemented
+## 10. PDAL adapter (`pdal`)
 
-- Real adapters `cli`, `pylib` and `pdal`. The modules exist as placeholders
-  and are not registered.
-- LAStools `normalization`, `pixel_metrics_2` and `generate_DEM` (no
-  `workloads-v1` contract yet).
+`execution/adapters/pdal.py` expresses the workloads with PDAL's own stages
+(not a port of an R call) and runs them with the native `pdal pipeline` command
+(example: [configs/examples/pdal-campaign.toml](../configs/examples/pdal-campaign.toml)).
+Nothing is downloaded or installed.
+
+**Discovery and platforms.** The `executable` option, else `$LIDARBENCH_PDAL`,
+else `pdal` on `PATH` (`pdal.exe` through `PATHEXT` on Windows; activate a conda
+environment to put it there). Linux, Windows and macOS are supported; other
+systems are `platform_unsupported`. Probing runs `pdal --version` (must print
+one `pdal x.y.z` line), `pdal --drivers --showjson` (needs `readers.las`,
+`filters.merge`, `writers.gdal`) and `pdal --options writers.gdal --showjson`
+(needs `binmode`, `origin_x`, `origin_y`, `width`, `height`, `output_type`,
+`nodata`, `data_type`, `gdaldriver`, `override_srs`, `resolution`). PDAL older
+than 2.5.0 (no `binmode`), a missing option or `expected_version` mismatch is
+`version_unsupported`; a missing stage is `misconfigured`. Identity records the
+version, the full version string, the `pdal` and launcher Python executables
+(hashed by the campaign), the discovery source and the execution mode.
+
+**Pipelines.** One pipeline file per input tile, written by the orchestrator as
+`ConfigFile`s (`pipeline-0001.json`, …) into the work directory:
+
+```text
+readers.las(tile) [, readers.las(neighbour)… → filters.merge]
+  → writers.gdal(binmode=true, output_type=mean|max, resolution=r,
+                 origin_x, origin_y, width, height,      # header bounds snapped outward
+                 nodata=-9999, data_type=double, gdaldriver=GTiff
+                 [, override_srs="EPSG:N"])               # optional epsg parameter
+```
+
+Neighbours are the inputs whose header bounds intersect the tile bounds grown by
+the contract buffer (20 m, closed rectangle) — the validator's population rule.
+The grid is fixed explicitly because PDAL otherwise sizes it from the points as
+`floor(extent / r) + 1` cells. JSON is UTF-8 with paths verbatim, so spaces,
+non-ASCII characters and Windows separators need no quoting. Paths containing
+`#` (PDAL expands it into per-view file names) or `://` (URL) are `unsupported`.
+
+**Execution.** The benchmarked command is the stdlib launcher
+`python -m lidarbench.execution.adapters.pdal_worker --job pdal-job.json`
+(threading model `concurrent_files`, 1+). It runs
+`pdal pipeline <pipeline> --metadata <file> [--stream|--nostream]` once per tile,
+at most `threads` at a time, with argv and no shell. Each child's output goes to
+a per-tile log that is echoed into the attempt's stdout. After the first failure
+no further pipeline starts and running ones are terminated. The launcher writes
+`pdal-run.json` (`lidarbench.pdal-run/1`: exit codes and launch/exit instants).
+`execution_mode` (option, default `stream`, part of the identity) selects
+`--stream` (fail if PDAL cannot stream), `standard` (`--nostream`) or `prefer`
+(PDAL's choice, not recorded). Environment: thread caps of 1 and
+`GDAL_NUM_THREADS=1`. The timed interval is the launcher process (Python start-up
+included). `tool_timing` reports the inner interval from the first `pdal` launch
+to the last exit.
+
+**Interpretation (fail closed).** The attempt fails on a missing or inconsistent
+run record, any tile that did not run or exited nonzero, any line containing
+`error`/`exception`/`fatal`/`PDAL:` or `warning` in a tile log (even with exit
+0), a missing or empty raster, or a missing `--metadata` record. `details`
+capture every pipeline document, per-tile exit codes, instants and log digests,
+and a summary of each metadata record (SHA-256, size, reader counts and bounds,
+the `writers.gdal` node). Config-file digests are in `invocation.json`.
+
+**Semantics, from the PDAL source** (`io/GDALWriter.cpp`,
+`io/private/GDALGrid.cpp`, `pdal/private/Raster.hpp`; identical in 2.5.0 and
+2.10):
+
+| Topic | PDAL behaviour | Contract (`workloads-v2`) |
+|---|---|---|
+| Neighbourhood | Default mode adds each point to every cell whose centre is within `radius` (default `r·√2`), with optional `window_size` fill. `binmode=true` bins each point into one cell. Only binmode is used. | cell statistic |
+| Cell index | `floor((X − origin_x)/r)`, `floor((Y − origin_y)/r)` in binary64, rows counted **upwards** from `origin_y` | `right_down` |
+| Exact edges | rightward X, **upward** Y: a point on a horizontal edge goes north; points on the grid's north/east edge are outside this tile's raster, those on its south/west edge inside | downward Y; north edge inside, south edge outside |
+| Statistic | `mean`: running (Welford) mean in double; `max`: maximum | float64 mean / max |
+| Empty cells | NaN internally, written as `nodata` (double default −9999, set explicitly) | NoData |
+| Band | one band per `output_type`, description `mean`/`max` | `z_mean` required only for lidR/lasR |
+| Extent | as given by `origin_x/origin_y/width/height` | header bounds snapped outward |
+
+The contract convention `pdal_binmode_floor` mirrors this arithmetic exactly
+(`validation/grid.py`), so a PDAL raster is validated against a reference built
+with PDAL's own edge rule, and `boundary_difference_points` measures how many
+points it owns differently from the contract partition. Platforms whose
+compilers fuse the LAS scale/offset multiply-add can decode a coordinate one ulp
+differently. A point that close to an edge would then be binned differently and
+validation would fail rather than hide it.
+
+**Classification.** `WorkloadContract.declared_comparability()` derives one of
+four classes from the declaration (never from results): `strictly_comparable`
+(matched definition, contract partition), `functionally_comparable` (matched
+definition, different declared edge convention), `non_comparable` and
+`unsupported`.
+
+| Workload | lidR | lasR | LAStools | PDAL |
+|---|---|---|---|---|
+| `pixel_metrics_1a` | functionally | strictly | non-comparable | **functionally** |
+| `generate_DSM1` | functionally | strictly | non-comparable | **functionally** |
+| `normalization`, `generate_DEM`, `generate_DSM2`, `pixel_metrics_2`, `tree_detection`, `complex_task1/2` | — | — | — | **unsupported** (no contract; candidate PDAL stages are not evaluated) |
+
+PDAL computes the same population, grid and statistic, but its upward-Y edge rule
+differs from the contract and from lidR's clamp and lasR's partition. PDAL is
+therefore never declared identical to lidR or lasR. An attempt can still become
+`comparable` only through the existing data-driven gate (validated and
+`boundary_difference_points == 0`, for example when no point lies on a
+horizontal cell edge). Data quantized to centimetres usually has points on 1 m
+grid lines, so PDAL `generate_DSM1` timings are normally `descriptive_only`.
+The adapter adds no transformation to force agreement.
+
+Unit tests (`tests/python/test_pdal_adapter.py`) use a fake `pdal` that
+reproduces the documented binmode arithmetic and also check pipeline
+generation, discovery, failures and a campaign. Integration tests with a real
+installation validate the actual PDAL outputs:
+`LIDARBENCH_PDAL=/path/to/pdal uv run pytest tests/python/test_pdal_integration.py`.
+
+## 11. Not yet implemented
+
+- Real adapters `cli` and `pylib`. The modules exist as placeholders and are
+  not registered.
+- LAStools `normalization`, `pixel_metrics_2` and `generate_DEM` (no contract yet).
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
-- Equivalence data covers only the `workloads-v1` contracts in `workloads/`.
+- Equivalence data covers only the contracts in `workloads/` (`workloads-v2` is
+  the default; `workloads-v1` is kept frozen and has no PDAL entry).

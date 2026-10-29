@@ -28,12 +28,22 @@ status (`runnable`, `diagnostic_only`, `unsupported`, `blocked`), the
 primary artifact names (`{stem}.tif`, `{stem}_avg.tif`), the tool's cell
 ownership convention and whether band names are part of the contract.
 
-Initial contracts (values from WORKLOADS.md):
+Suites: `workloads-v1` (frozen, lidR/lasR/LAStools) and `workloads-v2` (the
+default): the same definitions plus the PDAL implementation. A new tool entry
+changes the contract digest, so it needs a new suite (the comparison gate
+requires equal digests). Contract values come from WORKLOADS.md:
 
-| Contract | Statistic | Grid | lidR | lasR | LAStools |
-|---|---|---|---|---|---|
-| `pixel_metrics_1a` | mean original Z, band `z_mean` | 20 m | matched, `lidr_buffered_clamp` | matched, `right_down` | non-comparable, `undeclared`, `{stem}_avg.tif` |
-| `generate_DSM1` | max original Z | 1 m | matched, `lidr_buffered_clamp` | matched, `right_down` | non-comparable, `undeclared` |
+| Contract | Statistic | Grid | lidR | lasR | LAStools | PDAL (v2) |
+|---|---|---|---|---|---|---|
+| `pixel_metrics_1a` | mean original Z, band `z_mean` | 20 m | matched, `lidr_buffered_clamp` | matched, `right_down` | non-comparable, `undeclared`, `{stem}_avg.tif` | matched, `pdal_binmode_floor`, band name not required |
+| `generate_DSM1` | max original Z | 1 m | matched, `lidr_buffered_clamp` | matched, `right_down` | non-comparable, `undeclared` | matched, `pdal_binmode_floor` |
+
+`WorkloadContract.declared_comparability(tool)` derives the declared class
+(reported under `implementation.declared_comparability`):
+`strictly_comparable` (matched definition and the contract partition: lasR),
+`functionally_comparable` (matched definition, other declared edge convention:
+lidR, PDAL), `non_comparable` (LAStools) or `unsupported`. Only the attempt-level
+gate below can make a timing `comparable`.
 
 Both use a 20 m buffer and `|actual − reference| ≤ 2e-6 + 2e-7·|reference|`.
 
@@ -50,6 +60,13 @@ Both use a 20 m buffer and `|actual − reference| ≤ 2e-6 + 2e-7·|reference|`
   last column / bottom row when pinned lidR's buffered raster layout does not
   extend past that edge. This mirrors `benchmark_reference_cells()` in
   `R/1_functions.R` (layout edges rounded half away from zero).
+* **`pdal_binmode_floor`**: PDAL `writers.gdal` with `binmode=true` (>= 2.5.0).
+  Column `floor((X − xmin)/r)` and row `floor((Y − ymin)/r)` counted upwards
+  from the tile grid's south edge, evaluated in binary64 exactly as PDAL does
+  (`pdal/private/Raster.hpp`). On exact edges: rightward X, **upward** Y, so a
+  point on a horizontal edge belongs to the cell north of it, and points on the
+  grid's north edge are outside the tile's raster (design/ADAPTERS.md §10). Near
+  edges the assignment follows PDAL's division rounding, not exact rationals.
 * **`undeclared`**: the convention has not been established (native LAStools).
 
 Indices are computed with `floor`/`ceil` and then corrected by exact
@@ -170,6 +187,9 @@ Each report lists these per attempt under `claims`.
 * LAStools numerical conventions (cell ownership, cutoff comparison, encoding):
   `undeclared`, so native outputs are at best `unverified`, even when the
   diagnostic comparison agrees.
+* That real PDAL bins exactly by the mirrored `pdal_binmode_floor` rule. This
+  comes from the PDAL source and holds only where
+  `tests/python/test_pdal_integration.py` passes against an installed PDAL.
 * That pinned lidR's real clamping rule is exactly the mirrored R reference
   rule in general; it is established only where outputs pass (the real-tool
   fixture integration test passes for both workloads).

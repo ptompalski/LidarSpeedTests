@@ -27,7 +27,7 @@ def _data(name: str = "pixel_metrics_1a") -> dict:
 
 def test_suite_defines_the_two_initial_workloads():
     suite = load_suite(SUITE)
-    assert suite.name == "workloads-v1"
+    assert suite.name == "workloads-v2"
     assert sorted(suite.contracts) == ["generate_DSM1", "pixel_metrics_1a"]
     mean = suite.get("pixel_metrics_1a")
     assert (mean.statistic, mean.raster.resolution, mean.raster.bands) == (
@@ -46,6 +46,16 @@ def test_suite_defines_the_two_initial_workloads():
         lastools = contract.implementation("lastools")
         assert lastools.equivalence == "non_comparable"
         assert not lastools.ownership_declared
+        assert contract.implementation("pdal").cell_ownership == "pdal_binmode_floor"
+
+
+def test_frozen_v1_suite_has_no_pdal():
+    """workloads-v1 stays loadable and unchanged; PDAL exists only from workloads-v2."""
+    v1 = load_suite(default_suite_dir("workloads-v1"))
+    assert v1.name == "workloads-v1"
+    for contract in v1.contracts.values():
+        assert sorted(contract.implementations) == ["lasR", "lastools", "lidR"]
+        assert contract.equivalence_group == f"workloads-v1/{contract.id}"
 
 
 def test_matrix_matches_workloads_md():
@@ -54,11 +64,11 @@ def test_matrix_matches_workloads_md():
     for workload in ("pixel_metrics_1a", "generate_DSM1"):
         contract = suite.get(workload)
         assert {t: i.status for t, i in contract.implementations.items()} == dict.fromkeys(
-            ("lidR", "lasR", "lastools"), ImplementationStatus.RUNNABLE
+            ("lidR", "lasR", "lastools", "pdal"), ImplementationStatus.RUNNABLE
         )
         assert {
             t for t, i in contract.implementations.items() if i.equivalence == "matched_definition"
-        } == {"lidR", "lasR"}
+        } == {"lidR", "lasR", "pdal"}
     assert suite.get("pixel_metrics_1a").implementation("lastools").artifacts == ("{stem}_avg.tif",)
 
 

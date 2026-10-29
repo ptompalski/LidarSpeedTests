@@ -53,6 +53,7 @@ synthetic = "lidarbench.execution.adapters.synthetic:SyntheticAdapter"
 lidr = "lidarbench.execution.adapters.lidr:LidRAdapter"
 lasr = "lidarbench.execution.adapters.lasr:LasRAdapter"
 lastools = "lidarbench.execution.adapters.lastools:LastoolsAdapter"
+pdal = "lidarbench.execution.adapters.pdal:PdalAdapter"
 
 [project.entry-points."lidarbench.monitors"]
 psutil = "lidarbench.monitoring.psutil_backend:PsutilBackend"

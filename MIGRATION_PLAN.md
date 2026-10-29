@@ -130,6 +130,31 @@ Task 8 acceptance criteria:
 - [ ] `workloads-v1` treats LAStools `.tfw` world files as unexpected artifacts; accepting them needs a new contract version.
 - [ ] Verified natively on Windows.
 
+**Progress — Task 9 (PDAL adapter) ✅ DONE**: an independent `pdal` adapter
+expresses `pixel_metrics_1a` and `generate_DSM1` as native PDAL JSON pipelines
+(`readers.las` + buffered neighbours → `filters.merge` → `writers.gdal` with
+`binmode=true`, fixed snapped grid, explicit NoData and data type). A stdlib
+launcher runs `pdal pipeline` per tile through the generic `plan_invocation` →
+`execute_plan` → campaign path (`concurrent_files`). Discovery uses the
+`executable` option, `$LIDARBENCH_PDAL` or `PATH`. Probing checks the version
+(>= 2.5.0) and the required stages and options on Linux, Windows and macOS.
+Pipelines, versions, per-tile logs, `--metadata` summaries and the inner timing
+are recorded with each attempt. Grid assignment, neighbourhood (radius versus
+binmode), edges, NoData and the statistics were taken from the PDAL source
+(design/ADAPTERS.md §10). The new `pdal_binmode_floor` convention (rightward X,
+upward Y) mirrors them in the independent validator. The PDAL entries live in
+the new default suite `workloads-v2`; `workloads-v1` stays frozen. Contracts now
+derive a declared class: strictly comparable, functionally comparable,
+non-comparable or unsupported.
+
+Task 9 acceptance criteria:
+- [x] PDAL is a separate entry-point adapter; no change to the orchestrator (`execution/`, `campaign/`).
+- [x] Missing or too-old PDAL is `skipped_unavailable` with a reason; nothing is installed.
+- [x] Tests cover discovery, version/capability checks, pipeline generation (spaces, non-ASCII, Windows separators), failures, a campaign run and independent validation of rasters from a fake `pdal`. Optional real-PDAL tests are in `tests/python/test_pdal_integration.py`.
+- [x] Both workloads are classified *functionally comparable* (upward-Y edge rule); the other legacy workloads are *unsupported* with reasons.
+- [ ] Real-PDAL integration tests run on a machine with PDAL (none installed in the development environment).
+- [ ] Verified natively on Windows and macOS.
+
 **Key tasks**:
 - [x] Base adapter protocol and plugin discovery.
 - Generic CLI adapter with configurable success rules.
@@ -277,7 +302,7 @@ Task 6 acceptance criteria:
 - Distributed campaigns (multi-machine scheduling).
 - Web dashboard for monitoring.
 - Performance profiling and optimization.
-- Additional tool adapters (PDAL, CloudCompare, etc.).
+- Additional tool adapters (CloudCompare, etc.; PDAL done in Task 9).
 - Hardware monitoring (power, thermal, network I/O).
 - Custom validators (py-geo using rasterio/laspy).
 - CI/CD integration (GitHub Actions, GitLab CI).

@@ -83,10 +83,11 @@
 
 ### 1. Workloads and Contracts
 
-- Workloads are defined in `workloads/workloads-v1/` as TOML files.
+- Workloads are defined in `workloads/<suite>/` as TOML files. `workloads-v2` (default) = the frozen `workloads-v1` definitions plus the PDAL implementation.
 - A workload spec is tool-neutral; implementations are tool-specific.
 - Equivalence (matched_definition, diagnostic_only, unsupported, blocked) is declared in the spec, not inferred.
-- Changing a workload spec or equivalence requires a new version (workloads-v2).
+- Changing a workload spec or equivalence, including adding a tool's implementation, requires a new suite version (it changes the contract digest).
+- The declared four-way class (`strictly_comparable`, `functionally_comparable`, `non_comparable`, `unsupported`) is derived by `WorkloadContract.declared_comparability()`; never hard-code it elsewhere.
 
 ### 2. Campaign Identity
 
@@ -133,6 +134,15 @@ Normative description: [design/ADAPTERS.md](design/ADAPTERS.md) §9 (`execution/
 - Argument templates are pinned from `R/0_setup.R` (a test parses the R file). The height cutoff is derived from the input headers, never configured. `-fail` is always appended.
 - Identity keeps only the build number from `-version`. Never record, hash or quote licensing text or license files.
 - `interpret()` fails on nonzero exits, `ERROR`/`FATAL`, unlicensed notices, any unrecognized `WARNING:` line and missing/empty outputs. The only accepted exception is the opt-in (`accept_known_cutoff_warning`, default false) lascanopy cutoff warning for `pixel_metrics_1a`, declared through `CommandSpec.accepted_exceptions`.
+
+### 5b. PDAL Adapter
+
+Normative description: [design/ADAPTERS.md](design/ADAPTERS.md) §10 (`execution/adapters/pdal.py`, launcher `pdal_worker.py`).
+
+- Discovery: `executable` option → `$LIDARBENCH_PDAL` → `pdal` on `PATH`. Never install PDAL. Probing requires PDAL >= 2.5.0 and checks stages/options with `--drivers --showjson` and `--options writers.gdal --showjson`.
+- One JSON pipeline per tile (`readers.las` tile + 20 m neighbours → `filters.merge` → `writers.gdal binmode=true`, fixed `origin_x/origin_y/width/height`, `nodata=-9999`, `double`). Never use radius mode for cell statistics.
+- The stdlib launcher runs `pdal pipeline` per tile (`concurrent_files`) and writes `pdal-run.json`; `interpret()` fails on any nonzero tile, error/warning line, missing output or missing `--metadata` record.
+- PDAL edge ownership is `pdal_binmode_floor` (rightward X, upward Y): `functionally_comparable`, never declared identical to lidR/lasR. Do not add transformations to force agreement.
 
 ### 6. Configuration and Validation
 
@@ -235,5 +245,6 @@ A: Use `@pytest.mark.platform`, `platform.system()` checks, and either run the t
 - 2026-10-28: Validation framework and workload contracts (Task 6; design/VALIDATION.md).
 - 2026-10-28: lidR/lasR adapters through the R bridge and the adapter `interpret()` hook (Task 7; design/R_BRIDGE.md).
 - 2026-10-28: LAStools native adapter and declared accepted exceptions (Task 8; design/ADAPTERS.md §9).
+- 2026-10-28: PDAL adapter, `workloads-v2` suite and declared comparability classes (Task 9; design/ADAPTERS.md §10).
 
 **Last reviewed**: 2026-10-28

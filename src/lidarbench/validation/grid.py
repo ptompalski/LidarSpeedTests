@@ -149,6 +149,16 @@ def assign_cells(x: FloatArray, y: FloatArray, grid: GridSpec, convention: str) 
         ValueError: Unknown or undeclared convention.
     """
     r = grid.resolution
+    if convention == "pdal_binmode_floor":
+        # Mirrors PDAL Raster::xCell/yCell: floor((v - origin) / r) in binary64 with the
+        # origin at the grid's lower-left corner; rows are counted upwards.
+        with np.errstate(invalid="ignore", over="ignore"):
+            col = np.floor((x - grid.xmin) / r)
+            up = np.floor((y - grid.ymin) / r)
+        row = (grid.nrows - 1) - up
+        inside = (col >= 0) & (col < grid.ncols) & (row >= 0) & (row < grid.nrows)
+        flat = np.where(inside, row * grid.ncols + col, -1)
+        return flat.astype(np.int64)
     i = column_index(x, r)
     j = row_index(y, r)
     if convention == "lidr_buffered_clamp":

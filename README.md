@@ -1,4 +1,4 @@
-Work in progress: this repository is for testing the performance of LiDAR processing software packages, designed for—but not limited to—typical forestry-related workflows involving airborne laser scanning data. Currently tested packages are lidR, lasR, and LAStools.
+Work in progress: this repository is for testing the performance of LiDAR processing software packages, designed for—but not limited to—typical forestry-related workflows involving airborne laser scanning data. Currently tested packages are lidR, lasR, LAStools and (through the Python orchestrator) PDAL.
 
 Fresh-data preparation uses `cli` for status messages and parent-process progress
 bars for the repair/check, preparation and verification phases. Progress counts completed tile
@@ -39,9 +39,10 @@ verifier may leave no final status record.
 The Python orchestrator `lidarbench` is being built beside the R harness (see
 [design/ARCHITECTURE.md](design/ARCHITECTURE.md) and
 [MIGRATION_PLAN.md](MIGRATION_PLAN.md)). It runs campaigns with the `lidr` and
-`lasr` adapters (lidR and lasR through `Rscript`) and the `lastools` adapter
-(native LAStools) for the mean-elevation and maximum-DSM workloads, and with a
-deterministic `synthetic` test adapter.
+`lasr` adapters (lidR and lasR through `Rscript`), the `lastools` adapter
+(native LAStools) and the `pdal` adapter (`pdal pipeline` JSON pipelines) for the
+mean-elevation and maximum-DSM workloads, and with a deterministic `synthetic`
+test adapter.
 
 ```sh
 uv sync                            # create .venv/ from uv.lock (install uv: https://docs.astral.sh/uv/)
@@ -100,6 +101,20 @@ accepted only with `accept_known_cutoff_warning = true` (default `false`).
 LAStools results stay unverified and non-comparable with lidR/lasR. See
 [design/ADAPTERS.md](design/ADAPTERS.md) §9 and
 [configs/examples/lastools-campaign.toml](configs/examples/lastools-campaign.toml).
+
+The `pdal` adapter writes one PDAL JSON pipeline per tile (`readers.las` for the
+tile and its 20 m neighbours, `filters.merge`, then `writers.gdal` with
+`binmode=true`, `output_type` `mean` or `max`, and a fixed grid snapped to the
+header bounds) and runs `pdal pipeline` once per tile, `threads` at a time. A
+small Python launcher starts them inside the timed process. PDAL 2.5.0 or newer
+is required and is never installed. Set the `executable` tool option or
+`LIDARBENCH_PDAL`, or put `pdal` on `PATH`. Pipelines, logs, versions and
+`--metadata` summaries are recorded with each attempt. PDAL assigns points on
+horizontal cell edges to the cell north of the edge, so it is classified
+*functionally comparable*. It is validated under its own convention
+(`workloads-v2` contracts), but never declared identical to lidR or lasR. See
+[design/ADAPTERS.md](design/ADAPTERS.md) §10 and
+[configs/examples/pdal-campaign.toml](configs/examples/pdal-campaign.toml).
 
 The process execution engine (`lidarbench.execution.attempt.execute_plan`) runs
 a planned command as a fresh process with timeouts, cancellation, whole-tree

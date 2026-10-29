@@ -78,6 +78,37 @@ def test_right_down_partition_on_edges():
     assert cells.tolist() == [2, 3, 3, -1, -1, 2, 0, -1]
 
 
+def test_pdal_binmode_floor_on_edges():
+    """PDAL: rightward X, upward Y; the south/west edges are inside, north/east outside."""
+    grid = GridSpec(20.0, 0, 0, 2, 2)  # x, y in [0, 40]
+    x = np.array([0.0, 20.0, 39.999, 40.0, 10.0, 10.0, 10.0, 10.0, -0.001])
+    y = np.array([10.0, 10.0, 10.0, 10.0, 0.0, 20.0, 40.0, 39.999, 10.0])
+    cells = assign_cells(x, y, grid, "pdal_binmode_floor")
+    # row 0 is y in [20, 40), row 1 is y in [0, 20)
+    assert cells.tolist() == [2, 3, 3, -1, 2, 0, -1, 0, -1]
+    contract = assign_cells(x, y, grid, "right_down")
+    # Differs exactly for points on horizontal edges (y = 0, 20, 40).
+    assert ownership_differences(cells, contract) == 3
+
+
+@pytest.mark.parametrize("r", [20.0, 1.0, 0.1])
+@pytest.mark.parametrize("base", [5000000.0, 500000.0, 0.0, -1234.0])
+def test_pdal_binmode_floor_mirrors_pdal_arithmetic(r, base):
+    """floor((v - origin) / r) in binary64, as PDAL's Raster::xCell/yCell computes it."""
+    grid = expected_grid((base - 30 * r, base - 30 * r, base + 30 * r, base + 30 * r), r)
+    values = _edge_cases(r, base)
+    rng = random.Random(11)
+    x = np.array(values)
+    y = np.array(rng.sample(values, len(values)))
+    cells = assign_cells(x, y, grid, "pdal_binmode_floor")
+    for xi, yi, cell in zip(x.tolist(), y.tolist(), cells.tolist(), strict=True):
+        col = math.floor((xi - grid.xmin) / r)
+        up = math.floor((yi - grid.ymin) / r)
+        row = grid.nrows - 1 - up
+        inside = 0 <= col < grid.ncols and 0 <= row < grid.nrows
+        assert cell == (row * grid.ncols + col if inside else -1), (xi, yi)
+
+
 def test_lidr_clamp_depends_on_buffered_layout():
     """Mirrors benchmark_reference_cells(): layout edges round half away from zero."""
     grid = GridSpec(20.0, 10, 10, 2, 2)  # x, y in [200, 240]
