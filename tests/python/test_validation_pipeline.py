@@ -357,6 +357,79 @@ def test_extent_policy_is_explicit_and_limited(scene, tmp_path):
         assert run(scene_dir, bad, policies=policy).verdicts.structural.status is Status.FAILED
 
 
+@pytest.fixture(scope="module")
+def inset_scene(tmp_path_factory) -> tuple[Path, dict[str, Cloud]]:
+    """One tile whose data start 15 m east of the outward grid line (X0)."""
+    import random
+
+    root = tmp_path_factory.mktemp("inset")
+    rng = random.Random(7)
+    pts = [
+        (rng.uniform(X0 + 15.0, X0 + 99.5), rng.uniform(Y0 + 0.5, Y0 + 99.5)) for _ in range(600)
+    ]
+    pts += [(X0 + 15.0, Y0 + 50.0), (X0 + 17.5, Y0 + 10.0), (X0 + 19.99, Y0 + 90.0)]
+    zs = [round(rng.uniform(140.0, 185.0), 3) for _ in pts]
+    xs, ys = zip(*pts, strict=True)
+    return root, {"edge": write_las(root / "edge.las", xs, ys, zs)}
+
+
+def test_declared_lidr_extent_rule_accepts_nearest_snapped_cut(inset_scene, tmp_path):
+    scene_dir, clouds = inset_scene
+    policy = Policies(accept_known_extent_discrepancies=True)
+    cut = simulate(
+        scene_dir, clouds, tmp_path / "cut", MEAN, "lidr_buffered_clamp", grow=(-1, 0, 0, 0)
+    )
+    report = run(scene_dir, cut, MEAN, "lidR", policies=policy)
+    v = report.verdicts
+    assert v.structural.status is Status.PASSED, v.to_record()
+    assert v.numerical.status is Status.ACCEPTED_EXCEPTION, v.to_record()
+    dropped = sum(1 for x in clouds["edge"].x if x < X0 + 20.0)
+    assert dropped >= 3
+    assert v.boundary_difference_points is not None and v.boundary_difference_points >= dropped
+    artifact = report.to_record()["artifacts"][0]
+    trimmed = artifact["numerical"]["trimmed_extent"]
+    assert trimmed["dropped_points"] == dropped
+    assert trimmed["cells_wesn"] == [1, 0, 0, 0]
+    assert trimmed["occupied_cells_cut"] == 5
+    assert artifact["structural"]["trimmed_cells_wesn"] == [1, 0, 0, 0]
+    assert any("header_bounds_snapped_nearest" in r for r in v.numerical.reasons)
+    assert v.comparability("edge-tolerant")[0] is Comparability.COMPARABLE
+    assert v.comparability("strict")[0] is Comparability.DESCRIPTIVE_ONLY
+
+    # Needs the campaign opt-in, the contract declaration and the declaring tool.
+    assert run(scene_dir, cut, MEAN, "lidR").verdicts.structural.status is Status.FAILED
+    v4_mean = load_suite(default_suite_dir("workloads-v4")).get("pixel_metrics_1a")
+    assert (
+        run(scene_dir, cut, v4_mean, "lidR", policies=policy).verdicts.structural.status
+        is Status.FAILED
+    )
+    assert run(scene_dir, cut, MEAN, "lasR", policies=policy).verdicts.structural.status is (
+        Status.FAILED
+    )
+    # Values inside the covered part are still checked.
+    wrong = simulate(
+        scene_dir,
+        clouds,
+        tmp_path / "wrong",
+        MEAN,
+        "lidr_buffered_clamp",
+        grow=(-1, 0, 0, 0),
+        edit=_bump(1.0, "edge"),
+    )
+    v = run(scene_dir, wrong, MEAN, "lidR", policies=policy).verdicts
+    assert v.numerical.status is Status.FAILED
+
+
+@pytest.mark.parametrize("grow", [(0, 0, -1, 0), (0, -1, 0, 0), (-1, 0, 0, 1), (-2, 0, 0, 0)])
+def test_lidr_extent_rule_rejects_other_cuts(inset_scene, tmp_path, grow):
+    """Only edges whose header bound is >= half a cell inside may be cut, by one cell."""
+    scene_dir, clouds = inset_scene
+    policy = Policies(accept_known_extent_discrepancies=True)
+    out = simulate(scene_dir, clouds, tmp_path / "out", MEAN, "lidr_buffered_clamp", grow=grow)
+    v = run(scene_dir, out, MEAN, "lidR", policies=policy).verdicts
+    assert v.structural.status is Status.FAILED
+
+
 # -- unverified, unsupported, unavailable ------------------------------------------------------
 
 

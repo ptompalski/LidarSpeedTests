@@ -137,7 +137,7 @@ def add_subparsers(parser: argparse.ArgumentParser) -> None:
         "--input", action="append", metavar="FILE", help="input tile (repeatable)"
     )
     validate.add_argument("--input-dir", metavar="DIR", help="all *.las/*.laz tiles in DIR")
-    validate.add_argument("--suite", help="workload suite directory (default: workloads-v4)")
+    validate.add_argument("--suite", help="workload suite directory (default: workloads-v5)")
     validate.add_argument("--epsg", type=int, help="declared horizontal CRS of the inputs")
     validate.add_argument("--mode", default="numerical", choices=("numerical", "performance-only"))
     validate.add_argument(

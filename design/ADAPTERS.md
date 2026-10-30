@@ -332,7 +332,7 @@ with recognized warnings is labelled the same way. The recorded policy is
 `non_comparable` with `undeclared` cell ownership, so its outputs are at best
 `unverified` and descriptive only. `workloads-v3` accepts the `.tfw` world file
 LAStools writes beside every GeoTIFF as an ignored sidecar (v1/v2 report it as
-unexpected). `workloads-v4` (default) declares LAStools `matched_definition` with
+unexpected). `workloads-v4` (kept by `workloads-v5`, the default) declares LAStools `matched_definition` with
 the upward-Y floor cell rule (`pdal_binmode_floor`, the rule PDAL binmode uses)
 and, for `lascanopy -avg`, `value_precision = 0.01` (averages are written
 rounded to centimetres; the tolerance is widened by 0.005). On the Task 13 pilot
@@ -468,6 +468,6 @@ installation validate the actual PDAL outputs:
 - LAStools `normalization`, `pixel_metrics_2` and `generate_DEM` (no contract yet).
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
-- Equivalence data covers only the contracts in `workloads/` (`workloads-v4` is
-  the default; `workloads-v1` to `workloads-v3` are kept frozen; v1 has no PDAL
+- Equivalence data covers only the contracts in `workloads/` (`workloads-v5` is
+  the default; `workloads-v1` to `workloads-v4` are kept frozen; v1 has no PDAL
   entry).

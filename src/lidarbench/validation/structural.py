@@ -6,11 +6,20 @@ NoData value, axis-aligned north-up geometry, exact resolution, zero-origin
 alignment, exact expected extent, CRS identity and metre units, and no
 infinite values. Nothing is cropped, resampled, repaired or filled.
 
-Only the frozen opt-in ``accept_known_extent_discrepancies`` relaxes one rule:
-outward extension by at most one cell per edge, with the full expected core
-present. The product is then compared through an in-memory index window onto
-the expected core, the extension is recorded and the best possible numerical
-outcome becomes ``accepted_exception``.
+Only the frozen opt-in ``accept_known_extent_discrepancies`` relaxes the extent
+rule, in two ways:
+
+* outward extension by at most one cell per edge, with the full expected core
+  present. The product is compared through an in-memory index window onto the
+  expected core.
+* an implementation that declares ``extent = "header_bounds_snapped_nearest"``
+  (pinned lidR crops to the header bounds with ``terra::crop(snap = "near")``):
+  an edge may be one cell inward where the header bound lies at least half a
+  cell inside the outward grid line. Only the covered part of the reference is
+  compared; the cut cells and their points are counted by the numerical level.
+
+The extension or cut is recorded and the best possible numerical outcome
+becomes ``accepted_exception``.
 """
 
 from __future__ import annotations
@@ -44,6 +53,11 @@ class RasterStructure:
     accepted_exceptions: list[str] = field(default_factory=list)
     window: tuple[int, int] | None = None
     """``(row_offset, col_offset)`` of the expected core inside the product."""
+    inset: tuple[int, int] | None = None
+    """``(row_offset, col_offset)`` of the product inside the expected grid, when a
+    declared inward extent rule was accepted (the product is the smaller one)."""
+    trimmed: tuple[int, int, int, int] | None = None
+    """Edge cells W/E/S/N of the expected grid that the product does not cover."""
     extent_delta: tuple[float, float, float, float] | None = None
     finite_cells: int = 0
 
@@ -60,6 +74,14 @@ class RasterStructure:
         rows, cols = self.expected_grid.shape
         return band[r0 : r0 + rows, c0 : c0 + cols]
 
+    def covered(self, reference: np.ndarray) -> np.ndarray:
+        """The view of an expected-grid array that the (smaller) product covers."""
+        if self.inset is None or self.actual_grid is None:
+            raise ValueError("no inset window")
+        r0, c0 = self.inset
+        rows, cols = self.actual_grid.shape
+        return reference[r0 : r0 + rows, c0 : c0 + cols]
+
     def to_record(self) -> dict[str, Any]:
         """JSON-serializable form."""
         return {
@@ -69,6 +91,7 @@ class RasterStructure:
             "actual_grid": self.actual_grid.to_record() if self.actual_grid else None,
             "extent_delta": list(self.extent_delta) if self.extent_delta else None,
             "accepted_exceptions": list(self.accepted_exceptions),
+            "trimmed_cells_wesn": list(self.trimmed) if self.trimmed else None,
             "numerical_caps": list(self.numerical_caps),
             "finite_cells": self.finite_cells,
         }
@@ -171,5 +194,36 @@ def check_raster(
             f"core present (accept_known_extent_discrepancies): {description}"
         )
         return out
+    if (
+        policies.accept_known_extent_discrepancies
+        and implementation.extent == "header_bounds_snapped_nearest"
+        and all(g in (0, -1) for g in grow)
+        and all(-g <= ok for g, ok in zip(grow, _nearest_inward(tile_bounds, exp), strict=True))
+    ):
+        out.inset = (-grow[3], -grow[0])
+        out.trimmed = (-grow[0], -grow[1], -grow[2], -grow[3])
+        out.accepted_exceptions.append(
+            "accepted declared extent rule header_bounds_snapped_nearest: edges whose header "
+            "bound lies at least half a cell inside the outward grid line are cut by one cell "
+            f"(accept_known_extent_discrepancies): {description}"
+        )
+        return out
     out.errors.append(description)
     return out
+
+
+def _nearest_inward(
+    tile_bounds: tuple[float, float, float, float], exp: GridSpec
+) -> tuple[int, int, int, int]:
+    """Edges W/E/S/N where rounding the header bound to the nearest grid line moves inward.
+
+    A bound exactly half a cell from both lines may round either way (both are allowed).
+    """
+    min_x, min_y, max_x, max_y = tile_bounds
+    half = exp.resolution / 2
+    return (
+        int(min_x - exp.xmin >= half),
+        int(exp.xmax - max_x >= half),
+        int(min_y - exp.ymin >= half),
+        int(exp.ymax - max_y >= half),
+    )

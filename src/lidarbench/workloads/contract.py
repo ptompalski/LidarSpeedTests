@@ -29,7 +29,7 @@ from lidarbench.core.canonical import digest
 from lidarbench.execution.adapters.base import WORKLOAD_ID_PATTERN, ImplementationStatus
 
 CONTRACT_SCHEMA = "lidarbench.workload/1"
-DEFAULT_SUITE = "workloads-v4"
+DEFAULT_SUITE = "workloads-v5"
 
 SUITE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 TOOL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -66,6 +66,9 @@ POPULATION_Z = ("original",)
 UNITS = ("metre",)
 TILINGS = ("per_input_file",)
 EXTENT_RULES = ("header_bounds_snapped_outward",)
+IMPLEMENTATION_EXTENT_RULES = ("header_bounds_snapped_nearest",)
+"""Declared tool extent rules that differ from the contract's (validated only under the
+``accept_known_extent_discrepancies`` policy; design/VALIDATION.md)."""
 EMPTY_CELLS = ("nodata",)
 NODATA_SOURCES = ("file_metadata",)
 REFERENCE_METHODS = ("cell_statistic",)
@@ -193,6 +196,10 @@ class Implementation:
     value_precision: float | None = None
     """Declared output quantum of the tool's values (for example 0.01 m when the tool
     rounds to centimetres); the numerical tolerance is widened by half of it."""
+    extent: str | None = None
+    """Declared extent rule of the tool's rasters when it differs from the contract's
+    (``header_bounds_snapped_nearest``: each header bound rounded to the nearest grid
+    line, so up to one edge cell holding points can be cut off); ``None`` = contract."""
 
     def expected_names(self, stem: str) -> tuple[str, ...]:
         """Primary artifact file names expected for one input tile stem."""
@@ -280,6 +287,7 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
             "note",
             "reason",
             "value_precision",
+            "extent",
         },
         ("status", "equivalence"),
     )
@@ -319,6 +327,13 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
         if "value_precision" in table
         else None
     )
+    extent = (
+        _choice(table["extent"], f"{where}.extent", IMPLEMENTATION_EXTENT_RULES)
+        if "extent" in table
+        else None
+    )
+    if extent is not None and ownership == "undeclared":
+        raise ContractError(f"{where}.extent requires a declared cell_ownership")
     return Implementation(
         tool=tool,
         status=status,
@@ -329,6 +344,7 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
         note=note,
         reason=reason,
         value_precision=precision,
+        extent=extent,
     )
 
 
@@ -520,6 +536,7 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
                     if impl.value_precision is not None
                     else {}
                 ),
+                **({"extent": impl.extent} if impl.extent is not None else {}),
             }
             for tool, impl in implementations.items()
         },

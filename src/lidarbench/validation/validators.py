@@ -123,11 +123,22 @@ class TileReference:
     owned_points: dict[str, int]
     boundaries: dict[str, int]
     """Points owned by a different cell than under the contract convention, per convention."""
+    counts: dict[str, Any] = field(default_factory=dict)
+    """Owned points per cell (``(rows, cols)`` int32), per convention."""
 
     @property
     def nbytes(self) -> int:
         """Approximate memory use."""
-        return sum(int(r.nbytes) for r in self.references.values())
+        return sum(int(r.nbytes) for r in self.references.values()) + sum(
+            int(c.nbytes) for c in self.counts.values()
+        )
+
+
+def _cell_counts(cells: Any, grid: Any) -> Any:
+    import numpy as np
+
+    owned = cells[cells >= 0]
+    return np.bincount(owned, minlength=grid.size).astype(np.int32).reshape(grid.shape)
 
 
 def tile_reference(
@@ -145,12 +156,14 @@ def tile_reference(
         {base: cell_statistic(population.z, contract_cells, grid, contract.statistic)},
         {base: int((contract_cells >= 0).sum())},
         {base: 0},
+        {base: _cell_counts(contract_cells, grid)},
     )
     for convention in sorted(set(conventions) - {base}):
         cells = assign_cells(population.x, population.y, grid, convention)
         out.references[convention] = cell_statistic(population.z, cells, grid, contract.statistic)
         out.owned_points[convention] = int((cells >= 0).sum())
         out.boundaries[convention] = ownership_differences(cells, contract_cells)
+        out.counts[convention] = _cell_counts(cells, grid)
     return out
 
 
@@ -233,16 +246,38 @@ class CellStatisticValidator:
         contract_ref = entry.references[base]
         reference = entry.references[convention]
         boundary: int | None = entry.boundaries[convention] if declared else None
+        trimmed: dict[str, Any] | None = None
+        compare_grid = grid
+        if structure.inset is not None:
+            # Declared inward extent rule: compare the covered cells; count what was cut.
+            counts = entry.counts[convention]
+            dropped = int(counts.sum()) - int(structure.covered(counts).sum())
+            lost_cells = int((~np.isnan(reference)).sum()) - int(
+                (~np.isnan(structure.covered(reference))).sum()
+            )
+            trimmed = {
+                "rule": implementation.extent,
+                "cells_wesn": list(structure.trimmed),
+                "dropped_points": dropped,
+                "occupied_cells_cut": lost_cells,
+            }
+            reference = structure.covered(reference)
+            contract_ref = structure.covered(contract_ref)
+            compare_grid = structure.actual_grid
+            if boundary is not None:
+                boundary += dropped
 
         dtype = np.dtype(raster.dtypes[0])
         nodata = raster.nodata[0]
         sentinels = tuple(contract.raster.forbidden_values)
         if nodata is not None and not np.isnan(nodata):
             sentinels = (*sentinels, float(nodata))
-        actual = structure.core(raster.values[0])
+        actual = (
+            raster.values[0] if structure.inset is not None else structure.core(raster.values[0])
+        )
         encode = dtype.type if dtype.kind == "f" else None
         primary = compare_band(
-            actual, reference, tolerance, grid, tuple(sorted(set(sentinels))), encode
+            actual, reference, tolerance, compare_grid, tuple(sorted(set(sentinels))), encode
         )
         detail: dict[str, Any] = {
             "reference": {
@@ -263,8 +298,10 @@ class CellStatisticValidator:
             },
             "comparison": primary.to_record(),
         }
+        if trimmed is not None:
+            detail["trimmed_extent"] = trimmed
         if declared and implementation.cell_ownership != contract.raster.cell_ownership:
-            versus_contract = compare_band(actual, contract_ref, tolerance, grid)
+            versus_contract = compare_band(actual, contract_ref, tolerance, compare_grid)
             detail["contract_convention_comparison"] = {
                 "convention": contract.raster.cell_ownership,
                 "passed": versus_contract.passed,
@@ -298,6 +335,13 @@ class CellStatisticValidator:
             reasons.append(
                 f"{boundary} point(s) are owned by a different cell under "
                 f"{implementation.cell_ownership} than under {contract.raster.cell_ownership}"
+                + (
+                    f", including {trimmed['dropped_points']} point(s) in "
+                    f"{trimmed['occupied_cells_cut']} occupied edge cell(s) cut by the declared "
+                    f"extent rule {trimmed['rule']}"
+                    if trimmed and trimmed["dropped_points"]
+                    else ""
+                )
             )
         caps = list(structure.numerical_caps)
         if implementation.status.value == "diagnostic_only":

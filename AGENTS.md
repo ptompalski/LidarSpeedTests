@@ -83,7 +83,7 @@
 
 ### 1. Workloads and Contracts
 
-- Workloads are defined in `workloads/<suite>/` as TOML files. `workloads-v4` (default) = `workloads-v3` (= `workloads-v2`, the frozen `workloads-v1` definitions plus PDAL, with LAStools `*.tfw` world files as ignored sidecars) plus the LAStools cell rule (`pdal_binmode_floor`, upward-Y floor) and the `value_precision = 0.01` of lascanopy averages; v1–v3 are frozen.
+- Workloads are defined in `workloads/<suite>/` as TOML files. `workloads-v5` (default) = `workloads-v4` plus the lidR extent rule (`extent = "header_bounds_snapped_nearest"`, accepted only under `accept_known_extent_discrepancies`; design/VALIDATION.md §3). `workloads-v4` = `workloads-v3` (= `workloads-v2`, the frozen `workloads-v1` definitions plus PDAL, with LAStools `*.tfw` world files as ignored sidecars) plus the LAStools cell rule (`pdal_binmode_floor`, upward-Y floor) and the `value_precision = 0.01` of lascanopy averages; v1–v4 are frozen.
 - A workload spec is tool-neutral; implementations are tool-specific.
 - Equivalence (matched_definition, diagnostic_only, unsupported, blocked) is declared in the spec, not inferred.
 - Changing a workload spec or equivalence, including adding a tool's implementation, requires a new suite version (it changes the contract digest).

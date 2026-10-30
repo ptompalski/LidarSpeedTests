@@ -31,8 +31,9 @@ ownership convention and whether band names are part of the contract.
 Suites: `workloads-v1` (frozen, lidR/lasR/LAStools), `workloads-v2` (frozen: the
 same definitions plus the PDAL implementation), `workloads-v3` (frozen:
 `workloads-v2` plus LAStools `*.tfw` world files as ignored sidecars, so that
-LAStools outputs are no longer `validation_failed` at the artifacts level) and
-`workloads-v4` (the default: `workloads-v3` plus the LAStools declaration below).
+LAStools outputs are no longer `validation_failed` at the artifacts level),
+`workloads-v4` (frozen: `workloads-v3` plus the LAStools declaration below) and
+`workloads-v5` (the default: `workloads-v4` plus the lidR extent rule below).
 An implementation may declare `value_precision` (an output quantum, for example
 0.01 m when a tool rounds its values); the absolute tolerance is then widened by
 half of it, the reports say so, and the value is part of the contract digest. A new tool entry
@@ -41,8 +42,8 @@ requires equal digests). Contract values come from WORKLOADS.md:
 
 | Contract | Statistic | Grid | lidR | lasR | LAStools | PDAL (v2) |
 |---|---|---|---|---|---|---|
-| `pixel_metrics_1a` | mean original Z, band `z_mean` | 20 m | matched, `lidr_buffered_clamp` | matched, `right_down` | v4: matched, `pdal_binmode_floor`, `value_precision = 0.01`, `{stem}_avg.tif` (≤ v3: non-comparable, `undeclared`) | matched, `pdal_binmode_floor`, band name not required |
-| `generate_DSM1` | max original Z | 1 m | matched, `lidr_buffered_clamp` | matched, `right_down` | v4: matched, `pdal_binmode_floor` (≤ v3: non-comparable, `undeclared`) | matched, `pdal_binmode_floor` |
+| `pixel_metrics_1a` | mean original Z, band `z_mean` | 20 m | matched, `lidr_buffered_clamp`; v5: `extent = "header_bounds_snapped_nearest"` | matched, `right_down` | v4: matched, `pdal_binmode_floor`, `value_precision = 0.01`, `{stem}_avg.tif` (≤ v3: non-comparable, `undeclared`) | matched, `pdal_binmode_floor`, band name not required |
+| `generate_DSM1` | max original Z | 1 m | matched, `lidr_buffered_clamp`; v5: `extent = "header_bounds_snapped_nearest"` | matched, `right_down` | v4: matched, `pdal_binmode_floor` (≤ v3: non-comparable, `undeclared`) | matched, `pdal_binmode_floor` |
 
 `WorkloadContract.declared_comparability(tool)` derives the declared class
 (reported under `implementation.declared_comparability`):
@@ -173,6 +174,24 @@ possible numerical status is `accepted_exception`. Inward truncation, larger
 extensions, shifts and different resolution or alignment still fail. Values in
 the extra cells are not a claim about the contract.
 
+The one exception to "inward truncation fails" is an implementation that
+declares `extent = "header_bounds_snapped_nearest"` in its contract (lidR from
+`workloads-v5`), again only under this policy. Pinned lidR builds its layout
+from the buffered cloud and then crops each tile's raster to the header bounds
+with `terra::crop()`, whose default `snap = "near"` rounds every bound to the
+*nearest* grid line. Where a header bound lies at least half a cell inside the
+outward grid line (only possible where the tile has no data to the edge, for
+example at the dataset boundary) that edge cell is cut, together with the
+points it would own. The rule accepts exactly that: per edge either the
+contract edge or the one-cell-inward edge, the latter only where the header
+bound is ≥ `r/2` inside. Values are compared on the covered cells only. The
+cut is measured, never hidden: the artifact's `numerical.trimmed_extent`
+records the cut cells (W/E/S/N), `dropped_points` and `occupied_cells_cut`, and
+the dropped points are added to `boundary_difference_points` (they are owned
+under the contract but by no cell of the product). On the Petawawa
+10 pts/m² dataset (100 tiles) this cut 3,048 points in 19 occupied cells
+on 9 boundary tiles.
+
 ## 4. What validation establishes, and what it does not
 
 Each report lists these per attempt under `claims`.
@@ -182,7 +201,7 @@ Each report lists these per attempt under `claims`.
 | Claim | Level |
 |---|---|
 | Every input tile has exactly its declared primary artifact(s); each is a non-empty regular file with the correct format signature and decodes completely; nothing unexpected (halo exports, duplicates, extra primaries) is present. Declared sidecars (`*.aux.xml`, `*.vrt`) never satisfy a requirement. | artifacts |
-| Each raster is a north-up GeoTIFF on the zero-origin grid with the contract resolution, the expected outward-snapped extent of its tile (or an explicitly accepted outward extension), the required band layout, NoData expressed only as a NoData value, no infinite values, and the declared CRS in metres. | structural |
+| Each raster is a north-up GeoTIFF on the zero-origin grid with the contract resolution, the expected outward-snapped extent of its tile (or an explicitly accepted outward extension or declared nearest-snapped cut), the required band layout, NoData expressed only as a NoData value, no infinite values, and the declared CRS in metres. | structural |
 | Every owned cell value and the complete NoData mask equal an independent float64 mean/max of the original Z of all points, including buffered points from neighbouring tiles, under the tool's declared cell convention, within `2e-6 + 2e-7·|reference|`. | numerical `passed` |
 | The tool's cell ownership equals the contract partition for every point of these inputs (`boundary_difference_points == 0`). | numerical `passed` + boundary 0 |
 

@@ -27,7 +27,7 @@ def _data(name: str = "pixel_metrics_1a") -> dict:
 
 def test_suite_defines_the_two_initial_workloads():
     suite = load_suite(SUITE)
-    assert suite.name == "workloads-v4"
+    assert suite.name == "workloads-v5"
     assert sorted(suite.contracts) == ["generate_DSM1", "pixel_metrics_1a"]
     mean = suite.get("pixel_metrics_1a")
     assert (mean.statistic, mean.raster.resolution, mean.raster.bands) == (
@@ -66,7 +66,7 @@ def test_matrix_matches_workloads_md():
         assert {t: i.status for t, i in contract.implementations.items()} == dict.fromkeys(
             ("lidR", "lasR", "lastools", "pdal"), ImplementationStatus.RUNNABLE
         )
-        # workloads-v4 declares the LAStools convention (non_comparable up to v3).
+        # From workloads-v4 the LAStools convention is declared (non_comparable up to v3).
         assert {
             t for t, i in contract.implementations.items() if i.equivalence == "matched_definition"
         } == {"lidR", "lasR", "pdal", "lastools"}
@@ -200,6 +200,37 @@ def test_v4_declares_lastools_convention_and_precision_only():
         assert new.declared_comparability("lastools") == "functionally_comparable"
     assert v4.get("pixel_metrics_1a").implementation("lastools").value_precision == 0.01
     assert v4.get("generate_DSM1").implementation("lastools").value_precision is None
+
+
+def test_v5_declares_lidr_extent_rule_only():
+    """workloads-v5 = workloads-v4 + the lidR extent rule (terra::crop snap = "near")."""
+    v4 = load_suite(default_suite_dir("workloads-v4"))
+    v5 = load_suite(default_suite_dir("workloads-v5"))
+    for workload_id, old in v4.contracts.items():
+        new = v5.get(workload_id)
+        assert new.equivalence_group == f"workloads-v5/{workload_id}"
+        assert new.raster == old.raster and new.tolerance == old.tolerance
+        assert new.ignored_sidecars == old.ignored_sidecars
+        for tool in ("lasR", "lastools", "pdal"):
+            assert new.implementation(tool) == old.implementation(tool)
+        assert old.implementation("lidR").extent is None
+        assert new.implementation("lidR").extent == "header_bounds_snapped_nearest"
+        assert new.digest != old.digest
+        assert "extent" not in old.record["implementations"]["lidR"]
+
+
+def test_implementation_extent_rule_is_validated():
+    data = _data()
+    data["implementations"]["lasR"]["extent"] = "anything"
+    with pytest.raises(ContractError, match="extent"):
+        parse_contract(data)
+    data["implementations"]["lasR"]["extent"] = "header_bounds_snapped_nearest"
+    assert parse_contract(data).implementation("lasR").extent == "header_bounds_snapped_nearest"
+    data["implementations"]["lastools"]["cell_ownership"] = "undeclared"
+    data["implementations"]["lastools"]["equivalence"] = "non_comparable"
+    data["implementations"]["lastools"]["extent"] = "header_bounds_snapped_nearest"
+    with pytest.raises(ContractError, match="requires a declared cell_ownership"):
+        parse_contract(data)
 
 
 def test_value_precision_must_be_a_positive_float():
