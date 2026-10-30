@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ import lidarbench
 from lidarbench.core.canonical import sha256_bytes, sha256_file
 from lidarbench.core.platform import PlatformInfo
 from lidarbench.execution.adapters.base import (
+    AcceptedException,
     ArtifactKind,
     ArtifactSpec,
     Availability,
@@ -119,6 +121,20 @@ class RWorkload:
     def call_sha256(self) -> str:
         """SHA-256 of the pinned call text."""
         return sha256_bytes(self.call.encode("utf-8"))
+
+
+@dataclass(frozen=True)
+class KnownWarning:
+    """A documented R warning that an explicit opt-in policy accepts.
+
+    The bridge exits 3 when the pinned call succeeded but raised R warnings. The
+    attempt is accepted (as :class:`AcceptedException` ``name``) only if *every*
+    workload-phase warning fully matches ``pattern``; anything else still fails.
+    """
+
+    name: str
+    policy: str
+    pattern: re.Pattern[str]
 
 
 class ProbeError(RuntimeError):
@@ -495,12 +511,18 @@ class RBridgeAdapter(ToolAdapter):
             invocation.work_dir / RESULT_FILE,
         )
         content = json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+        known = self.known_warning(invocation)
         return CommandSpec(
             argv=argv,
             cwd=invocation.work_dir,
             env=self.thread_env(invocation.threads),
             config_files=(ConfigFile(INVOCATION_FILE, content),),
+            accepted_exceptions=(known.name,) if known else (),
         )
+
+    def known_warning(self, invocation: Invocation) -> KnownWarning | None:
+        """The opted-in accepted R warning for this invocation (none by default)."""
+        return None
 
     def expected_outputs(self, invocation: Invocation) -> list[ArtifactSpec]:
         """One raster per input tile, named after the tile (``{stem}.tif``)."""
@@ -553,16 +575,34 @@ class RBridgeAdapter(ToolAdapter):
             return Interpretation(failure_reason=f"R bridge record is not {RESULT_SCHEMA}")
 
         warnings = [
-            f"R warning ({w.get('phase')}): {w.get('message')}"
+            (w.get("phase"), str(w.get("message")))
             for w in record.get("warnings") or []
             if isinstance(w, dict)
         ]
-        failure = self._failure(record, invocation, process, meaning)
+        known = self.known_warning(invocation)
+        evidence = tuple(m for p, m in warnings if p == "workload")
+        accepting = (
+            known is not None
+            and bool(evidence)
+            and all(known.pattern.fullmatch(m) for m in evidence)
+            and record.get("status") == "failed"
+            and record.get("phase") == "workload"
+            and record.get("exit_code") == 3
+            and (record.get("legacy") or {}).get("execution_status") == "succeeded"
+        )
+        failure = self._failure(record, invocation, process, meaning, accepting)
+        accepted = None
+        if accepting and failure is None:
+            assert known is not None
+            accepted = AcceptedException(known.name, 3, known.policy, evidence)
         return Interpretation(
             failure_reason=failure,
-            warnings=tuple(warnings),
+            warnings=tuple(
+                f"R warning ({p}): {m}" for p, m in warnings if not (accepted and p == "workload")
+            ),
             tool_timing=_tool_timing(record),
             details={"exit_code_meaning": meaning, "bridge_record": record},
+            accepted_exception=accepted,
         )
 
     def _failure(
@@ -571,6 +611,7 @@ class RBridgeAdapter(ToolAdapter):
         invocation: Invocation,
         process: ProcessResult,
         meaning: str,
+        accepting: bool = False,
     ) -> str | None:
         status, phase = record.get("status"), record.get("phase")
         if record.get("tool") not in (None, self.r_package) or record.get("workload_id") not in (
@@ -581,14 +622,19 @@ class RBridgeAdapter(ToolAdapter):
                 f"R bridge record describes {record.get('tool')}/{record.get('workload_id')}, "
                 f"not {self.r_package}/{invocation.workload_id}"
             )
-        if status != "succeeded":
+        if status != "succeeded" and not accepting:
             return (
                 f"R bridge failed in phase {phase} (exit {process.exit_code}: {meaning}): "
                 f"{record.get('diagnostic')}"
             )
-        if process.exit_code != 0 or record.get("exit_code") != 0 or phase != "complete":
+        expected_exit, expected_phase = (3, "workload") if accepting else (0, "complete")
+        if (
+            process.exit_code != expected_exit
+            or record.get("exit_code") != expected_exit
+            or phase != expected_phase
+        ):
             return (
-                f"R bridge record says succeeded but the process exited with "
+                f"R bridge record says {status} but the process exited with "
                 f"{process.exit_code} ({meaning}); not trusted"
             )
         if record.get("tool") != self.r_package:

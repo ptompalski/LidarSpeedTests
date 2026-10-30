@@ -8,6 +8,8 @@ launched process):
 ========== =========================================================================
 ok         writes ``<stem>.tif`` per input and a success record, exits 0
 warning    writes outputs, records a workload warning, exits 3 (bridge policy)
+tinwarning as ``warning`` with two lidR ``tin()`` nearest-neighbour fallback warnings
+tinmixed   as ``tinwarning`` plus one unrelated workload warning
 error      records an R error in the workload, exits 1, no outputs
 lie        records a failure but exits 0 (inconsistent; must not succeed)
 norecord   exits 0 without writing a record
@@ -109,7 +111,15 @@ record["timing"] = {"clock": "R Sys.time()", "bridge_start": bridge_start,
                     "namespaces_preloaded": namespaces_preloaded,
                     "bridge_end": time.time_ns()}
 status, code, phase, diagnostic, exit_code = "succeeded", 0, "complete", None, 0
-if mode == "warning":
+record["legacy"] = {"execution_status": "failed" if mode == "error" else "succeeded"}
+tin = ("Interpolation of {} points failed because they are too far from ground points. "
+       "Nearest neighbour was used but interpolation is weak for those points")
+if mode in ("tinwarning", "tinmixed"):
+    messages = [tin.format(77), tin.format(1068)] + (["NAs introduced"] if mode == "tinmixed" else [])
+    record["warnings"] = [{"phase": "workload", "message": m} for m in messages]
+    status, code, phase, exit_code = "failed", 3, "workload", 3
+    diagnostic = f"{len(messages)} R warning(s) during the workload: " + " | ".join(messages)
+elif mode == "warning":
     record["warnings"] = [{"phase": "workload", "message": "NAs introduced"}]
     status, code, phase = "failed", 3, "workload"
     diagnostic = "1 R warning(s) during the workload: NAs introduced"

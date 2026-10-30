@@ -488,7 +488,10 @@ like lasR, no long triangle is dropped. PDAL uses `filters.range` (classes 2, 9)
 `filters.delaunay` → `filters.faceraster` with `max_triangle_edge_length = 100`,
 cropped to the tile plus the 20 m buffer (design/ADAPTERS.md §10). Hull masking and
 edge trimming therefore still differ between tools (lidR convex hull, lasR and
-LAStools none, PDAL 100 m); the legacy harness is unchanged.
+LAStools none, PDAL 100 m); the legacy harness is unchanged. Where cells are too
+far from any ground point, lidR `tin()` warns and uses the nearest ground point; the
+lidR option `accept_known_tin_fallback_warning` accepts exactly that warning
+(design/R_BRIDGE.md §3), otherwise the attempt fails.
 
 ## Checks and remaining acceptance work
 

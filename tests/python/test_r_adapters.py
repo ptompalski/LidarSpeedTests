@@ -36,7 +36,7 @@ from lidarbench.execution.adapters import (
     UnavailableReason,
 )
 from lidarbench.execution.adapters.lasr import LasRAdapter
-from lidarbench.execution.adapters.lidr import LidRAdapter
+from lidarbench.execution.adapters.lidr import TIN_FALLBACK, TIN_FALLBACK_POLICY, LidRAdapter
 from lidarbench.execution.adapters.registry import AdapterRegistry
 from lidarbench.execution.adapters.rscript import (
     INVOCATION_FILE,
@@ -521,6 +521,74 @@ def test_interpret_rejects_failures_and_inconsistencies(
         assert result.warnings == ("R warning (workload): NAs",)
 
 
+TIN_WARNING = (
+    "Interpolation of 786 points failed because they are too far from ground points. "
+    "Nearest neighbour was used but interpolation is weak for those points"
+)
+
+
+def _tin_record(adapter, *messages, **overrides):
+    fields = {
+        "status": "failed",
+        "phase": "workload",
+        "exit_code": 3,
+        "diagnostic": "R warning(s) during the workload",
+        "warnings": [{"phase": "workload", "message": m} for m in messages],
+        "legacy": {"execution_status": "succeeded"},
+    }
+    return _record(adapter, "generate_DEM", **{**fields, **overrides})
+
+
+def test_lidr_accepts_only_the_known_tin_fallback_warning_when_opted_in(layout, project, tmp_path):
+    adapter = _ready(LidRAdapter(project=str(project), accept_known_tin_fallback_warning=True))
+    inv = _invocation(layout, "generate_DEM")
+    assert adapter.build_command(inv).accepted_exceptions == (TIN_FALLBACK.name,)
+    assert adapter.invocation_metadata(inv)["accepted_exception_policy"] == TIN_FALLBACK_POLICY
+    assert adapter.identify().details["accept_known_tin_fallback_warning"] is True
+    other = TIN_WARNING.replace("786", "77")
+    _write_record(layout, _tin_record(adapter, TIN_WARNING, other))
+    result = adapter.interpret(inv, _process(tmp_path, 3))
+    assert result.failure_reason is None and result.warnings == ()
+    accepted = result.accepted_exception
+    assert accepted is not None and accepted.name == TIN_FALLBACK.name
+    assert accepted.exit_code == 3 and accepted.policy == TIN_FALLBACK_POLICY
+    assert accepted.evidence == (TIN_WARNING, other)
+    assert result.tool_timing is not None
+
+
+@pytest.mark.parametrize(
+    ("opt_in", "workload", "messages", "overrides", "exit_code"),
+    [
+        (False, "generate_DEM", (TIN_WARNING,), {}, 3),  # not opted in
+        (True, "generate_DSM1", (TIN_WARNING,), {}, 3),  # other workload
+        (True, "generate_DEM", (TIN_WARNING, "NAs introduced"), {}, 3),  # mixed warnings
+        (True, "generate_DEM", (TIN_WARNING + " (extra)",), {}, 3),  # no full match
+        (True, "generate_DEM", (TIN_WARNING,), {"legacy": {"execution_status": "failed"}}, 3),
+        (True, "generate_DEM", (TIN_WARNING,), {"exit_code": 1}, 1),  # an R error
+        (True, "generate_DEM", (TIN_WARNING,), {}, 0),  # process exit disagrees
+        (True, "generate_DEM", (TIN_WARNING,), {"timing_workload": {}}, 3),
+        (True, "generate_DEM", (TIN_WARNING,), {"packages": {"lidR": "9.9"}}, 3),
+    ],
+)
+def test_lidr_tin_fallback_acceptance_is_narrow(
+    layout, project, tmp_path, opt_in, workload, messages, overrides, exit_code
+):
+    adapter = _ready(LidRAdapter(project=str(project), accept_known_tin_fallback_warning=opt_in))
+    inv = _invocation(layout, workload)
+    record = _tin_record(adapter, *messages, **overrides)
+    record["workload_id"] = workload
+    _write_record(layout, record)
+    result = adapter.interpret(inv, _process(tmp_path, exit_code))
+    assert result.failure_reason is not None and result.accepted_exception is None
+    if not opt_in or workload != "generate_DEM":
+        assert adapter.build_command(inv).accepted_exceptions == ()
+
+
+def test_lidr_tin_fallback_option_must_be_bool():
+    with pytest.raises(TypeError, match="accept_known_tin_fallback_warning"):
+        LidRAdapter(accept_known_tin_fallback_warning="yes")
+
+
 def test_interpret_without_record_uses_stderr(layout, project, tmp_path):
     adapter = _ready(LidRAdapter(project=str(project)))
     result = adapter.interpret(_invocation(layout), _process(tmp_path, 4, "renv failed\n"))
@@ -612,6 +680,42 @@ def test_execute_plan_never_turns_r_problems_into_success(
     assert text in record["failure_reason"]
     if mode == "warning":
         assert "R warning (workload): NAs introduced" in record["warnings"]
+
+
+@pytest.mark.platform
+@pytest.mark.skipif(posix_only, reason="fake Rscript is a POSIX shebang script")
+@pytest.mark.parametrize(
+    ("mode", "opt_in", "status"),
+    [
+        ("tinwarning", True, "succeeded"),
+        ("tinwarning", False, "failed"),
+        ("tinmixed", True, "failed"),
+    ],
+)
+def test_execute_plan_accepts_the_tin_fallback_only_as_declared(
+    layout, project, tmp_path, monkeypatch, mode, opt_in, status
+):
+    monkeypatch.setenv("FAKE_R_MODE", mode)
+    adapter = LidRAdapter(
+        project=str(project),
+        rscript=str(make_fake_rscript(tmp_path / "bin")),
+        accept_known_tin_fallback_warning=opt_in,
+    )
+    availability = adapter.probe(PLATFORM)
+    inv = _invocation(layout, "generate_DEM")
+    plan = plan_invocation(adapter, inv, availability=availability)
+    assert plan.ready, plan.reason
+    execution = execute_plan(plan, inv, layout["attempt"], timeout_s=60, adapter=adapter)
+    record = json.loads((layout["attempt"] / "execution.json").read_text(encoding="utf-8"))
+    assert str(execution.execution_status) == status, record.get("failure_reason")
+    assert record["process"]["exit_code"] == 3
+    if status == "succeeded":
+        accepted = record["accepted_exception"]
+        assert accepted["name"] == TIN_FALLBACK.name and accepted["exit_code"] == 3
+        assert accepted["policy"] == TIN_FALLBACK_POLICY and len(accepted["evidence"]) == 2
+    else:
+        assert record["accepted_exception"] is None
+        assert "R warning during the workload" in record["failure_reason"]
 
 
 def test_execute_plan_rejects_foreign_adapter(layout, project):

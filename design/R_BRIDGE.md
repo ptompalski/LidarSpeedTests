@@ -115,6 +115,18 @@ fail an attempt:
   adapter is stricter and records them as failures. Warnings in other phases
   (package loading, catalog construction, teardown) are kept as attempt
   warnings and do not fail the attempt.
+- the single exception: the lidR option `accept_known_tin_fallback_warning`
+  (default false, part of the campaign identity) accepts, for `generate_DEM`
+  only, an exit 3 whose workload warnings *all* fully match lidR `tin()`'s
+  "Interpolation of N points failed because they are too far from ground
+  points. Nearest neighbour was used but interpolation is weak for those points"
+  (cells far from any ground point take the nearest ground point's Z). The pinned
+  call must have succeeded and every other check above still applies. The
+  attempt then succeeds with the declared accepted exception
+  `lidr_tin_nearest_neighbour_fallback` (policy
+  `lidr.accept_known_tin_fallback_warning`, raw exit 3 and the warnings recorded
+  as evidence); any other or additional warning still fails it. On the Petawawa
+  density-10 data 9 of 100 tiles raise it.
 
 Every warning is listed in `execution.json` / `result.json` as
 `R warning (<phase>): <message>`. The full bridge record is kept in

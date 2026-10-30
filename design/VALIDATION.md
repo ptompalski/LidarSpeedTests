@@ -72,7 +72,7 @@ trimming:
 
 | Tool | Implementation | Declared |
 |---|---|---|
-| lidR | `rasterize_terrain(tin(), use_class = c(2L, 9L), shape = "convex")` | `cell_centre_sample`, `extent = "header_bounds_snapped_nearest"` |
+| lidR | `rasterize_terrain(tin(), use_class = c(2L, 9L), shape = "convex")`; option `accept_known_tin_fallback_warning` accepts its nearest-neighbour fallback warning (R_BRIDGE.md §3) | `cell_centre_sample`, `extent = "header_bounds_snapped_nearest"` |
 | lasR | `dtm(res = 1)` (no edge trim) | `cell_centre_sample` |
 | LAStools | `blast2dem64 -keep_class 2 9 -kill 100000` (legacy: `-kill 100`) | `undeclared`; `*.kml` is an ignored sidecar (written despite `-no_kml`) |
 | PDAL | `filters.crop` → `filters.range` → `filters.delaunay` → `filters.faceraster` (`max_triangle_edge_length = 100`) → `writers.raster` | `cell_centre_sample` |
