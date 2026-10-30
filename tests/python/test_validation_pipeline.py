@@ -357,6 +357,32 @@ def test_extent_policy_is_explicit_and_limited(scene, tmp_path):
         assert run(scene_dir, bad, policies=policy).verdicts.structural.status is Status.FAILED
 
 
+def test_contract_without_reference_stops_after_structure(scene, tmp_path):
+    """generate_DEM (reference.method = none): structural checks only, never validated."""
+    scene_dir, clouds = scene
+    dem = SUITE.get("generate_DEM")
+    product = simulate(scene_dir, clouds, tmp_path / "dem", DSM)  # values are not checked
+    v = run(scene_dir, product, dem).verdicts
+    assert v.structural.status is Status.PASSED, v.structural.reasons
+    assert v.numerical.status is Status.UNSUPPORTED
+    assert "structural validation only" in v.numerical.reasons[0]
+    assert v.outcome is Outcome.UNVERIFIED and not v.validated_performance
+    assert v.report_inclusion("performance-only") == (True, "unverified (unsupported)")
+    assert v.report_inclusion("validated")[0] is False
+
+    outward = simulate(scene_dir, clouds, tmp_path / "outward", DSM, grow=(0, 1, 0, 1))
+    assert run(scene_dir, outward, dem).verdicts.structural.status is Status.FAILED
+    policy = Policies(accept_known_extent_discrepancies=True)
+    v = run(scene_dir, outward, dem, policies=policy).verdicts
+    assert v.numerical.status is Status.UNSUPPORTED
+    assert any("accept_known_extent_discrepancies" in r for r in v.numerical.reasons)
+
+    empty = simulate(scene_dir, clouds, tmp_path / "empty", DSM, edit=lambda _, a: a * np.nan)
+    v = run(scene_dir, empty, dem).verdicts
+    assert v.structural.status is Status.FAILED
+    assert any("no finite values" in r for r in v.structural.reasons)
+
+
 @pytest.fixture(scope="module")
 def inset_scene(tmp_path_factory) -> tuple[Path, dict[str, Cloud]]:
     """One tile whose data start 15 m east of the outward grid line (X0)."""

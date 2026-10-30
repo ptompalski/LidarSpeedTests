@@ -32,8 +32,10 @@ Suites: `workloads-v1` (frozen, lidR/lasR/LAStools), `workloads-v2` (frozen: the
 same definitions plus the PDAL implementation), `workloads-v3` (frozen:
 `workloads-v2` plus LAStools `*.tfw` world files as ignored sidecars, so that
 LAStools outputs are no longer `validation_failed` at the artifacts level),
-`workloads-v4` (frozen: `workloads-v3` plus the LAStools declaration below) and
-`workloads-v5` (the default: `workloads-v4` plus the lidR extent rule below).
+`workloads-v4` (frozen: `workloads-v3` plus the LAStools declaration below),
+`workloads-v5` (frozen: `workloads-v4` plus the lidR extent rule below) and
+`workloads-v6` (the default: the `workloads-v5` definitions unchanged plus the
+structural-only `generate_DEM` below).
 An implementation may declare `value_precision` (an output quantum, for example
 0.01 m when a tool rounds its values); the absolute tolerance is then widened by
 half of it, the reports say so, and the value is part of the contract digest. A new tool entry
@@ -53,6 +55,31 @@ lidR, PDAL), `non_comparable` (LAStools) or `unsupported`. Only the attempt-leve
 gate below can make a timing `comparable`.
 
 Both use a 20 m buffer and `|actual − reference| ≤ 2e-6 + 2e-7·|reference|`.
+
+**Structural-only contracts (`generate_DEM`, workloads-v6).** A contract may
+declare `reference.method = "none"` (no `statistic`, no `[tolerance]`) when no
+independent reference exists. `generate_DEM` is a linear Delaunay TIN of the
+ground and water points (`population.points = "classes"`, `classes = [2, 9]`)
+sampled at 1 m cell centres (contract convention `cell_centre_sample`). The
+artifacts and structural levels run as usual (grid, extent and the extent
+policies, CRS, band layout, no infinite values) and a product without any finite
+value fails. The numerical level is then `unsupported` ("structural validation
+only"), listing any accepted extent exception, so the outcome is `unverified`:
+such timings appear only in `performance-only` reports and are never
+`comparable`. Every implementation is declared `non_comparable`, because the tools
+legitimately differ in duplicate-XY handling, hull masking and long-triangle
+trimming:
+
+| Tool | Implementation | Declared |
+|---|---|---|
+| lidR | `rasterize_terrain(tin(), use_class = c(2L, 9L), shape = "convex")` | `cell_centre_sample`, `extent = "header_bounds_snapped_nearest"` |
+| lasR | `dtm(res = 1)` (no edge trim) | `cell_centre_sample` |
+| LAStools | `blast2dem64 -keep_class 2 9 -kill 100000` (legacy: `-kill 100`) | `undeclared`; `*.kml` is an ignored sidecar (written despite `-no_kml`) |
+| PDAL | `filters.crop` → `filters.range` → `filters.delaunay` → `filters.faceraster` (`max_triangle_edge_length = 100`) → `writers.raster` | `cell_centre_sample` |
+
+On the Petawawa pilot pair lidR, lasR and PDAL agreed within ~1 mm on almost
+every shared cell while ~0.3 % of LAStools cells differed by more than 1 cm (up
+to 3 m); this is informal evidence, not a validation claim.
 
 ### Cell ownership conventions
 

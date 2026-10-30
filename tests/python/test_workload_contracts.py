@@ -25,10 +25,10 @@ def _data(name: str = "pixel_metrics_1a") -> dict:
         return tomllib.load(handle)
 
 
-def test_suite_defines_the_two_initial_workloads():
+def test_suite_defines_the_cell_statistic_workloads_and_the_dem():
     suite = load_suite(SUITE)
-    assert suite.name == "workloads-v5"
-    assert sorted(suite.contracts) == ["generate_DSM1", "pixel_metrics_1a"]
+    assert suite.name == "workloads-v6"
+    assert sorted(suite.contracts) == ["generate_DEM", "generate_DSM1", "pixel_metrics_1a"]
     mean = suite.get("pixel_metrics_1a")
     assert (mean.statistic, mean.raster.resolution, mean.raster.bands) == (
         "mean",
@@ -37,7 +37,7 @@ def test_suite_defines_the_two_initial_workloads():
     )
     dsm = suite.get("generate_DSM1")
     assert (dsm.statistic, dsm.raster.resolution, dsm.raster.bands) == ("max", 1.0, ())
-    for contract in suite.contracts.values():
+    for contract in (c for c in suite.contracts.values() if c.has_reference):
         assert contract.buffer == 20.0
         assert contract.raster.cell_ownership == "right_down"
         assert contract.tolerance.absolute == 2e-6 and contract.tolerance.relative == 2e-7
@@ -217,6 +217,63 @@ def test_v5_declares_lidr_extent_rule_only():
         assert new.implementation("lidR").extent == "header_bounds_snapped_nearest"
         assert new.digest != old.digest
         assert "extent" not in old.record["implementations"]["lidR"]
+
+
+def test_v6_keeps_the_v5_definitions_and_adds_a_structural_only_dem():
+    v5 = load_suite(default_suite_dir("workloads-v5"))
+    v6 = load_suite(default_suite_dir("workloads-v6"))
+    for workload_id, old in v5.contracts.items():
+        new, old_record = dict(v6.get(workload_id).record), dict(old.record)
+        for record in (new, old_record):
+            record.pop("suite")
+            record.pop("equivalence")
+        assert new == old_record
+    dem = v6.get("generate_DEM")
+    assert not dem.has_reference and dem.statistic == ""
+    assert dem.population.points == "classes" and dem.population.classes == (2, 9)
+    assert dem.raster.cell_ownership == "cell_centre_sample" and dem.raster.resolution == 1.0
+    assert "tolerance" not in dem.record and dem.record["reference"] == {"method": "none"}
+    assert dem.is_ignored_sidecar("298000_5093000.kml")
+    assert {t: dem.declared_comparability(t) for t in dem.implementations} == {
+        "lasR": "non_comparable",
+        "lastools": "non_comparable",
+        "lidR": "non_comparable",
+        "pdal": "non_comparable",
+    }
+    assert dem.implementation("lidR").extent == "header_bounds_snapped_nearest"
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda d: d["population"].pop("classes"), "population.classes is required"),
+        (lambda d: d["population"].update(classes=[9, 2]), "sorted, distinct"),
+        (lambda d: d["population"].update(classes=[]), "sorted, distinct"),
+        (lambda d: d["population"].update(classes=[2, 2]), "sorted, distinct"),
+        (lambda d: d["population"].update(classes=[2, 256]), r"classes\[1\]"),
+        (lambda d: d["population"].update(classes=[True]), r"classes\[0\]"),
+        (lambda d: d["population"].update(points="all"), "only allowed when"),
+        (lambda d: d["reference"].update(statistic="max"), "not allowed when method"),
+        (lambda d: d.update(tolerance={"absolute": 0.0, "relative": 0.0}), "tolerance is not"),
+        (lambda d: d["reference"].update(method="cell_statistic"), "statistic"),
+    ],
+)
+def test_invalid_structural_only_contracts_name_the_key(mutate, message):
+    data = copy.deepcopy(_data("generate_DEM"))
+    mutate(data)
+    with pytest.raises(ContractError, match=message):
+        parse_contract(data)
+
+
+def test_cell_statistic_needs_all_points_and_a_tolerance():
+    data = copy.deepcopy(_data())
+    data["population"].update(points="classes", classes=[2])
+    with pytest.raises(ContractError, match=r'require population\.points = "all"'):
+        parse_contract(data)
+    data = copy.deepcopy(_data())
+    data["reference"].pop("statistic")
+    with pytest.raises(ContractError, match="statistic"):
+        parse_contract(data)
 
 
 def test_implementation_extent_rule_is_validated():

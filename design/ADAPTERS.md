@@ -332,7 +332,7 @@ with recognized warnings is labelled the same way. The recorded policy is
 `non_comparable` with `undeclared` cell ownership, so its outputs are at best
 `unverified` and descriptive only. `workloads-v3` accepts the `.tfw` world file
 LAStools writes beside every GeoTIFF as an ignored sidecar (v1/v2 report it as
-unexpected). `workloads-v4` (kept by `workloads-v5`, the default) declares LAStools `matched_definition` with
+unexpected). `workloads-v4` (kept by `workloads-v5` and `workloads-v6`, the default) declares LAStools `matched_definition` with
 the upward-Y floor cell rule (`pdal_binmode_floor`, the rule PDAL binmode uses)
 and, for `lascanopy -avg`, `value_precision = 0.01` (averages are written
 rounded to centimetres; the tolerance is widened by 0.005). On the Task 13 pilot
@@ -341,6 +341,15 @@ pair (LAStools 261023) `lasgrid -highest` matched that reference exactly and
 outputs are validated and functionally comparable (PILOT_REVIEW.md §14). The
 declaration rests on this evidence: a different LAStools build is re-validated
 by every campaign.
+
+`generate_DEM` (workloads-v6) pins `blast2dem64 -keep_class 2 9 -elevation
+-step 1 -kill 100000 -buffered 20 -use_orig_bb`. It deliberately deviates from
+the legacy `-kill 100` (blast2dem's default) so that, like lasR, no long
+triangle is dropped; `LastoolsWorkload.legacy_deviation` records the change, the
+parity test checks the remaining arguments against `R/0_setup.R`, and the
+invocation metadata reports it (`legacy_deviation`). blast2dem writes a `.kml`
+despite `-no_kml`; the contract lists `*.kml` as an ignored sidecar. The
+contract is structural-only and LAStools `non_comparable`/`undeclared`.
 
 Integration tests (`tests/python/test_lastools_integration.py`) run only when
 an installation is found, for example
@@ -384,6 +393,28 @@ The grid is fixed explicitly because PDAL otherwise sizes it from the points as
 `floor(extent / r) + 1` cells. JSON is UTF-8 with paths verbatim, so spaces,
 non-ASCII characters and Windows separators need no quoting. Paths containing
 `#` (PDAL expands it into per-view file names) or `://` (URL) are `unsupported`.
+
+**TIN pipeline (`generate_DEM`, workloads-v6).** A structural-only contract
+(design/VALIDATION.md §1):
+
+```text
+readers.las(tile[, neighbours], threads=1[, override_srs="EPSG:N"]) [→ filters.merge]
+  → filters.crop(bounds = tile header bounds grown by 20 m)
+  → filters.range(limits = "Classification[2:2],Classification[9:9]")
+  → filters.delaunay
+  → filters.faceraster(resolution=1, origin_x, origin_y, width, height,  # snapped outward
+                       nodata=-9999, max_triangle_edge_length=100)
+  → writers.raster(data_type=double, nodata=-9999, gdaldriver=GTiff)
+```
+
+The crop keeps the TIN to the contract's 20 m neighbourhood instead of whole
+neighbouring tiles. `writers.raster` has no `override_srs`, so the optional EPSG
+is set on the readers. `filters.delaunay` cannot stream, so this workload always
+runs `--nostream` whatever `execution_mode` says (metadata `execution_mode`
+records the mode used, `configured_execution_mode` the option). These stages are
+not required by the probe: a PDAL without them only makes `generate_DEM`
+`unsupported`. `faceraster` samples the TIN at cell centres; on a planar ground
+surface the real-PDAL integration test reproduces it to < 1e-6 m.
 
 **Execution.** The benchmarked command is the stdlib launcher
 `python -m lidarbench.execution.adapters.pdal_worker --job pdal-job.json`
@@ -465,9 +496,9 @@ installation validate the actual PDAL outputs:
 
 - Real adapters `cli` and `pylib`. The modules exist as placeholders and are
   not registered.
-- LAStools `normalization`, `pixel_metrics_2` and `generate_DEM` (no contract yet).
+- LAStools `normalization` and `pixel_metrics_2` (no contract yet).
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
-- Equivalence data covers only the contracts in `workloads/` (`workloads-v5` is
-  the default; `workloads-v1` to `workloads-v4` are kept frozen; v1 has no PDAL
-  entry).
+- Equivalence data covers only the contracts in `workloads/` (`workloads-v6` is
+  the default; `workloads-v1` to `workloads-v5` are kept frozen; v1 has no PDAL
+  entry). `generate_DEM` has no numerical reference (structural validation only).

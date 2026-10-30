@@ -19,7 +19,7 @@ lidarbench report WORKSPACE/campaigns/ID --mode validated -o REPORT_DIR
 lidarbench report WORKSPACE/campaigns/ID --historical _OLD/results --historical r-export.json
 lidarbench report --historical _OLD/results -o REPORT_DIR      # historical-only report
 lidarbench report ... --render auto|always|never --quarto PATH --rscript PATH --no-renv
-lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v5 --include-raw
+lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v6 --include-raw
 ```
 
 | Option | Meaning |
@@ -28,7 +28,7 @@ lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v5 --include
 | `-o` | New report directory. Default `<workspace>/reports/<campaign>-<mode>-<UTC>`. An existing directory, a path inside the campaign, the repository root or `docs/` is refused. |
 | `--min-seconds` | Shorter timings are excluded and flagged (default 0.1 s, as in R). |
 | `--historical` | Directory of legacy per-run CSVs, or a `lidarbench.legacy-r-campaign/1` export (repeatable). |
-| `--suite` | Workload suite for the *declared* comparability labels (default `workloads/workloads-v5` of the checkout). |
+| `--suite` | Workload suite for the *declared* comparability labels (default `workloads/workloads-v6` of the checkout). |
 | `--render` | `auto` (default): render if Quarto, Rscript, `knitr` and `rmarkdown` are found, otherwise explain what is missing; `always`: exit 5 unless rendered; `never`. |
 | `--include-raw` | Also copy the verified campaign directory into `<report>/raw/`. |
 

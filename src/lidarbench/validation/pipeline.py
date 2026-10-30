@@ -328,7 +328,9 @@ def validate_outputs(
             request.expected_epsg,
             request.policies,
         )
-        if request.validation_mode == "performance-only" and structure.finite_cells == 0:
+        if (
+            request.validation_mode == "performance-only" or not contract.has_reference
+        ) and structure.finite_cells == 0:
             structure.errors.append(
                 "no finite values; coverage cannot be confirmed without a reference"
             )
@@ -362,6 +364,28 @@ def validate_outputs(
                 LevelVerdict.of(
                     Status.UNVERIFIED,
                     "performance-only validation mode: no numerical reference was computed",
+                ),
+            )
+        )
+    if not contract.has_reference:
+        accepted = sorted(
+            {
+                f"structural: {e}"
+                for s in structures.values()
+                for e in (*s.accepted_exceptions, *s.numerical_caps)
+            }
+        )
+        return finish(
+            _verdicts(
+                request,
+                impl,
+                artifacts_ok,
+                structural_ok,
+                LevelVerdict.of(
+                    Status.UNSUPPORTED,
+                    f"contract {contract.key} declares no numerical reference "
+                    "(reference.method = none): structural validation only",
+                    *accepted,
                 ),
             )
         )

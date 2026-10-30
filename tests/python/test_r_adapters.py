@@ -166,11 +166,12 @@ def test_adapters_are_registered_entry_points():
 def test_workload_declarations(cls, model):
     adapter = cls()
     support = {s.workload_id: s for s in adapter.workload_support()}
-    for workload in ("pixel_metrics_1a", "generate_DSM1"):
+    runnable = ("pixel_metrics_1a", "generate_DSM1", "generate_DEM")
+    for workload in runnable:
         assert support[workload].status is ImplementationStatus.RUNNABLE
         assert support[workload].threading.model is model
         assert adapter.support_for(workload, 64).status is ImplementationStatus.RUNNABLE
-    others = [s for w, s in support.items() if w not in ("pixel_metrics_1a", "generate_DSM1")]
+    others = [s for w, s in support.items() if w not in runnable]
     assert others and all(s.reason and not s.status.dispatchable for s in others)
 
 
@@ -189,7 +190,9 @@ def test_pinned_definitions_match_contracts_and_legacy_calls(cls):
         contract = suite.get(workload.workload_id)
         impl = contract.implementation(cls.contract_tool)
         assert impl is not None and impl.status is ImplementationStatus.RUNNABLE
-        assert impl.equivalence == "matched_definition"
+        # generate_DEM (workloads-v6) has no numerical reference: non_comparable.
+        expected = "matched_definition" if contract.has_reference else "non_comparable"
+        assert impl.equivalence == expected
         assert impl.artifacts == (workload.artifact_pattern,)
         assert workload.buffer == contract.buffer
         assert f'"{workload.call}"' in setup

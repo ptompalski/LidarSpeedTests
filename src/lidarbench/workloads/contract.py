@@ -29,7 +29,7 @@ from lidarbench.core.canonical import digest
 from lidarbench.execution.adapters.base import WORKLOAD_ID_PATTERN, ImplementationStatus
 
 CONTRACT_SCHEMA = "lidarbench.workload/1"
-DEFAULT_SUITE = "workloads-v5"
+DEFAULT_SUITE = "workloads-v6"
 
 SUITE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 TOOL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -53,6 +53,11 @@ CELL_OWNERSHIP = {
         "edge belongs to the cell north of it and a point on the grid's north edge is "
         "outside the tile's raster."
     ),
+    "cell_centre_sample": (
+        "No point binning: each cell's value is a surface (for example a linear TIN) "
+        "sampled at the cell centre, so point ownership does not apply; only the grid "
+        "geometry is shared."
+    ),
     "undeclared": (
         "The tool's cell ownership has not been established; numerical agreement can be "
         "measured diagnostically but never certified."
@@ -61,7 +66,8 @@ CELL_OWNERSHIP = {
 """Named cell-ownership conventions a contract or implementation may declare."""
 
 POPULATION_INPUTS = ("original",)
-POPULATION_POINTS = ("all",)
+POPULATION_POINTS = ("all", "classes")
+"""``all``: no filter; ``classes``: only points whose ASPRS class is in ``population.classes``."""
 POPULATION_Z = ("original",)
 UNITS = ("metre",)
 TILINGS = ("per_input_file",)
@@ -71,7 +77,9 @@ IMPLEMENTATION_EXTENT_RULES = ("header_bounds_snapped_nearest",)
 ``accept_known_extent_discrepancies`` policy; design/VALIDATION.md)."""
 EMPTY_CELLS = ("nodata",)
 NODATA_SOURCES = ("file_metadata",)
-REFERENCE_METHODS = ("cell_statistic",)
+REFERENCE_METHODS = ("cell_statistic", "none")
+"""``none``: the contract defines no independent numerical reference; validation stops at
+the structural level and the numerical level is ``unsupported`` (descriptive timings)."""
 STATISTICS = ("mean", "max")
 EQUIVALENCE = ("matched_definition", "non_comparable")
 BAND_NAMES = ("required", "not_required")
@@ -148,6 +156,8 @@ class Population:
     z: str
     require_finite_xyz: bool
     horizontal_units: str
+    classes: tuple[int, ...] = ()
+    """ASPRS classes kept when ``points == "classes"`` (sorted, distinct); else empty."""
 
 
 @dataclass(frozen=True)
@@ -241,6 +251,11 @@ class WorkloadContract:
     def digest(self) -> str:
         """SHA-256 of the canonical parsed contract (independent of TOML layout)."""
         return digest(dict(self.record))
+
+    @property
+    def has_reference(self) -> bool:
+        """Whether the contract defines an independent numerical reference."""
+        return self.reference_method != "none"
 
     def implementation(self, tool: str) -> Implementation | None:
         """Declared implementation for ``tool`` (exact name), or ``None``."""
@@ -377,7 +392,6 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
             "spatial",
             "raster",
             "reference",
-            "tolerance",
             "equivalence",
             "implementations",
         ),
@@ -392,15 +406,32 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
     pop = _table(
         top["population"],
         "population",
-        {"input", "points", "z", "require_finite_xyz", "horizontal_units"},
+        {"input", "points", "z", "require_finite_xyz", "horizontal_units", "classes"},
         ("input", "points", "z", "require_finite_xyz", "horizontal_units"),
     )
+    points = _choice(pop["points"], "population.points", POPULATION_POINTS)
+    classes: tuple[int, ...] = ()
+    if points == "classes":
+        if "classes" not in pop:
+            raise ContractError('population.classes is required when points = "classes"')
+        raw = _list(pop["classes"], "population.classes")
+        for i, value in enumerate(raw):
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 255:
+                raise ContractError(
+                    f"population.classes[{i}] must be an ASPRS class 0-255, got {value!r}"
+                )
+        if not raw or len(set(raw)) != len(raw) or list(raw) != sorted(raw):
+            raise ContractError("population.classes must be a non-empty, sorted, distinct list")
+        classes = tuple(raw)
+    elif "classes" in pop:
+        raise ContractError('population.classes is only allowed when points = "classes"')
     population = Population(
         input=_choice(pop["input"], "population.input", POPULATION_INPUTS),
-        points=_choice(pop["points"], "population.points", POPULATION_POINTS),
+        points=points,
         z=_choice(pop["z"], "population.z", POPULATION_Z),
         require_finite_xyz=_bool(pop["require_finite_xyz"], "population.require_finite_xyz"),
         horizontal_units=_choice(pop["horizontal_units"], "population.horizontal_units", UNITS),
+        classes=classes,
     )
     if not population.require_finite_xyz:
         raise ContractError("population.require_finite_xyz must be true in this schema version")
@@ -468,17 +499,35 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
         ),
     )
 
-    ref = _table(top["reference"], "reference", {"method", "statistic"}, ("method", "statistic"))
+    ref = _table(top["reference"], "reference", {"method", "statistic"}, ("method",))
     method = _choice(ref["method"], "reference.method", REFERENCE_METHODS)
-    statistic = _choice(ref["statistic"], "reference.statistic", STATISTICS)
-    if raster.band_count != 1:
-        raise ContractError("cell_statistic references produce exactly one band")
+    if method == "cell_statistic":
+        if "statistic" not in ref:
+            raise ContractError("reference: missing required key(s) ['statistic']")
+        statistic = _choice(ref["statistic"], "reference.statistic", STATISTICS)
+        if raster.band_count != 1:
+            raise ContractError("cell_statistic references produce exactly one band")
+        if population.points != "all":
+            raise ContractError('cell_statistic references require population.points = "all"')
+    else:
+        if "statistic" in ref:
+            raise ContractError('reference.statistic is not allowed when method = "none"')
+        statistic = ""
 
-    tol = _table(top["tolerance"], "tolerance", {"absolute", "relative"}, ("absolute", "relative"))
-    tolerance = Tolerance(
-        absolute=_float(tol["absolute"], "tolerance.absolute", minimum=0.0),
-        relative=_float(tol["relative"], "tolerance.relative", minimum=0.0),
-    )
+    if method == "none":
+        if "tolerance" in top:
+            raise ContractError('tolerance is not allowed when reference.method = "none"')
+        tolerance = Tolerance(absolute=0.0, relative=0.0)
+    else:
+        if "tolerance" not in top:
+            raise ContractError("contract: missing required key(s) ['tolerance']")
+        tol = _table(
+            top["tolerance"], "tolerance", {"absolute", "relative"}, ("absolute", "relative")
+        )
+        tolerance = Tolerance(
+            absolute=_float(tol["absolute"], "tolerance.absolute", minimum=0.0),
+            relative=_float(tol["relative"], "tolerance.relative", minimum=0.0),
+        )
 
     art = _table(top.get("artifacts", {}), "artifacts", {"ignored_sidecars"})
     sidecars = tuple(
@@ -518,8 +567,12 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
             "nodata_source": raster.nodata_source,
             "forbidden_values": list(raster.forbidden_values),
         },
-        "reference": {"method": method, "statistic": statistic},
-        "tolerance": {"absolute": tolerance.absolute, "relative": tolerance.relative},
+        "reference": {"method": method, **({"statistic": statistic} if statistic else {})},
+        **(
+            {"tolerance": {"absolute": tolerance.absolute, "relative": tolerance.relative}}
+            if method != "none"
+            else {}
+        ),
         "artifacts": {"ignored_sidecars": list(sidecars)},
         "equivalence": {"group": group},
         "implementations": {

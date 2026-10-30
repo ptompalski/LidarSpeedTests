@@ -95,6 +95,14 @@ SUPPORTED_SYSTEMS = ("Linux", "Windows", "Darwin")
 MINIMUM_VERSION = (2, 5, 0)
 """First release with ``writers.gdal`` ``binmode`` (PDAL commit e243a67, #3840)."""
 REQUIRED_STAGES = ("readers.las", "filters.merge", "writers.gdal")
+TIN_STAGES = (
+    "filters.crop",
+    "filters.range",
+    "filters.delaunay",
+    "filters.faceraster",
+    "writers.raster",
+)
+"""Extra stages of TIN workloads; their absence makes only those workloads unrunnable."""
 READER_THREADS = 1
 """``readers.las`` ``threads`` per pipeline; concurrency comes from concurrent pipelines."""
 REQUIRED_GDAL_OPTIONS = (
@@ -131,19 +139,49 @@ _LINE_LIMIT = 20
 
 @dataclass(frozen=True)
 class PdalWorkload:
-    """A workload expressed as a ``writers.gdal`` binmode cell statistic."""
+    """A workload expressed as a ``writers.gdal`` binmode cell statistic or a TIN raster.
+
+    ``method = "binmode"``: ``writers.gdal`` cell statistic ``output_type``.
+    ``method = "tin"``: ``filters.range`` (``classes``) -> ``filters.delaunay`` ->
+    ``filters.faceraster`` (sampled at cell centres) -> ``writers.raster``; the merged
+    points are first cropped to the tile bounds grown by ``buffer``. Not streamable.
+    """
 
     workload_id: str
     output_type: str
     resolution: float
     artifact_pattern: str = "{stem}.tif"
     buffer: float = 20.0
+    method: str = "binmode"
+    classes: tuple[int, ...] = ()
+    max_triangle_edge_length: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.method not in ("binmode", "tin"):
+            raise ValueError(f"unknown PDAL workload method {self.method!r}")
+        if self.method == "tin" and (self.output_type or not self.classes):
+            raise ValueError("TIN workloads take classes and no output_type")
+
+    @property
+    def streamable(self) -> bool:
+        """Whether every stage of the pipeline can stream (filters.delaunay cannot)."""
+        return self.method == "binmode"
+
+    @property
+    def stages(self) -> tuple[str, ...]:
+        """PDAL stages the pipeline needs."""
+        if self.method == "tin":
+            return ("readers.las", "filters.merge", *TIN_STAGES)
+        return REQUIRED_STAGES
 
 
 WORKLOADS: Mapping[str, PdalWorkload] = MappingProxyType(
     {
         "pixel_metrics_1a": PdalWorkload("pixel_metrics_1a", "mean", 20.0),
         "generate_DSM1": PdalWorkload("generate_DSM1", "max", 1.0),
+        "generate_DEM": PdalWorkload(
+            "generate_DEM", "", 1.0, method="tin", classes=(2, 9), max_triangle_edge_length=100.0
+        ),
     }
 )
 """Implemented workloads (workloads-v2 and later contracts, ``[implementations.pdal]``)."""
@@ -157,11 +195,6 @@ OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
                 "normalization",
                 "candidate filters.hag_delaunay/hag_nn not yet evaluated against the legacy "
                 "TIN normalization",
-            ),
-            (
-                "generate_DEM",
-                "candidate filters.delaunay + filters.faceraster not yet evaluated against "
-                "the legacy TIN DEM",
             ),
             ("generate_DSM2", "the legacy subcircle/pit-free DSM has no evaluated PDAL pipeline"),
             (
@@ -392,6 +425,78 @@ def build_pipeline(
     return {"pipeline": stages}
 
 
+def _range_limits(classes: Sequence[int]) -> str:
+    return ",".join(f"Classification[{c}:{c}]" for c in classes)
+
+
+def build_tin_pipeline(
+    tile: Path,
+    neighbours: Sequence[Path],
+    output: Path,
+    grid: TileGrid,
+    tile_bounds: tuple[float, float, float, float],
+    workload: PdalWorkload,
+    epsg: int | None = None,
+    reader_threads: int | None = READER_THREADS,
+) -> dict[str, Any]:
+    """The PDAL TIN pipeline document for one tile (see :class:`PdalWorkload`).
+
+    Points are cropped to the tile's header bounds grown by the buffer, so the TIN
+    uses the contract's 20 m neighbourhood rather than whole neighbouring tiles.
+    """
+    reader: dict[str, Any] = {} if reader_threads is None else {"threads": reader_threads}
+    if epsg is not None:
+        reader["override_srs"] = f"EPSG:{epsg}"
+    paths = [tile, *neighbours]
+    stages: list[dict[str, Any]] = [
+        {
+            "type": "readers.las",
+            "filename": os.fspath(path),
+            "tag": "tile" if i == 0 else f"neighbour_{i}",
+            **reader,
+        }
+        for i, path in enumerate(paths)
+    ]
+    if neighbours:
+        stages.append(
+            {
+                "type": "filters.merge",
+                "inputs": ["tile", *(f"neighbour_{i}" for i in range(1, len(paths)))],
+                "tag": "merged",
+            }
+        )
+    min_x, min_y, max_x, max_y = tile_bounds
+    b = workload.buffer
+    raster: dict[str, Any] = {
+        "type": "filters.faceraster",
+        "resolution": grid.resolution,
+        "origin_x": grid.origin_x,
+        "origin_y": grid.origin_y,
+        "width": grid.width,
+        "height": grid.height,
+        "nodata": NODATA,
+    }
+    if workload.max_triangle_edge_length is not None:
+        raster["max_triangle_edge_length"] = workload.max_triangle_edge_length
+    stages += [
+        {
+            "type": "filters.crop",
+            "bounds": f"([{min_x - b!r}, {max_x + b!r}], [{min_y - b!r}, {max_y + b!r}])",
+        },
+        {"type": "filters.range", "limits": _range_limits(workload.classes)},
+        {"type": "filters.delaunay"},
+        raster,
+        {
+            "type": "writers.raster",
+            "filename": os.fspath(output),
+            "gdaldriver": GDAL_DRIVER,
+            "data_type": DATA_TYPE,
+            "nodata": NODATA,
+        },
+    ]
+    return {"pipeline": stages}
+
+
 def render_json(document: Mapping[str, Any]) -> str:
     """Stable UTF-8 JSON text (paths unescaped, floats round-trip)."""
     return json.dumps(document, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
@@ -430,8 +535,9 @@ def _metadata_facts(path: Path) -> dict[str, Any]:
                     if isinstance(node.get(k), int | float | str)
                 }
             )
-        elif name.startswith("writers.gdal"):
-            facts["writers.gdal"] = json.loads(json.dumps(node, allow_nan=False, default=str))
+        elif name.startswith(("writers.gdal", "writers.raster")):
+            writer = "writers.gdal" if name.startswith("writers.gdal") else "writers.raster"
+            facts[writer] = json.loads(json.dumps(node, allow_nan=False, default=str))
     facts["readers.las"] = readers
     facts["points_read"] = sum(
         r.get("count", 0) for r in readers if isinstance(r.get("count"), int)
@@ -500,6 +606,7 @@ class PdalAdapter(ToolAdapter):
         self._full_version: str | None = None
         self._python: Path | None = None
         self._reader_threads: int | None = READER_THREADS
+        self._stages: set[str] = set()
         self._headers: dict[tuple[Path, ...], dict[Path, tuple[float, float, float, float]]] = {}
 
     # -- probe and identity -------------------------------------------------------
@@ -571,6 +678,7 @@ class PdalAdapter(ToolAdapter):
         except ProbeError as exc:
             return Availability.unavailable(UnavailableReason.PROBE_FAILED, f"{path}: {exc}")
         self._reader_threads = READER_THREADS if "threads" in reader_options else None
+        self._stages = stages
         missing = [o for o in REQUIRED_GDAL_OPTIONS if o not in options]
         if missing:
             return Availability.unavailable(
@@ -608,7 +716,7 @@ class PdalAdapter(ToolAdapter):
                 "launcher": WORKER_MODULE,
                 "job_schema": worker.JOB_SCHEMA,
                 "run_schema": worker.RUN_SCHEMA,
-                "writer": "writers.gdal binmode=true",
+                "writer": "writers.gdal binmode=true; TIN: filters.faceraster + writers.raster",
                 "nodata": NODATA,
                 "data_type": DATA_TYPE,
                 "required_stages": ",".join(REQUIRED_STAGES),
@@ -710,17 +818,35 @@ class PdalAdapter(ToolAdapter):
         out = []
         for index, tile in enumerate(invocation.inputs, start=1):
             grid = snapped_grid(bounds[tile], workload.resolution)
-            document = build_pipeline(
-                tile,
-                buffered_neighbours(bounds, tile, workload.buffer),
-                self._artifact(invocation, workload, tile),
-                grid,
-                workload.output_type,
-                epsg,
-                self._reader_threads,
-            )
+            neighbours = buffered_neighbours(bounds, tile, workload.buffer)
+            output = self._artifact(invocation, workload, tile)
+            if workload.method == "tin":
+                document = build_tin_pipeline(
+                    tile,
+                    neighbours,
+                    output,
+                    grid,
+                    bounds[tile],
+                    workload,
+                    epsg,
+                    self._reader_threads,
+                )
+            else:
+                document = build_pipeline(
+                    tile,
+                    neighbours,
+                    output,
+                    grid,
+                    workload.output_type,
+                    epsg,
+                    self._reader_threads,
+                )
             out.append((tile, f"pipeline-{index:04d}.json", document))
         return out
+
+    def effective_mode(self, workload: PdalWorkload) -> str:
+        """``execution_mode`` actually used: non-streamable pipelines always run standard."""
+        return self.execution_mode if workload.streamable else "standard"
 
     @staticmethod
     def _artifact(invocation: Invocation, workload: PdalWorkload, tile: Path) -> Path:
@@ -728,13 +854,18 @@ class PdalAdapter(ToolAdapter):
 
     def build_command(self, invocation: Invocation) -> CommandSpec:
         """``python -m pdal_worker --job pdal-job.json`` plus one pipeline file per tile."""
-        self._workload(invocation)
+        workload = self._workload(invocation)
         self._epsg(invocation)
         self._check_paths(invocation)
         try:
             pdal = self._require_probe()
         except RuntimeError as exc:
             raise UnsupportedCombinationError(str(exc)) from exc
+        missing = [s for s in workload.stages if s not in self._stages]
+        if missing:
+            raise UnsupportedCombinationError(
+                f"PDAL {self._version} lacks stage(s) {missing} needed by {workload.workload_id}"
+            )
         python = self._python
         assert python is not None
         files = []
@@ -753,7 +884,7 @@ class PdalAdapter(ToolAdapter):
         job = {
             "schema": worker.JOB_SCHEMA,
             "pdal": os.fspath(pdal),
-            "execution_mode": self.execution_mode,
+            "execution_mode": self.effective_mode(workload),
             "concurrency": invocation.threads,
             "tiles": tiles,
             "result": RUN_FILE,
@@ -771,8 +902,11 @@ class PdalAdapter(ToolAdapter):
                 self._artifact(invocation, workload, path),
                 ArtifactKind.RASTER,
                 required=True,
-                description=f"{workload.workload_id} writers.gdal {workload.output_type} for "
-                f"{path.name}",
+                description=(
+                    f"{workload.workload_id} writers.gdal {workload.output_type} for {path.name}"
+                    if workload.method == "binmode"
+                    else f"{workload.workload_id} TIN (faceraster) for {path.name}"
+                ),
             )
             for path in invocation.inputs
         ]
@@ -788,17 +922,21 @@ class PdalAdapter(ToolAdapter):
         digest = sha256_bytes(
             "\x00".join(render_json(doc) for _, _, doc in pipelines).encode("utf-8")
         )
+        tin = workload.method == "tin"
         return {
             "pdal_version": self._version,
-            "writer": "writers.gdal",
-            "binmode": True,
-            "output_type": workload.output_type,
+            "writer": "writers.raster" if tin else "writers.gdal",
+            "binmode": None if tin else True,
+            "output_type": "tin_faceraster" if tin else workload.output_type,
+            "classes": ",".join(map(str, workload.classes)) or None,
+            "max_triangle_edge_length": workload.max_triangle_edge_length,
             "resolution": workload.resolution,
             "buffer": workload.buffer,
             "nodata": NODATA,
             "data_type": DATA_TYPE,
             "epsg": self._epsg(invocation),
-            "execution_mode": self.execution_mode,
+            "execution_mode": self.effective_mode(workload),
+            "configured_execution_mode": self.execution_mode,
             "concurrency": invocation.threads,
             "reader_threads": self._reader_threads,
             "threading_model": str(ThreadingModel.CONCURRENT_FILES),
@@ -817,7 +955,7 @@ class PdalAdapter(ToolAdapter):
         details: dict[str, Any] = {
             "workload": workload.workload_id,
             "raw_exit_code": process.exit_code,
-            "execution_mode": self.execution_mode,
+            "execution_mode": self.effective_mode(workload),
             "pdal_version": self._version,
             "pipelines": {},
             "tiles": [],
@@ -905,6 +1043,9 @@ class PdalAdapter(ToolAdapter):
                 "Execution checks only. writers.gdal binmode owns edge points rightward in X "
                 "and upward in Y (pdal_binmode_floor); numerical agreement and comparability "
                 "are decided by validation and the workload contracts."
+                if workload.method == "binmode"
+                else "Execution checks only. TIN rasters are sampled at cell centres by "
+                "filters.faceraster; validation and the workload contract decide the rest."
             ),
         )
         failure = None

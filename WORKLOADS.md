@@ -477,6 +477,19 @@ core value/support check succeeded: lidR attempts passed and lasR attempts
 retained explicit outward-extent exceptions. This is not full-dataset or
 native acceptance.
 
+## Python orchestrator: `generate_DEM` in workloads-v6
+
+`workloads/workloads-v6/generate_DEM.toml` makes the DEM runnable for lidR, lasR,
+LAStools and PDAL with **structural validation only** (no independent TIN
+reference; every implementation `non_comparable`, outcome `unverified`, timings
+only in `performance-only` reports). lidR and lasR use the calls above
+unchanged. LAStools deliberately uses `-kill 100000` instead of `-kill 100` so that,
+like lasR, no long triangle is dropped. PDAL uses `filters.range` (classes 2, 9) →
+`filters.delaunay` → `filters.faceraster` with `max_triangle_edge_length = 100`,
+cropped to the tile plus the 20 m buffer (design/ADAPTERS.md §10). Hull masking and
+edge trimming therefore still differ between tools (lidR convex hull, lasR and
+LAStools none, PDAL 100 m); the legacy harness is unchanged.
+
 ## Checks and remaining acceptance work
 
 Run `Rscript --vanilla tests/testthat.R`; focused workload checks use

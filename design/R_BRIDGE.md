@@ -291,9 +291,10 @@ declared equivalent.
 
 ## 10. Limitations
 
-- Only `pixel_metrics_1a` and `generate_DSM1` are runnable. Other legacy tasks
-  are declared `unsupported` (no `workloads-v1` contract) or `blocked` (lasR TIN
-  defects), with reasons.
+- Only `pixel_metrics_1a`, `generate_DSM1` and (workloads-v6, structural
+  validation only, `non_comparable`) `generate_DEM` are runnable, with the legacy
+  `R/0_setup.R` calls. Other legacy tasks are declared `unsupported` (no
+  contract) or `blocked` (lasR TIN defects), with reasons.
 - The lasR path does not check header CRS conflicts for a declared `epsg`
   (legacy behaviour).
 - The fake-`Rscript` tests use a POSIX shebang script and are skipped on

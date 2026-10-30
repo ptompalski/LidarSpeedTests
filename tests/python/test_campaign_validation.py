@@ -84,7 +84,7 @@ def test_runner_validates_and_reuses_identical_outputs(tmp_path):
         assert REPORT_REL in result["files"], "the report is sealed by the digest chain"
         report = json.loads((attempt / REPORT_REL).read_text(encoding="utf-8"))
         assert report["schema"] == "lidarbench.validation-report/1"
-        assert report["contract"]["key"].startswith("workloads-v5/")
+        assert report["contract"]["key"].startswith("workloads-v6/")
         assert report["tool"] == "pdal"
         validation = result["validation"]
         assert validation["report"] == REPORT_REL

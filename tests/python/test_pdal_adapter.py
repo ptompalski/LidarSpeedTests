@@ -136,7 +136,10 @@ def test_workload_declarations():
     assert PdalAdapter().support_for("pixel_metrics_1a", threads=64).status.dispatchable
 
 
-@pytest.mark.parametrize("workload_id", sorted(WORKLOADS))
+BINMODE = sorted(w for w, spec in WORKLOADS.items() if spec.method == "binmode")
+
+
+@pytest.mark.parametrize("workload_id", BINMODE)
 def test_workloads_match_the_v2_contracts(workload_id):
     contract = SUITE.get(workload_id)
     impl = contract.implementation(PdalAdapter.contract_tool)
@@ -165,7 +168,7 @@ def test_v2_suite_keeps_the_v1_definitions():
 
 
 def test_declared_classification_of_every_tool():
-    for contract in SUITE.contracts.values():
+    for contract in (c for c in SUITE.contracts.values() if c.has_reference):
         assert contract.declared_comparability("lasR") == "strictly_comparable"
         assert contract.declared_comparability("lidR") == "functionally_comparable"
         assert contract.declared_comparability("lastools") == "functionally_comparable"
@@ -465,7 +468,7 @@ def test_plan_with_spaces_and_metacharacters(pdal, layout):
         ({"parameters": {"epsg": "2959"}}, "positive integer"),
         ({"parameters": {"epsg": True}}, "positive integer"),
         ({"parameters": {"res": 2.0}}, "does not accept"),
-        ({"workload_id": "generate_DEM"}, "no workloads-v2 contract"),
+        ({"workload_id": "generate_DSM2"}, "no workloads-v2 contract"),
     ],
 )
 def test_unsupported_combinations(pdal, layout, change, text):
@@ -526,7 +529,7 @@ def _calls(layout) -> list[list[str]]:
 
 @pytest.mark.platform
 @needs_posix
-@pytest.mark.parametrize("workload", sorted(WORKLOADS))
+@pytest.mark.parametrize("workload", BINMODE)
 def test_execute_plan_and_validate_independently(pdal, layout, monkeypatch, workload):
     execution, record, inv = _execute(pdal, layout, monkeypatch, "ok", workload)
     assert str(execution.execution_status) == "succeeded", record["failure_reason"]
@@ -569,6 +572,134 @@ def test_execute_plan_and_validate_independently(pdal, layout, monkeypatch, work
     assert v.comparability()[0] is Comparability.DESCRIPTIVE_ONLY
     impl = report.to_record()["implementation"]
     assert impl["declared_comparability"] == "functionally_comparable"
+
+
+def _ground_scene(layout) -> None:
+    """Two 100 m tiles of ground (2) and water (9) points plus vegetation (1) to drop."""
+    from validation_fixtures import X0, Y0
+
+    for name, x0 in (("west tile", X0), ("east tile", X0 + 100.0)):
+        xs, ys, zs, cs = [], [], [], []
+        for i in range(21):
+            for j in range(21):
+                xs.append(x0 + 5.0 * i)
+                ys.append(Y0 + 5.0 * j)
+                zs.append(150.0 + 0.1 * i + 0.05 * j)
+                cs.append(9 if i == 3 else 2)
+                if i < 20 and j < 20:
+                    xs.append(x0 + 5.0 * i + 1.0)
+                    ys.append(Y0 + 5.0 * j + 1.0)
+                    zs.append(170.0)
+                    cs.append(1)
+        write_las(layout["inputs"] / f"{name}.las", xs, ys, zs, classification=cs)
+
+
+def test_dem_pipeline_is_a_cropped_class_filtered_tin(pdal, layout):
+    _ground_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, "generate_DEM", epsg=EPSG)
+    (_, _, east), (_, _, west) = adapter.pipelines(inv)
+    stages = [s["type"] for s in west["pipeline"]]
+    assert stages == [
+        "readers.las",
+        "readers.las",
+        "filters.merge",
+        "filters.crop",
+        "filters.range",
+        "filters.delaunay",
+        "filters.faceraster",
+        "writers.raster",
+    ]
+    assert all(s["override_srs"] == f"EPSG:{EPSG}" for s in west["pipeline"][:2])
+    by_type = {s["type"]: s for s in west["pipeline"]}
+    assert by_type["filters.range"]["limits"] == "Classification[2:2],Classification[9:9]"
+    from validation_fixtures import X0, Y0
+
+    assert by_type["filters.crop"]["bounds"] == (
+        f"([{X0 - 20.0!r}, {X0 + 120.0!r}], [{Y0 - 20.0!r}, {Y0 + 120.0!r}])"
+    )
+    face = by_type["filters.faceraster"]
+    assert (face["resolution"], face["origin_x"], face["width"], face["height"]) == (
+        1.0,
+        X0,
+        100,
+        100,
+    )
+    assert face["max_triangle_edge_length"] == 100.0 and face["nodata"] == NODATA
+    assert by_type["writers.raster"]["data_type"] == "double"
+    assert "binmode" not in json.dumps(east)
+    meta = plan_invocation(adapter, inv, adapter.probe(PLATFORM)).metadata
+    assert meta["writer"] == "writers.raster" and meta["binmode"] is None
+    assert meta["execution_mode"] == "standard" and meta["configured_execution_mode"] == "stream"
+    assert meta["classes"] == "2,9" and meta["max_triangle_edge_length"] == 100.0
+
+
+@needs_posix
+def test_dem_needs_the_tin_stages(pdal, layout, monkeypatch):
+    fake_env(monkeypatch, drivers="notin")
+    _ground_scene(layout)
+    adapter = _adapter(pdal)
+    plan = plan_invocation(adapter, _invocation(layout, "generate_DEM"), adapter.probe(PLATFORM))
+    assert plan.status is PlanStatus.SKIPPED_UNSUPPORTED and "filters.delaunay" in plan.reason
+    plan = plan_invocation(adapter, _invocation(layout, "generate_DSM1"), adapter.probe(PLATFORM))
+    assert plan.ready, plan.reason
+
+
+def test_dem_contract_is_structural_only():
+    contract = SUITE.get("generate_DEM")
+    impl = contract.implementation(PdalAdapter.contract_tool)
+    assert impl is not None and impl.status is ImplementationStatus.RUNNABLE
+    assert impl.artifacts == (WORKLOADS["generate_DEM"].artifact_pattern,)
+    assert not contract.has_reference and contract.population.classes == (2, 9)
+    assert contract.population.classes == WORKLOADS["generate_DEM"].classes
+    assert contract.raster.resolution == WORKLOADS["generate_DEM"].resolution
+    assert contract.buffer == WORKLOADS["generate_DEM"].buffer
+    assert contract.declared_comparability("pdal") == "non_comparable"
+
+
+@pytest.mark.platform
+@needs_posix
+@pytest.mark.parametrize("configured", ["stream", "prefer"])
+def test_dem_runs_standard_and_validates_structurally(pdal, layout, monkeypatch, configured):
+    pytest.importorskip("rasterio")
+    pytest.importorskip("laspy")
+    fake_env(monkeypatch, "ok", log=os.fspath(layout["attempt"].parent / "pdal-calls.jsonl"))
+    _ground_scene(layout)
+    adapter = _adapter(pdal, execution_mode=configured)
+    inv = _invocation(layout, "generate_DEM", epsg=EPSG)
+    plan = plan_invocation(adapter, inv, availability=adapter.probe(PLATFORM))
+    assert plan.ready, plan.reason
+    execution = execute_plan(plan, inv, layout["attempt"], timeout_s=120, adapter=adapter)
+    record = json.loads((layout["attempt"] / "execution.json").read_text(encoding="utf-8"))
+    assert str(execution.execution_status) == "succeeded", record["failure_reason"]
+    details = record["interpretation"]["details"]
+    assert details["execution_mode"] == "standard"
+    for tile in details["tiles"]:
+        assert tile["metadata"]["writers.raster"]["filename"]
+    pipelines = [c for c in _calls(layout) if c[0] == "pipeline"]
+    assert len(pipelines) == 2 and all(c[-1] == "--nostream" for c in pipelines)
+
+    from lidarbench.validation.pipeline import ValidationRequest, validate_outputs
+    from lidarbench.validation.status import Comparability, Outcome, Status
+
+    report = validate_outputs(
+        ValidationRequest(
+            contract=SUITE.get("generate_DEM"),
+            tool="pdal",
+            inputs=inv.inputs,
+            output_dir=inv.output_dir,
+            expected_epsg=EPSG,
+        )
+    )
+    v = report.verdicts
+    assert v.artifacts.status is Status.PASSED, v.artifacts.reasons
+    assert v.structural.status is Status.PASSED, v.structural.reasons
+    assert v.numerical.status is Status.UNSUPPORTED
+    assert "structural validation only" in v.numerical.reasons[0]
+    assert v.outcome is Outcome.UNVERIFIED
+    assert v.comparability()[0] is Comparability.DESCRIPTIVE_ONLY
+    assert v.report_inclusion("performance-only") == (True, "unverified (unsupported)")
+    assert v.report_inclusion("validated")[0] is False
 
 
 @pytest.mark.platform

@@ -14,7 +14,7 @@ Environment variables read by the launched script:
 =================== =================================================================
 FAKE_PDAL_VERSION    version printed by ``--version`` (default ``2.6.3``)
 FAKE_PDAL_OPTIONS    ``ok`` | ``nobinmode`` | ``broken`` (``--options`` output)
-FAKE_PDAL_DRIVERS    ``ok`` | ``nomerge``
+FAKE_PDAL_DRIVERS    ``ok`` | ``nomerge`` | ``notin`` (no TIN stages)
 FAKE_PDAL_READER_THREADS ``absent``: ``readers.las`` lists no ``threads`` option
 FAKE_PDAL_MODE       ``ok`` | ``fail`` (exit 1, ``PDAL:`` error) | ``warning`` (exit 0
                      with a warning line) | ``error0`` (exit 0 with an error line) |
@@ -46,6 +46,8 @@ if args == ["--version"]:
     sys.exit(0)
 if args == ["--drivers", "--showjson"]:
     names = ["readers.las", "filters.merge", "writers.gdal", "filters.crop"]
+    if os.environ.get("FAKE_PDAL_DRIVERS") != "notin":
+        names += ["filters.range", "filters.delaunay", "filters.faceraster", "writers.raster"]
     if os.environ.get("FAKE_PDAL_DRIVERS") == "nomerge":
         names.remove("filters.merge")
     print(json.dumps([{"name": n, "description": "", "link": "", "extensions": []} for n in names]))
@@ -85,20 +87,61 @@ if mode == "fail":
 
 stages = json.loads(pipeline_file.read_text(encoding="utf-8"))["pipeline"]
 writer = stages[-1]
-assert writer["type"] == "writers.gdal" and writer["binmode"] is True
 readers = [s for s in stages if s["type"] == "readers.las"]
 
 import laspy, numpy as np, rasterio
 from rasterio.transform import from_origin
 
-xs, ys, zs, counts = [], [], [], []
+xs, ys, zs, cs, counts = [], [], [], [], []
 for reader in readers:
     las = laspy.read(reader["filename"])
     xs.append(np.asarray(las.x, dtype=np.float64))
     ys.append(np.asarray(las.y, dtype=np.float64))
     zs.append(np.asarray(las.z, dtype=np.float64))
+    cs.append(np.asarray(las.classification, dtype=np.int64))
     counts.append(len(las.points))
 x, y, z = np.concatenate(xs), np.concatenate(ys), np.concatenate(zs)
+c = np.concatenate(cs)
+
+if writer["type"] == "writers.raster":
+    # TIN stand-in (no triangulation): crop, class filter, then every cell centre inside
+    # the kept points' bounding box gets their mean Z. Plumbing only, not PDAL behaviour.
+    names = [s["type"] for s in stages]
+    assert names[-4:] == ["filters.range", "filters.delaunay", "filters.faceraster",
+                          "writers.raster"], names
+    crop = next(s for s in stages if s["type"] == "filters.crop")["bounds"]
+    (x0, x1), (y0, y1) = json.loads(crop.replace("(", "[").replace(")", "]"))
+    limits = next(s for s in stages if s["type"] == "filters.range")["limits"]
+    keep_classes = [int(p.split("[")[1].split(":")[0]) for p in limits.split(",")]
+    keep = (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1) & np.isin(c, keep_classes)
+    face = stages[-2]
+    r, ox, oy = face["resolution"], face["origin_x"], face["origin_y"]
+    w, h = face["width"], face["height"]
+    data = np.full((h, w), float(writer["nodata"]))
+    if keep.any():
+        cx = ox + (np.arange(w) + 0.5) * r
+        cy = oy + (h - np.arange(h) - 0.5) * r
+        inside = ((cy[:, None] >= y[keep].min()) & (cy[:, None] <= y[keep].max())
+                  & (cx[None, :] >= x[keep].min()) & (cx[None, :] <= x[keep].max()))
+        data[inside] = z[keep].mean()
+    if mode != "nooutput":
+        crs = readers[0].get("override_srs")
+        with rasterio.open(
+            writer["filename"], "w", driver="GTiff", width=w, height=h, count=1,
+            dtype="float64", nodata=writer["nodata"], crs=crs,
+            transform=from_origin(ox, oy + r * h, r, r),
+        ) as dst:
+            dst.write(data, 1)
+            dst.set_band_description(1, "faceraster")
+    if mode != "nometadata":
+        meta = {"stages": {
+            **{f"readers.las{'' if k == 0 else k}": {"count": n} for k, n in enumerate(counts)},
+            "writers.raster": {"filename": [writer["filename"]]},
+        }}
+        metadata_file.write_text(json.dumps(meta), encoding="utf-8")
+    sys.exit(0)
+
+assert writer["type"] == "writers.gdal" and writer["binmode"] is True
 r, ox, oy = writer["resolution"], writer["origin_x"], writer["origin_y"]
 w, h = writer["width"], writer["height"]
 count = np.zeros((h, w))

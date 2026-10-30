@@ -59,6 +59,14 @@ class LidRAdapter(RBridgeAdapter):
                 ),
                 buffer=20.0,
             ),
+            "generate_DEM": RWorkload(
+                "generate_DEM",
+                call=(
+                    "lidR::rasterize_terrain(las = ctg, res = 1, algorithm = tin(), "
+                    "use_class = c(2L, 9L), shape = 'convex')"
+                ),
+                buffer=20.0,
+            ),
         }
     )
     other_workloads = (
@@ -67,7 +75,6 @@ class LidRAdapter(RBridgeAdapter):
             for w in (
                 "normalization",
                 "pixel_metrics_2",
-                "generate_DEM",
                 "generate_DSM2",
                 "tree_detection",
             )

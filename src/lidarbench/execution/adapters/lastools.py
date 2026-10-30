@@ -125,11 +125,25 @@ class LastoolsWorkload:
     kind: ArtifactKind = ArtifactKind.RASTER
     cutoff_warning_applies: bool = False
     """Whether the documented lascanopy cutoff-warning exception may apply."""
+    legacy_deviation: tuple[tuple[str, str, str], ...] = ()
+    """``(flag, legacy value, pinned value)`` of a deliberately changed legacy template
+    (declared in the contract note); empty = exactly the legacy call."""
 
     def __post_init__(self) -> None:
         for arg in self.args:
             if ("{" in arg or "}" in arg) and arg not in PLACEHOLDERS:
                 raise ValueError(f"unknown LAStools argument placeholder: {arg}")
+        for flag, _, pinned in self.legacy_deviation:
+            i = self.args.index(flag)
+            if self.args[i + 1] != pinned:
+                raise ValueError(f"legacy_deviation {flag} {pinned} is not in the arguments")
+
+    def legacy_args(self) -> tuple[str, ...]:
+        """The ``R/0_setup.R`` template this call derives from."""
+        args = list(self.args)
+        for flag, legacy, _ in self.legacy_deviation:
+            args[args.index(flag) + 1] = legacy
+        return tuple(args)
 
     @property
     def template_sha256(self) -> str:
@@ -162,10 +176,23 @@ WORKLOADS: Mapping[str, LastoolsWorkload] = MappingProxyType(
             ),
             artifact_pattern="{stem}.tif",
         ),
+        "generate_DEM": LastoolsWorkload(
+            "generate_DEM",
+            command="blast2dem64",
+            args=(
+                "-i", "{inputs}", "-otif", "-odir", "{output}", "-step", "1",
+                "-cores", "{cores}", "-keep_class", "2", "9", "-elevation",
+                "-kill", "100000", "-buffered", "20", "-use_orig_bb",
+                "-no_data", "-9999", "-no_kml",
+            ),
+            artifact_pattern="{stem}.tif",
+            # workloads-v6: no long-triangle trimming (like lasR) instead of the default 100 m.
+            legacy_deviation=(("-kill", "100", "100000"),),
+        ),
     }
 )
 # fmt: on
-"""Pinned legacy calls (``R/0_setup.R``); a parity test compares them with the R file."""
+"""Pinned calls; a parity test compares them with ``R/0_setup.R`` (after ``legacy_deviation``)."""
 
 _NOT_PORTED = "not yet available through the Python orchestrator: no workloads-v1 contract"
 OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
@@ -174,7 +201,6 @@ OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
         for w, cmd in (
             ("normalization", "lasheight64"),
             ("pixel_metrics_2", "lascanopy64"),
-            ("generate_DEM", "blast2dem64"),
         )
     ),
     WorkloadSupport(
@@ -777,6 +803,10 @@ class LastoolsAdapter(ToolAdapter):
         return {
             "lastools_command": workload.command,
             "legacy_template_sha256": workload.template_sha256,
+            "legacy_deviation": (
+                "; ".join(f"{f} {old} -> {new}" for f, old, new in workload.legacy_deviation)
+                or None
+            ),
             "buffer": workload.buffer,
             "height_cutoff": (
                 self.height_cutoff(invocation) if "{height_cutoff}" in workload.args else None

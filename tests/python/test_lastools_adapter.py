@@ -138,7 +138,7 @@ def test_workload_declarations():
         "complex_task1",
         "complex_task2",
     }
-    for workload in ("pixel_metrics_1a", "generate_DSM1"):
+    for workload in ("pixel_metrics_1a", "generate_DSM1", "generate_DEM"):
         support = supports[workload]
         assert support.status is ImplementationStatus.RUNNABLE
         assert support.threading.model is ThreadingModel.NATIVE_THREADS
@@ -162,16 +162,40 @@ def _legacy_lastools_call(task_id: str) -> tuple[str, tuple[str, ...]]:
 @pytest.mark.parametrize("workload_id", sorted(WORKLOADS))
 def test_pinned_templates_match_legacy_calls_and_contracts(workload_id):
     workload = WORKLOADS[workload_id]
-    assert (workload.command, workload.args) == _legacy_lastools_call(workload_id)
-    impl = load_suite(default_suite_dir()).get(workload_id).implementation("lastools")
+    assert (workload.command, workload.legacy_args()) == _legacy_lastools_call(workload_id)
+    contract = load_suite(default_suite_dir()).get(workload_id)
+    impl = contract.implementation("lastools")
     assert impl is not None and impl.status is ImplementationStatus.RUNNABLE
-    # workloads-v4 declares the upward-Y floor rule (and 0.01 m precision for the mean).
-    assert impl.equivalence == "matched_definition"
-    assert impl.cell_ownership == "pdal_binmode_floor"
-    assert impl.value_precision == (0.01 if workload_id == "pixel_metrics_1a" else None)
     assert list(impl.artifacts) == [workload.artifact_pattern]
     assert workload.buffer == 20.0 and "-buffered" in workload.args
     assert workload.args[workload.args.index("-buffered") + 1] == "20"
+    for flag, legacy, pinned in workload.legacy_deviation:
+        assert f"{flag} {pinned}" in impl.note and legacy != pinned
+    if not contract.has_reference:
+        assert impl.equivalence == "non_comparable" and impl.cell_ownership == "undeclared"
+        return
+    # workloads-v4 declares the upward-Y floor rule (and 0.01 m precision for the mean).
+    assert not workload.legacy_deviation
+    assert impl.equivalence == "matched_definition"
+    assert impl.cell_ownership == "pdal_binmode_floor"
+    assert impl.value_precision == (0.01 if workload_id == "pixel_metrics_1a" else None)
+
+
+def test_dem_drops_no_long_triangles():
+    """workloads-v6: -kill 100000 instead of the legacy (and blast2dem default) 100 m."""
+    dem = WORKLOADS["generate_DEM"]
+    assert dem.legacy_deviation == (("-kill", "100", "100000"),)
+    assert dem.args[dem.args.index("-kill") + 1] == "100000"
+    assert dem.legacy_args()[dem.args.index("-kill") + 1] == "100"
+    assert dem.args[dem.args.index("-keep_class") + 1 :][:2] == ("2", "9")
+    with pytest.raises(ValueError, match="legacy_deviation"):
+        LastoolsWorkload(
+            "x",
+            "blast2dem64",
+            ("-kill", "5"),
+            "{stem}.tif",
+            legacy_deviation=(("-kill", "100", "100000"),),
+        )
 
 
 def test_unknown_placeholder_is_rejected():
@@ -237,6 +261,7 @@ def test_probe_identifies_build_without_licensing_text(bin_dir):
     assert availability.executables == {
         "lascanopy64": bin_dir / "lascanopy64",
         "lasgrid64": bin_dir / "lasgrid64",
+        "blast2dem64": bin_dir / "blast2dem64",
     }
     identity = adapter.identify()
     assert identity.tool == "LAStools" and identity.version == FAKE_BUILD
@@ -560,12 +585,17 @@ def test_windows_command_line_limit(bin_dir, layout):
 
 
 @needs_posix
-def test_unknown_workload_is_unsupported(bin_dir, layout):
-    adapter = _adapter(bin_dir)
+def test_workload_with_a_missing_command_is_unsupported(tmp_path, layout):
+    partial = make_fake_lastools(tmp_path / "partial", ("lascanopy64", "lasgrid64"))
+    adapter = _adapter(partial)
     plan = plan_invocation(
         adapter, _invocation(layout, "generate_DEM"), availability=adapter.probe(PLATFORM)
     )
     assert plan.status is PlanStatus.SKIPPED_UNSUPPORTED and "blast2dem64" in plan.reason
+    plan = plan_invocation(
+        adapter, _invocation(layout, "generate_DSM2"), availability=adapter.probe(PLATFORM)
+    )
+    assert plan.status is PlanStatus.SKIPPED_UNSUPPORTED
 
 
 # -- interpretation (direct) ----------------------------------------------------------

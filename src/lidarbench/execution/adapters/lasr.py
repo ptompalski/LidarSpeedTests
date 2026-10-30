@@ -55,6 +55,14 @@ class LasRAdapter(RBridgeAdapter):
                 ),
                 buffer=20.0,
             ),
+            "generate_DEM": RWorkload(
+                "generate_DEM",
+                call=(
+                    "exec(pipeline = dtm(res = 1, ofile = fout), on = f, "
+                    "with = list(buffer = 20, chunk = 0, progress = FALSE))"
+                ),
+                buffer=20.0,
+            ),
         }
     )
     other_workloads = (
@@ -65,6 +73,6 @@ class LasRAdapter(RBridgeAdapter):
         WorkloadSupport("generate_DSM2", ImplementationStatus.BLOCKED, reason=_UNSTABLE_TIN),
         *(
             WorkloadSupport(w, ImplementationStatus.UNSUPPORTED, reason=_NOT_PORTED)
-            for w in ("pixel_metrics_2", "generate_DEM", "tree_detection")
+            for w in ("pixel_metrics_2", "tree_detection")
         ),
     )

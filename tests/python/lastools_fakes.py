@@ -121,7 +121,7 @@ posix_only = sys.platform == "win32"
 
 def make_fake_lastools(
     bin_dir: Path,
-    commands: tuple[str, ...] = ("lascanopy64", "lasgrid64"),
+    commands: tuple[str, ...] = ("lascanopy64", "lasgrid64", "blast2dem64"),
     exe: bool = False,
     build: str = FAKE_BUILD,
 ) -> Path:
