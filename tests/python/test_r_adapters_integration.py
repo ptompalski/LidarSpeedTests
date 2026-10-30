@@ -60,6 +60,7 @@ REPO = Path(__file__).resolve().parents[2]
 PLATFORM = get_platform_info()
 SUITE = load_suite(default_suite_dir())
 WORKLOADS = ("pixel_metrics_1a", "generate_DSM1")
+PLANS = {"multisession": "multisession", "mirai": "mirai_multisession"}
 
 
 @pytest.fixture(scope="module")
@@ -132,7 +133,9 @@ def campaign(adapters, indexed_scene):
                 f'path = "{inputs.as_posix()}"',
                 'include = ["*.las"]',
                 workloads,
-                '[[tools]]\nid = "lidr"\n[[tools]]\nid = "lasr"\n',
+                '[[tools]]\nid = "lidr"\n[[tools]]\nid = "lasr"\n'
+                '[[tools]]\nid = "lidr-mirai"\nadapter = "lidr"\n'
+                'options = { future_backend = "mirai" }\n',
             ]
         ),
         encoding="utf-8",
@@ -166,10 +169,10 @@ def _attempts(summary):
 
 def test_campaign_runs_both_tools_with_common_schema(campaign, adapters):
     summary, _ = campaign
-    assert summary.statuses == {"succeeded": 4}, summary.to_record()
+    assert summary.statuses == {"succeeded": 6}, summary.to_record()
     rows = collect_rows(summary.campaign_path)
     assert {(r["tool"], r["workload_id"]) for r in rows} == {
-        (t, w) for t in ("lidr", "lasr") for w in WORKLOADS
+        (t, w) for t in ("lidr", "lasr", "lidr-mirai") for w in WORKLOADS
     }
     for row in rows:
         assert row["execution_status"] == "succeeded" and row["exit_code"] == 0
@@ -177,7 +180,7 @@ def test_campaign_runs_both_tools_with_common_schema(campaign, adapters):
         # Validation runs in the runner: lidR passes structure (performance-only mode, so
         # numerical stays unverified); lasR's known one-cell outward extent fails the strict
         # structural level because this campaign does not enable the extent policy.
-        if row["tool"] == "lidr":
+        if row["tool_adapter"] == "lidr":
             assert (row["structural_status"], row["numerical_status"]) == ("passed", "unverified")
         else:
             assert (row["structural_status"], row["numerical_status"]) == ("failed", "not_run")
@@ -204,7 +207,9 @@ def test_bridge_records_versions_threads_and_inner_timing(campaign, adapters):
         assert record["catalog"]["buffer"] == 20 and record["catalog"]["crs"] == f"EPSG:{EPSG}"
         threads = record["threads"]
         if adapter.r_package == "lidR":
-            assert threads["future_plan"] == "multisession" and threads["future_workers"] == 2
+            backend = "mirai" if result["entry"]["tool"] == "lidr-mirai" else "multisession"
+            assert threads["future_backend"] == backend
+            assert threads["future_plan"] == PLANS[backend] and threads["future_workers"] == 2
             assert threads["lidr_threads"] == 1
             assert threads["environment"]["OMP_NUM_THREADS"] == "1"
         else:

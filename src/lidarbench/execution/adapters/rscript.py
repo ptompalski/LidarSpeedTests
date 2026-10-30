@@ -168,8 +168,9 @@ class RBridgeAdapter(ToolAdapter):
     """The benchmarked R package (also the reported tool name)."""
     contract_tool: ClassVar[str]
     """Implementation name in the workload contracts (``[implementations.<name>]``)."""
-    required_packages: ClassVar[tuple[str, ...]]
-    """Packages that must be installed and loadable (the bridge needs ``jsonlite``)."""
+    required_packages: tuple[str, ...]
+    """Packages that must be installed and loadable (the bridge needs ``jsonlite``);
+    a class default that an adapter instance may extend from its options."""
     threading_model: ClassVar[ThreadingModel]
     workloads: ClassVar[Mapping[str, RWorkload]]
     other_workloads: ClassVar[tuple[WorkloadSupport, ...]] = ()

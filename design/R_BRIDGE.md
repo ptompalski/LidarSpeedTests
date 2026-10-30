@@ -22,7 +22,7 @@ unchanged:
 | `R/1_functions.R` | `sys.source()`d into a private environment |
 | `R/0_setup.R` `benchmark_tasks` | parsed, not run. Each cell of the `tribble()` literal is evaluated on its own in `baseenv()` to get the exact `task_call_lidR` / `task_call_lasR` string. |
 | `prepare_input()` | lidR catalog configuration: buffer 20, chunk 0, alignment (0, 0), `wall_to_wall = FALSE`, `{ORIGINALFILENAME}` outputs |
-| `benchmark_with_resources()` | reference-BLAS check, thread caps, `future` multisession (lidR), `concurrent_files` (lasR), cleanup |
+| `benchmark_with_resources()` | reference-BLAS check, thread caps, `future` multisession or mirai (lidR), `concurrent_files` (lasR), cleanup |
 | `benchmark_execute_call()` | evaluates the call and records the **inner** start/finish time (`Sys.time()`) |
 
 The Python adapter pins each call string (`RWorkload.call`). The bridge
@@ -148,8 +148,31 @@ The environment delta of every command sets the legacy caps before R starts.
 `OMP_THREAD_LIMIT` and `OMP_MAX_ACTIVE_LEVELS` are all `1`. For lasR,
 `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT` equal the thread budget.
 `benchmark_with_resources()` then applies the same values inside R, verifies
-reference BLAS, and starts `future` multisession with *n* workers (lidR) or
+reference BLAS, and starts *n* `future` workers (lidR) or
 `concurrent_files(n)` (lasR). The applied state is recorded in the result.
+
+The lidR `future` backend is the tool option `future_backend`:
+
+* `"multisession"` (default; the legacy harness and lidR's documented example):
+  `future::plan(multisession, workers = n, rscript_startup = …)`. `plan()` returns
+  once every worker runs and has executed the start-up (`lidR` loaded,
+  `set_lidr_threads(1)`, `setDTthreads(1)`).
+* `"mirai"`: `future.mirai::mirai_multisession` (needs `future.mirai` and `mirai`,
+  locked in `renv.lock`). `benchmark_plan_mirai()` passes the session's library
+  paths to the daemons (`R_LIBS`), waits until all *n* daemons are connected and
+  runs the same start-up once on each (`mirai::everywhere()`), so both backends
+  start the timed call from the same state.
+
+Both backends' workers are re-parented away from the R process but stay in its
+session and process group, so they are sampled and cleaned up as part of the
+attempt (EXECUTION.md §6); `wait4` accounting excludes both alike. The bridge
+records `future_backend`, the plan class and the worker count. Use a separate
+`[[tools]]` entry per backend, for example `id = "lidr-mirai"`,
+`adapter = "lidr"`, `options = { future_backend = "mirai" }`. With
+`multisession`, lidR's main R process saturates one core from about 16 workers
+and limits scaling; mirai's dispatch overhead is lower (diagnostic on the
+10 pts/m² Petawawa tiles, mean metric: multisession 250/201/287 s, mirai
+244/153/86 s at 8/16/32 workers).
 
 | Adapter | Threading model | Threads |
 |---|---|---|
@@ -181,7 +204,8 @@ the runner re-checks their fingerprints before every schedule entry.
 
 Tool options (`[[tools]] options`): `rscript`, `project` (default: the
 checkout containing the package), `renv` (default `true`),
-`require_locked_versions` (default `true`) and `probe_timeout_s` (default 600).
+`require_locked_versions` (default `true`), `probe_timeout_s` (default 600) and,
+for `lidr` only, `future_backend` (`"multisession"` default or `"mirai"`, §5).
 
 ## 7. Timing
 

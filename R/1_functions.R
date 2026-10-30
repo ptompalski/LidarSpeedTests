@@ -1040,6 +1040,36 @@ benchmark_validate_thread_runtime <- function() {
   invisible(NULL)
 }
 
+benchmark_plan_mirai <- function(cores, cleanup_add, timeout_s = 120) {
+  # mirai daemons are plain R processes: give them this session's (renv) library
+  # and the same per-worker state multisession workers get from rscript_startup
+  # (lidR loaded, lidR and data.table at one thread), all before the timed call.
+  previous_libs <- Sys.getenv("R_LIBS", unset = NA_character_)
+  cleanup_add(function() {
+    if (is.na(previous_libs)) Sys.unsetenv("R_LIBS") else Sys.setenv(R_LIBS = previous_libs)
+  })
+  Sys.setenv(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
+  future::plan(future.mirai::mirai_multisession, workers = cores)
+  deadline <- Sys.time() + timeout_s
+  while (mirai::status()$connections < cores) {
+    if (Sys.time() > deadline) {
+      stop("mirai: only ", mirai::status()$connections, " of ", cores,
+           " daemons connected within ", timeout_s, " s.")
+    }
+    Sys.sleep(0.05)
+  }
+  ready <- mirai::collect_mirai(mirai::everywhere({
+    lidR::set_lidr_threads(1L)
+    data.table::setDTthreads(1L)
+    Sys.getpid()
+  }))
+  pids <- unlist(ready)
+  if (length(pids) != cores || anyDuplicated(pids) || !is.numeric(pids)) {
+    stop("mirai: worker start-up did not run once on each of ", cores, " daemons.")
+  }
+  invisible(pids)
+}
+
 benchmark_with_resources <- function(tool, cores, config, label, run, monitor_path = NULL) {
   cleanup <- list()
   cleaned <- FALSE
@@ -1072,11 +1102,21 @@ benchmark_with_resources <- function(tool, cores, config, label, run, monitor_pa
       lidR::set_lidr_threads(1L)
       previous_plan <- future::plan()
       cleanup[[length(cleanup) + 1L]] <- function() future::plan(previous_plan)
-      future::plan(future::multisession, workers = cores,
-                   rscript_startup = quote({
-                     lidR::set_lidr_threads(1L)
-                     data.table::setDTthreads(1L)
-                   }))
+      backend <- config$lidr_future_backend
+      if (is.null(backend)) backend <- "multisession"
+      if (identical(backend, "multisession")) {
+        future::plan(future::multisession, workers = cores,
+                     rscript_startup = quote({
+                       lidR::set_lidr_threads(1L)
+                       data.table::setDTthreads(1L)
+                     }))
+      } else if (identical(backend, "mirai")) {
+        benchmark_plan_mirai(cores, cleanup_add = function(f) {
+          cleanup[[length(cleanup) + 1L]] <<- f
+        })
+      } else {
+        stop("Unsupported lidR future backend: ", format(backend))
+      }
     }
     if (tool == "lasR") {
       cleanup[[length(cleanup) + 1L]] <- function() unset_parallel_strategy()

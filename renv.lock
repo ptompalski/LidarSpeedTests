@@ -707,6 +707,19 @@
       ],
       "Hash": "08bb70ca9876ea87966ef2513744c569"
     },
+    "future.mirai": {
+      "Package": "future.mirai",
+      "Version": "1.1.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "future",
+        "mirai",
+        "parallelly",
+        "utils"
+      ],
+      "Hash": "e3043b09c6dfce963eef16c6ff967824"
+    },
     "gargle": {
       "Package": "gargle",
       "Version": "1.6.1",
@@ -1233,6 +1246,17 @@
       ],
       "Hash": "0ec19f34c72fab674d8f2b4b1c6410e1"
     },
+    "mirai": {
+      "Package": "mirai",
+      "Version": "2.7.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "nanonext",
+        "R"
+      ],
+      "Hash": "d1a2a035cf5f15b64775e37d6d579e17"
+    },
     "modelr": {
       "Package": "modelr",
       "Version": "0.1.11",
@@ -1250,6 +1274,16 @@
         "vctrs"
       ],
       "Hash": "4f50122dc256b1b6996a4703fecea821"
+    },
+    "nanonext": {
+      "Package": "nanonext",
+      "Version": "1.10.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R"
+      ],
+      "Hash": "17ee6beda7ce8b08b4f3a50ead00056d"
     },
     "openssl": {
       "Package": "openssl",

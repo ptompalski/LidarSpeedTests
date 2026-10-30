@@ -112,7 +112,7 @@ adapter-imposed limit. A thread count outside the range resolves to
 |---|---|---|
 | `single_threaded` | always one thread (`max_threads` must be 1) | synthetic worker |
 | `native_threads` | the tool's own flag or setting | LAStools `-cores N` |
-| `worker_processes` | the tool starts worker processes | lidR `future` multisession |
+| `worker_processes` | the tool starts worker processes | lidR `future` multisession or mirai |
 | `concurrent_files` | files processed concurrently | lasR `concurrent_files` |
 
 ### Invocation (input, built by the orchestrator)

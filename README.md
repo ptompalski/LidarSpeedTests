@@ -103,7 +103,8 @@ locked packages (`renv::restore()`), these tools are reported as unavailable,
 and their attempts are recorded as `skipped_unavailable`. R errors and R
 warnings during a workload fail the attempt. lasR inputs need `.lax` indexes
 (create them once before the campaign). The timed interval includes R start-up;
-the R workload time and the start-up overhead are reported separately. See
+the R workload time and the start-up overhead are reported separately. lidR's `future` backend is the `lidr` tool option `future_backend`
+(`"multisession"`, the default, or `"mirai"`). See
 [design/R_BRIDGE.md](design/R_BRIDGE.md) and
 [configs/examples/r-campaign.toml](configs/examples/r-campaign.toml).
 

@@ -203,11 +203,38 @@ def test_default_project_is_this_checkout():
 
 @pytest.mark.parametrize(
     "options",
-    [{"rscript": 1}, {"renv": "yes"}, {"probe_timeout_s": True}, {"probe_timeout_s": 0}],
+    [
+        {"rscript": 1},
+        {"renv": "yes"},
+        {"probe_timeout_s": True},
+        {"probe_timeout_s": 0},
+        {"future_backend": "callr"},
+        {"future_backend": 1},
+        {"unknown": 1},
+    ],
 )
 def test_invalid_options_raise_type_error(options):
     with pytest.raises(TypeError):
         LidRAdapter(**options)
+
+
+def test_lidr_future_backend_option(layout, project):
+    default = LidRAdapter(project=str(project))
+    assert default.future_backend == "multisession"
+    assert default.required_packages == LidRAdapter.required_packages
+    mirai = _ready(LidRAdapter(project=str(project), future_backend="mirai"))
+    assert mirai.required_packages == (*LidRAdapter.required_packages, "future.mirai", "mirai")
+    assert LidRAdapter.required_packages == ("lidR", "future", "data.table", "jsonlite")
+    for adapter, backend in ((_ready(default), "multisession"), (mirai, "mirai")):
+        inv = _invocation(layout, threads=3, epsg=2959)
+        plan = plan_invocation(adapter, inv, availability=_available(adapter))
+        document = json.loads(plan.command.config_files[0].content)
+        assert document["lidr_future_backend"] == backend
+        assert document["required_packages"] == list(adapter.required_packages)
+        assert plan.metadata["future_backend"] == backend
+    lasr = _ready(LasRAdapter(project=str(project)))
+    plan = plan_invocation(lasr, _invocation(layout), availability=_available(lasr))
+    assert "lidr_future_backend" not in json.loads(plan.command.config_files[0].content)
 
 
 # -- planning --------------------------------------------------------------------------
@@ -419,6 +446,13 @@ def test_identify_records_versions_and_bridge_files(project, tmp_path):
     assert details["locked.lidR"] == FAKE_VERSION and details["renv"] is True
     assert re.fullmatch(r"[0-9a-f]{64}", details["renv_lockfile_sha256"])
     assert all(isinstance(v, str | int | float | bool | type(None)) for v in details.values())
+    assert details["future_backend"] == "multisession"
+    mirai = LidRAdapter(project=str(project), rscript=str(rscript), future_backend="mirai")
+    assert mirai.probe(PLATFORM).available
+    mirai_details = mirai.identify().details
+    assert mirai_details["future_backend"] == "mirai"
+    assert mirai_details["package.mirai"] == FAKE_VERSION
+    assert mirai_details["package.future.mirai"] == FAKE_VERSION
 
 
 # -- interpretation --------------------------------------------------------------------

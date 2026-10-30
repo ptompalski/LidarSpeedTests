@@ -103,6 +103,13 @@ local({
         length(buffer) != 1L || !is.finite(buffer)) {
       fail(2L, "invocation needs inputs, threads >= 1 and a finite buffer")
     }
+    future_backend <- invocation$lidr_future_backend
+    if (is.null(future_backend)) future_backend <- "multisession"
+    if (!is.character(future_backend) || length(future_backend) != 1L ||
+        !future_backend %in% c("multisession", "mirai") ||
+        (!identical(tool, "lidR") && !is.null(invocation$lidr_future_backend))) {
+      fail(2L, "invalid lidr_future_backend: ", format(invocation$lidr_future_backend))
+    }
 
     phase <- "packages"
     required <- unlist(invocation$required_packages)
@@ -223,7 +230,8 @@ local({
 
     phase <- "resources"
     result <- harness$benchmark_with_resources(
-      tool, threads, list(resource_monitoring = FALSE), invocation$workload_id,
+      tool, threads, list(resource_monitoring = FALSE, lidr_future_backend = future_backend),
+      invocation$workload_id,
       function() {
         variables <- c("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                        "BLIS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
@@ -235,6 +243,7 @@ local({
         )
         if (tool == "lidR") {
           applied$lidr_threads <- lidR::get_lidr_threads()
+          applied$future_backend <- future_backend
           applied$future_plan <- setdiff(class(future::plan()), c("FutureStrategy", "tweaked"))[[1]]
           applied$future_workers <- as.integer(future::nbrOfWorkers())
         } else {
