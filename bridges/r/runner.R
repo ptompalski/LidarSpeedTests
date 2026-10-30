@@ -208,12 +208,29 @@ local({
         fail(1L, "lasR buffer/chunking differs from the workload contract (buffer ", buffer, ")")
       }
       # lasR indexes unindexed files on the fly by writing .lax files next to
-      # them, which would modify the protected input tree.
+      # them, which would modify the protected input tree. COPC files carry
+      # their own spatial index (first VLR "copc"/1) and need no .lax.
+      bridge_is_copc <- function(path) {
+        con <- file(path, "rb")
+        on.exit(close(con))
+        head <- readBin(con, "raw", 104L)
+        if (length(head) < 104L || !identical(rawToChar(head[1:4]), "LASF")) return(FALSE)
+        size <- sum(as.integer(head[95:96]) * c(1, 256))
+        vlrs <- sum(as.integer(head[101:104]) * c(1, 256, 65536, 16777216))
+        if (vlrs < 1 || size < 104) return(FALSE)
+        rest <- readBin(con, "raw", size - 104L + 20L)
+        if (length(rest) < size - 104L + 20L) return(FALSE)
+        vlr <- rest[(size - 104L + 1L):(size - 104L + 20L)]
+        user <- vlr[3:18]
+        identical(rawToChar(user[user != as.raw(0)]), "copc") &&
+          sum(as.integer(vlr[19:20]) * c(1, 256)) == 1
+      }
+      copc <- vapply(inputs, bridge_is_copc, logical(1))
       indexes <- sub("\\.la[sz]$", ".lax", inputs, ignore.case = TRUE)
-      unindexed <- inputs[!file.exists(indexes) | file.info(indexes)$size <= 0]
+      unindexed <- inputs[!copc & (!file.exists(indexes) | file.info(indexes)$size <= 0)]
       if (length(unindexed)) {
-        fail(1L, "lasR inputs need existing nonempty LAX indexes (lasR would otherwise write ",
-             "them into the protected input directory): ", paste(unindexed, collapse = ", "))
+        fail(1L, "lasR inputs need existing nonempty LAX indexes or COPC (lasR would otherwise ",
+             "write them into the protected input directory): ", paste(unindexed, collapse = ", "))
       }
       if (!is.null(epsg)) {
         declared <- as.integer(epsg)

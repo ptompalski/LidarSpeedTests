@@ -52,7 +52,7 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
@@ -61,7 +61,7 @@ from typing import TYPE_CHECKING, Any
 
 from lidarbench.core.canonical import sha256_bytes
 from lidarbench.core.platform import PlatformInfo
-from lidarbench.datasets.lasheader import LasHeaderError, read_las_header
+from lidarbench.datasets.lasheader import LasHeader, LasHeaderError, read_las_header
 from lidarbench.execution.adapters import pdal_worker as worker
 from lidarbench.execution.adapters.base import (
     ArtifactKind,
@@ -366,6 +366,40 @@ def buffered_neighbours(
     return [p for p, b in bounds.items() if p != tile and _intersects(b, grown)]
 
 
+def _box(bounds: tuple[float, float, float, float], grow: float = 0.0) -> str:
+    min_x, min_y, max_x, max_y = bounds
+    return f"([{min_x - grow!r}, {max_x + grow!r}], [{min_y - grow!r}, {max_y + grow!r}])"
+
+
+def reader_stage(
+    path: Path,
+    tag: str,
+    reader_threads: int | None,
+    *,
+    copc: bool = False,
+    bounds: str | None = None,
+    srs: str | None = None,
+) -> dict[str, Any]:
+    """``readers.las``, or ``readers.copc`` for a COPC file (optionally a ``bounds`` query).
+
+    ``readers.copc`` fetches and decompresses only the octree nodes that intersect
+    ``bounds``; ``requests = 1`` keeps it to one decoding thread, like
+    ``readers.las threads = 1``.
+    """
+    stage: dict[str, Any] = {"filename": os.fspath(path), "tag": tag}
+    if copc:
+        stage = {"type": "readers.copc", **stage, "requests": 1}
+        if bounds is not None:
+            stage["bounds"] = bounds
+    else:
+        stage = {"type": "readers.las", **stage}
+        if reader_threads is not None:
+            stage["threads"] = reader_threads
+    if srs is not None:
+        stage["override_srs"] = srs
+    return stage
+
+
 def build_pipeline(
     tile: Path,
     neighbours: Sequence[Path],
@@ -374,25 +408,27 @@ def build_pipeline(
     output_type: str,
     epsg: int | None = None,
     reader_threads: int | None = READER_THREADS,
+    *,
+    copc: Collection[Path] = (),
+    neighbour_bounds: str | None = None,
 ) -> dict[str, Any]:
     """The PDAL pipeline document for one tile.
 
     ``reader_threads`` sets ``readers.las`` ``threads`` (its decompression pool,
     default 7 in PDAL) so a pipeline stays within its share of the thread budget;
-    ``None`` omits the option (PDAL builds without it).
+    ``None`` omits the option (PDAL builds without it). Inputs in ``copc`` are read
+    with ``readers.copc``; neighbours then only within ``neighbour_bounds``.
     """
-    reader: dict[str, Any] = {} if reader_threads is None else {"threads": reader_threads}
-    stages: list[dict[str, Any]] = [
-        {"type": "readers.las", "filename": os.fspath(tile), "tag": "tile", **reader}
-    ]
+    stages: list[dict[str, Any]] = [reader_stage(tile, "tile", reader_threads, copc=tile in copc)]
     for i, path in enumerate(neighbours, start=1):
         stages.append(
-            {
-                "type": "readers.las",
-                "filename": os.fspath(path),
-                "tag": f"neighbour_{i}",
-                **reader,
-            }
+            reader_stage(
+                path,
+                f"neighbour_{i}",
+                reader_threads,
+                copc=path in copc,
+                bounds=neighbour_bounds,
+            )
         )
     writer: dict[str, Any] = {
         "type": "writers.gdal",
@@ -438,23 +474,27 @@ def build_tin_pipeline(
     workload: PdalWorkload,
     epsg: int | None = None,
     reader_threads: int | None = READER_THREADS,
+    *,
+    copc: Collection[Path] = (),
 ) -> dict[str, Any]:
     """The PDAL TIN pipeline document for one tile (see :class:`PdalWorkload`).
 
     Points are cropped to the tile's header bounds grown by the buffer, so the TIN
     uses the contract's 20 m neighbourhood rather than whole neighbouring tiles.
+    COPC neighbours (``copc``) are queried only within that box.
     """
-    reader: dict[str, Any] = {} if reader_threads is None else {"threads": reader_threads}
-    if epsg is not None:
-        reader["override_srs"] = f"EPSG:{epsg}"
+    srs = None if epsg is None else f"EPSG:{epsg}"
+    box = _box(tile_bounds, workload.buffer)
     paths = [tile, *neighbours]
     stages: list[dict[str, Any]] = [
-        {
-            "type": "readers.las",
-            "filename": os.fspath(path),
-            "tag": "tile" if i == 0 else f"neighbour_{i}",
-            **reader,
-        }
+        reader_stage(
+            path,
+            "tile" if i == 0 else f"neighbour_{i}",
+            reader_threads,
+            copc=path in copc,
+            bounds=None if i == 0 else box,
+            srs=srs,
+        )
         for i, path in enumerate(paths)
     ]
     if neighbours:
@@ -465,8 +505,6 @@ def build_tin_pipeline(
                 "tag": "merged",
             }
         )
-    min_x, min_y, max_x, max_y = tile_bounds
-    b = workload.buffer
     raster: dict[str, Any] = {
         "type": "filters.faceraster",
         "resolution": grid.resolution,
@@ -481,7 +519,7 @@ def build_tin_pipeline(
     stages += [
         {
             "type": "filters.crop",
-            "bounds": f"([{min_x - b!r}, {max_x + b!r}], [{min_y - b!r}, {max_y + b!r}])",
+            "bounds": box,
         },
         {"type": "filters.range", "limits": _range_limits(workload.classes)},
         {"type": "filters.delaunay"},
@@ -527,7 +565,7 @@ def _metadata_facts(path: Path) -> dict[str, Any]:
     for name, node in sorted(stages.items()):
         if not isinstance(node, dict):
             continue
-        if name.startswith("readers.las"):
+        if name.startswith(("readers.las", "readers.copc")):
             readers.append(
                 {
                     k: node.get(k)
@@ -607,7 +645,7 @@ class PdalAdapter(ToolAdapter):
         self._python: Path | None = None
         self._reader_threads: int | None = READER_THREADS
         self._stages: set[str] = set()
-        self._headers: dict[tuple[Path, ...], dict[Path, tuple[float, float, float, float]]] = {}
+        self._headers: dict[tuple[Path, ...], dict[Path, LasHeader]] = {}
 
     # -- probe and identity -------------------------------------------------------
 
@@ -799,22 +837,35 @@ class PdalAdapter(ToolAdapter):
         Raises:
             ValueError: A header is unreadable (planning then fails, not skips).
         """
+        return {path: h.bounds_xy for path, h in self.headers(invocation).items()}
+
+    def headers(self, invocation: Invocation) -> dict[Path, LasHeader]:
+        """LAS headers of every input (cached per input set).
+
+        Raises:
+            ValueError: A header is unreadable (planning then fails, not skips).
+        """
         key = tuple(invocation.inputs)
         if key not in self._headers:
-            bounds = {}
+            headers = {}
             for path in key:
                 try:
-                    bounds[path] = read_las_header(path).bounds_xy
+                    headers[path] = read_las_header(path)
                 except (LasHeaderError, OSError) as exc:
                     raise ValueError(f"cannot read the LAS header of {path}: {exc}") from exc
-            self._headers[key] = bounds
+            self._headers[key] = headers
         return self._headers[key]
+
+    def copc_inputs(self, invocation: Invocation) -> frozenset[Path]:
+        """Inputs that are COPC files (read with ``readers.copc`` and bounds queries)."""
+        return frozenset(p for p, h in self.headers(invocation).items() if h.copc)
 
     def pipelines(self, invocation: Invocation) -> list[tuple[Path, str, dict[str, Any]]]:
         """``(tile, config file name, pipeline document)`` for every input, in order."""
         workload = self._workload(invocation)
         epsg = self._epsg(invocation)
         bounds = self.header_bounds(invocation)
+        copc = self.copc_inputs(invocation)
         out = []
         for index, tile in enumerate(invocation.inputs, start=1):
             grid = snapped_grid(bounds[tile], workload.resolution)
@@ -830,6 +881,7 @@ class PdalAdapter(ToolAdapter):
                     workload,
                     epsg,
                     self._reader_threads,
+                    copc=copc,
                 )
             else:
                 document = build_pipeline(
@@ -840,6 +892,8 @@ class PdalAdapter(ToolAdapter):
                     workload.output_type,
                     epsg,
                     self._reader_threads,
+                    copc=copc,
+                    neighbour_bounds=_box(bounds[tile], workload.buffer),
                 )
             out.append((tile, f"pipeline-{index:04d}.json", document))
         return out
@@ -861,7 +915,8 @@ class PdalAdapter(ToolAdapter):
             pdal = self._require_probe()
         except RuntimeError as exc:
             raise UnsupportedCombinationError(str(exc)) from exc
-        missing = [s for s in workload.stages if s not in self._stages]
+        needed = [*workload.stages, *(["readers.copc"] if self.copc_inputs(invocation) else [])]
+        missing = [s for s in needed if s not in self._stages]
         if missing:
             raise UnsupportedCombinationError(
                 f"PDAL {self._version} lacks stage(s) {missing} needed by {workload.workload_id}"
@@ -916,7 +971,7 @@ class PdalAdapter(ToolAdapter):
         workload = self._workload(invocation)
         pipelines = self.pipelines(invocation)
         neighbour_reads = sum(
-            sum(1 for s in doc["pipeline"] if s["type"] == "readers.las") - 1
+            sum(1 for s in doc["pipeline"] if s["type"] in ("readers.las", "readers.copc")) - 1
             for _, _, doc in pipelines
         )
         digest = sha256_bytes(
@@ -937,6 +992,13 @@ class PdalAdapter(ToolAdapter):
             "epsg": self._epsg(invocation),
             "execution_mode": self.effective_mode(workload),
             "configured_execution_mode": self.execution_mode,
+            "reader": (
+                "readers.copc (neighbours: bounds query)"
+                if (n := len(self.copc_inputs(invocation))) == len(invocation.inputs)
+                else "readers.las"
+                if n == 0
+                else f"mixed ({n} COPC)"
+            ),
             "concurrency": invocation.threads,
             "reader_threads": self._reader_threads,
             "threading_model": str(ThreadingModel.CONCURRENT_FILES),

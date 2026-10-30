@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from campaign_helpers import make_runner, no_git, registry
 from dataset_helpers import copy_repo_recipes
+from validation_fixtures import mark_copc
 
 from lidarbench import cli
 from lidarbench.campaign.commands import preflight_command
@@ -322,6 +323,20 @@ def test_lasr_requires_lax_indexes(tmp_path):
     report = _preflight(path, base)
     assert _item(report, "dataset.tiles.lax").status == "ok"
     assert report.exit_code == 0, render_report(report)
+
+
+def test_copc_inputs_need_no_lax(tmp_path):
+    base = _layout(tmp_path)
+    tools = SYNTHETIC_TOOL + '[[tools]]\nid = "lasr"\n'
+    path = _config(base, tools=tools)
+    tiles = sorted((base / "data").glob("*.las"))
+    mark_copc(tiles[0])
+    lax = _item(_preflight(path, base), "dataset.tiles.lax")
+    assert lax.status == "error" and lax.details["missing"] == [tiles[1].name]
+    assert lax.details["copc"] == 1
+    tiles[1].with_suffix(".lax").write_bytes(b"index")
+    lax = _item(_preflight(path, base), "dataset.tiles.lax")
+    assert lax.status == "ok" and "1 .lax + 1 COPC" in lax.message
 
 
 def test_cpu_count_above_available_is_error(tmp_path):

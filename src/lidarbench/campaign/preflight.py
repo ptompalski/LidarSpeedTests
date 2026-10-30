@@ -191,6 +191,13 @@ def _bytes(n: int | float) -> str:
     return f"{size:.1f} TiB"  # pragma: no cover
 
 
+def _is_copc(path: Path) -> bool:
+    try:
+        return read_las_header(path).copc
+    except LasHeaderError:
+        return False  # unreadable headers are reported by the header check
+
+
 def _existing_ancestor(path: Path) -> Path | None:
     for candidate in (path, *path.parents):
         if candidate.exists():
@@ -490,11 +497,15 @@ class _Preflight:
     def check_lax(self, prefix: str, files: list[Path]) -> None:
         clouds = [f for f in files if f.suffix.lower() in POINT_CLOUD_SUFFIXES]
         missing = []
+        copc = 0
         for path in clouds:
+            if _is_copc(path):
+                copc += 1  # COPC carries its own spatial index; lasR writes no .lax for it
+                continue
             index = path.with_suffix(".lax")
             if not index.is_file() or index.stat().st_size <= 0:
                 missing.append(path.name)
-        details = {"checked": len(clouds), "missing": missing}
+        details = {"checked": len(clouds), "missing": missing, "copc": copc}
         if missing:
             self.add(
                 f"{prefix}.lax",
@@ -505,7 +516,10 @@ class _Preflight:
                 details,
             )
             return
-        self.add(f"{prefix}.lax", "ok", f".lax index present for {len(clouds)} input(s)", details)
+        indexed = f"{len(clouds) - copc} .lax" + (f" + {copc} COPC" if copc else "")
+        self.add(
+            f"{prefix}.lax", "ok", f"spatial index present for every input ({indexed})", details
+        )
 
     def check_manifest(self, prefix: str, dataset: DatasetConfig) -> None:
         assert dataset.manifest is not None

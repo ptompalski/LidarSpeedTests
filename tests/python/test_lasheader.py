@@ -6,7 +6,7 @@ import struct
 from pathlib import Path
 
 import pytest
-from validation_fixtures import X0, Y0, write_las
+from validation_fixtures import X0, Y0, mark_copc, write_las
 
 from lidarbench.datasets.lasheader import LasHeaderError, read_las_header
 
@@ -73,3 +73,13 @@ def test_las14_and_laz_written_by_laspy(tmp_path: Path):
         pytest.skip(f"no LAZ backend: {exc}")
     compressed = read_las_header(laz)
     assert compressed.compressed and compressed.point_format == 6 and compressed.point_count == 3
+
+
+def test_copc_is_detected_from_the_first_vlr(tmp_path: Path):
+    path = tmp_path / "t.las"
+    write_las(path, [X0 + 1.0], [Y0 + 1.0], [1.0])
+    plain = read_las_header(path)
+    assert not plain.copc and "copc" not in plain.to_record()
+    parsed = read_las_header(mark_copc(path))
+    assert parsed.copc and parsed.to_record()["copc"] is True
+    assert parsed.point_count == 1 and parsed.vlr_count == plain.vlr_count + 1

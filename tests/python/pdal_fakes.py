@@ -14,7 +14,7 @@ Environment variables read by the launched script:
 =================== =================================================================
 FAKE_PDAL_VERSION    version printed by ``--version`` (default ``2.6.3``)
 FAKE_PDAL_OPTIONS    ``ok`` | ``nobinmode`` | ``broken`` (``--options`` output)
-FAKE_PDAL_DRIVERS    ``ok`` | ``nomerge`` | ``notin`` (no TIN stages)
+FAKE_PDAL_DRIVERS    ``ok`` | ``nomerge`` | ``notin`` (no TIN stages) | ``nocopc``
 FAKE_PDAL_READER_THREADS ``absent``: ``readers.las`` lists no ``threads`` option
 FAKE_PDAL_MODE       ``ok`` | ``fail`` (exit 1, ``PDAL:`` error) | ``warning`` (exit 0
                      with a warning line) | ``error0`` (exit 0 with an error line) |
@@ -48,6 +48,8 @@ if args == ["--drivers", "--showjson"]:
     names = ["readers.las", "filters.merge", "writers.gdal", "filters.crop"]
     if os.environ.get("FAKE_PDAL_DRIVERS") != "notin":
         names += ["filters.range", "filters.delaunay", "filters.faceraster", "writers.raster"]
+    if os.environ.get("FAKE_PDAL_DRIVERS") != "nocopc":
+        names.append("readers.copc")
     if os.environ.get("FAKE_PDAL_DRIVERS") == "nomerge":
         names.remove("filters.merge")
     print(json.dumps([{"name": n, "description": "", "link": "", "extensions": []} for n in names]))
@@ -87,7 +89,7 @@ if mode == "fail":
 
 stages = json.loads(pipeline_file.read_text(encoding="utf-8"))["pipeline"]
 writer = stages[-1]
-readers = [s for s in stages if s["type"] == "readers.las"]
+readers = [s for s in stages if s["type"] in ("readers.las", "readers.copc")]
 
 import laspy, numpy as np, rasterio
 from rasterio.transform import from_origin
@@ -95,11 +97,16 @@ from rasterio.transform import from_origin
 xs, ys, zs, cs, counts = [], [], [], [], []
 for reader in readers:
     las = laspy.read(reader["filename"])
-    xs.append(np.asarray(las.x, dtype=np.float64))
-    ys.append(np.asarray(las.y, dtype=np.float64))
-    zs.append(np.asarray(las.z, dtype=np.float64))
-    cs.append(np.asarray(las.classification, dtype=np.int64))
-    counts.append(len(las.points))
+    keep = np.ones(len(las.points), dtype=bool)
+    if "bounds" in reader:  # readers.copc spatial query
+        assert reader["type"] == "readers.copc", reader
+        (bx0, bx1), (by0, by1) = json.loads(reader["bounds"].replace("(", "[").replace(")", "]"))
+        keep = (las.x >= bx0) & (las.x <= bx1) & (las.y >= by0) & (las.y <= by1)
+    xs.append(np.asarray(las.x, dtype=np.float64)[keep])
+    ys.append(np.asarray(las.y, dtype=np.float64)[keep])
+    zs.append(np.asarray(las.z, dtype=np.float64)[keep])
+    cs.append(np.asarray(las.classification, dtype=np.int64)[keep])
+    counts.append(int(keep.sum()))
 x, y, z = np.concatenate(xs), np.concatenate(ys), np.concatenate(zs)
 c = np.concatenate(cs)
 

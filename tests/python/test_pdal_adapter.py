@@ -21,7 +21,7 @@ from pathlib import Path, PureWindowsPath
 import pytest
 from campaign_helpers import write_config
 from pdal_fakes import fake_env, make_fake_pdal, posix_only
-from validation_fixtures import EPSG, neighbour_scene, write_las
+from validation_fixtures import EPSG, mark_copc, neighbour_scene, write_las
 
 from lidarbench.campaign.results import collect_rows
 from lidarbench.campaign.runner import CampaignRunner, RunOptions
@@ -853,3 +853,70 @@ def test_campaign_runs_pdal_through_the_common_schema(tmp_path, pdal, monkeypatc
         names = [c["name"] for c in inv["command"]["config_files"]]
         assert names == ["pipeline-0001.json", "pipeline-0002.json", JOB_FILE]
         assert inv["plan"]["metadata"]["binmode"] is True
+
+
+# -- COPC inputs ------------------------------------------------------------------------
+
+
+def _copc_scene(layout) -> None:
+    _scene(layout)
+    for tile in layout["inputs"].glob("*.las"):
+        mark_copc(tile)
+
+
+@pytest.mark.parametrize("workload", sorted(WORKLOADS))
+def test_copc_inputs_query_only_the_buffer_of_neighbours(pdal, layout, workload):
+    _copc_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, workload, epsg=EPSG)
+    bounds = adapter.header_bounds(inv)
+    assert adapter.copc_inputs(inv) == frozenset(inv.inputs)
+    for tile, _, doc in adapter.pipelines(inv):
+        readers = [s for s in doc["pipeline"] if s["type"].startswith("readers.")]
+        assert {r["type"] for r in readers} == {"readers.copc"}
+        assert all(r["requests"] == 1 and "threads" not in r for r in readers)
+        assert "bounds" not in readers[0]  # the tile itself is read whole
+        min_x, min_y, max_x, max_y = bounds[tile]
+        box = f"([{min_x - 20.0!r}, {max_x + 20.0!r}], [{min_y - 20.0!r}, {max_y + 20.0!r}])"
+        assert len(readers) == 2 and readers[1]["bounds"] == box
+    meta = plan_invocation(adapter, inv, adapter.probe(PLATFORM)).metadata
+    assert meta["reader"].startswith("readers.copc") and meta["neighbour_reads"] == 2
+
+
+@needs_posix
+def test_copc_inputs_need_readers_copc(pdal, layout, monkeypatch):
+    fake_env(monkeypatch, drivers="nocopc")
+    _copc_scene(layout)
+    adapter = _adapter(pdal)
+    plan = plan_invocation(adapter, _invocation(layout, "generate_DSM1"), adapter.probe(PLATFORM))
+    assert plan.status is PlanStatus.SKIPPED_UNSUPPORTED and "readers.copc" in plan.reason
+
+
+@pytest.mark.platform
+@needs_posix
+@pytest.mark.parametrize("workload", BINMODE)
+def test_copc_buffer_queries_keep_the_validated_results(pdal, layout, monkeypatch, workload):
+    pytest.importorskip("rasterio")
+    pytest.importorskip("laspy")
+    fake_env(monkeypatch, "ok")
+    _copc_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, workload, epsg=EPSG)
+    plan = plan_invocation(adapter, inv, availability=adapter.probe(PLATFORM))
+    assert plan.ready, plan.reason
+    execution = execute_plan(plan, inv, layout["attempt"], timeout_s=120, adapter=adapter)
+    assert str(execution.execution_status) == "succeeded"
+
+    from lidarbench.validation.pipeline import ValidationRequest, validate_outputs
+    from lidarbench.validation.status import Status
+
+    report = validate_outputs(
+        ValidationRequest(
+            contract=SUITE.get(workload),
+            tool="pdal",
+            inputs=inv.inputs,
+            output_dir=inv.output_dir,
+            expected_epsg=EPSG,
+        )
+    )
+    assert report.verdicts.numerical.status is Status.PASSED, report.verdicts.numerical.reasons

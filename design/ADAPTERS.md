@@ -394,6 +394,20 @@ The grid is fixed explicitly because PDAL otherwise sizes it from the points as
 non-ASCII characters and Windows separators need no quoting. Paths containing
 `#` (PDAL expands it into per-view file names) or `://` (URL) are `unsupported`.
 
+**COPC inputs.** `readers.las` has no spatial index, so for LAZ inputs every
+neighbour is decompressed in full and only its buffer strip is used: on the
+Petawawa density-10 data (100 tiles) that is 752 full tile reads instead of 100,
+which dominated PDAL's run time for every workload. COPC inputs (detected from the
+header: first VLR `copc`/1) are read with `readers.copc` (`requests = 1`, one
+decoding thread, like `readers.las threads = 1`), and each neighbour with
+`bounds` = the tile's header bounds grown by the buffer, so only intersecting
+octree nodes are fetched. The tile itself is read whole. On an interior d10 tile
+this cut a pipeline from 60 s to 17.5 s (DEM) and 52 s to 14.5 s (mean); the DEM
+was byte-identical and the mean within 2e-12 (summation order). A PDAL without
+`readers.copc` makes COPC invocations `unsupported`; metadata `reader` records
+which reader was used. `scripts/convert_to_copc.py` converts prepared LAZ tiles
+to verified COPC copies.
+
 **TIN pipeline (`generate_DEM`, workloads-v6).** A structural-only contract
 (design/VALIDATION.md §1):
 

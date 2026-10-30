@@ -78,7 +78,7 @@ def _run(
     assert adapter.probe(PLATFORM).available
     inv = Invocation(
         workload,
-        tuple(sorted(paths["in"].glob("*.las"))),
+        tuple(sorted(p for p in paths["in"].iterdir() if p.suffix in (".las", ".laz"))),
         paths["out"],
         paths["work"],
         threads=threads,
@@ -156,3 +156,48 @@ def test_real_pdal_dem_is_a_class_filtered_tin_validated_structurally(tmp_path):
             valid = band != src.nodata
             assert valid.mean() > 0.99
             assert np.abs(band[valid] - expected[valid]).max() < 1e-6
+
+
+def copc_scene(directory: Path, base=neighbour_scene) -> None:
+    """A LAS fixture converted to real COPC files (writers.copc, scale kept)."""
+    import subprocess
+
+    staging = directory / "las"
+    staging.mkdir()
+    base(staging)
+    pdal = _ADAPTER._pdal
+    assert pdal is not None
+    for las in sorted(staging.glob("*.las")):
+        target = directory / f"{las.stem}.copc.laz"
+        stages = [
+            {"type": "readers.las", "filename": str(las)},
+            {"type": "writers.copc", "filename": str(target), "forward": "all",
+             "scale_x": 0.01, "scale_y": 0.01, "scale_z": 0.001},
+        ]  # fmt: skip
+        subprocess.run(
+            [str(pdal), "pipeline", "--stdin"],
+            input=json.dumps({"pipeline": stages}),
+            text=True,
+            check=True,
+            capture_output=True,
+        )
+        las.unlink()
+    staging.rmdir()
+
+
+@pytest.mark.parametrize("workload", ["pixel_metrics_1a", "generate_DSM1", "generate_DEM"])
+def test_real_pdal_on_copc_queries_neighbour_buffers(tmp_path, workload):
+    from lidarbench.datasets.lasheader import read_las_header
+    from lidarbench.validation.status import Status
+
+    base = ground_scene if workload == "generate_DEM" else neighbour_scene
+    inv, record, report = _run(tmp_path, workload, scene=lambda d: copc_scene(d, base))
+    assert all(read_las_header(p).copc for p in inv.inputs)
+    for doc in record["interpretation"]["details"]["pipelines"].values():
+        readers = [s for s in doc["pipeline"] if s["type"].startswith("readers.")]
+        assert {r["type"] for r in readers} == {"readers.copc"}
+        assert all("bounds" in r for r in readers[1:])
+    v = report.verdicts
+    assert v.structural.status is Status.PASSED, v.structural.reasons
+    expected = Status.UNSUPPORTED if workload == "generate_DEM" else Status.PASSED
+    assert v.numerical.status is expected, v.numerical.reasons

@@ -43,6 +43,9 @@ class LasHeader:
     vlr_count: int
     crs_wkt: str | None
     has_geotiff_keys: bool
+    copc: bool = False
+    """COPC (cloud-optimized point cloud): the first VLR is the ``copc`` info record,
+    so the file carries its own spatial index (no ``.lax`` needed)."""
 
     @property
     def bounds_xy(self) -> tuple[float, float, float, float]:
@@ -62,6 +65,7 @@ class LasHeader:
             "min": list(self.min_xyz),
             "max": list(self.max_xyz),
             "crs": "wkt" if self.crs_wkt else ("geotiff" if self.has_geotiff_keys else None),
+            **({"copc": True} if self.copc else {}),
         }
 
 
@@ -97,8 +101,9 @@ def read_las_header(path: str | os.PathLike[str]) -> LasHeader:
                 raise LasHeaderError(f"{file}: inconsistent header size/point offset")
             crs_wkt: str | None = None
             geotiff = False
+            copc = False
             handle.seek(header_size)
-            for _ in range(vlr_count):
+            for index in range(vlr_count):
                 raw = handle.read(_VLR_HEADER)
                 if len(raw) < _VLR_HEADER:
                     raise LasHeaderError(f"{file}: truncated VLR directory")
@@ -107,6 +112,8 @@ def read_las_header(path: str | os.PathLike[str]) -> LasHeader:
                 body = handle.read(length)
                 if len(body) < length:
                     raise LasHeaderError(f"{file}: truncated VLR body")
+                if index == 0 and user_id == "copc" and record_id == 1:
+                    copc = True
                 if user_id == "LASF_Projection" and record_id == WKT_RECORD_ID:
                     crs_wkt = body.rstrip(b"\0").decode("utf-8", "replace") or None
                 elif user_id == "LASF_Projection" and record_id == GEOKEY_RECORD_ID:
@@ -131,4 +138,5 @@ def read_las_header(path: str | os.PathLike[str]) -> LasHeader:
         vlr_count=vlr_count,
         crs_wkt=crs_wkt,
         has_geotiff_keys=geotiff,
+        copc=copc,
     )

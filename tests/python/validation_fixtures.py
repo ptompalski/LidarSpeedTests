@@ -99,6 +99,18 @@ def write_las(
     return Cloud(path, dx, dy, dz)
 
 
+def mark_copc(path: Path) -> Path:
+    """Insert a COPC info VLR (``copc``/1, zero payload) as the first VLR of an
+    uncompressed LAS file, so header readers see a COPC file; points are unchanged."""
+    data = bytearray(path.read_bytes())
+    header_size = struct.unpack_from("<H", data, 94)[0]
+    offset, count = struct.unpack_from("<II", data, 96)
+    vlr = struct.pack("<H16sHH32s", 0, b"copc", 1, 160, b"copc info") + bytes(160)
+    struct.pack_into("<II", data, 96, offset + len(vlr), count + 1)
+    path.write_bytes(bytes(data[:header_size]) + vlr + bytes(data[header_size:]))
+    return path
+
+
 def _grid_points(rng: random.Random, xmin: float, xmax: float, n: int) -> list[tuple[float, float]]:
     pts = []
     for _ in range(n):

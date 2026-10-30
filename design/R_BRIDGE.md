@@ -144,7 +144,10 @@ Every warning is listed in `execution.json` / `result.json` as
   unindexed inputs before any work (exit 1, phase `preparation`). Create the
   indexes once, before the campaign is created (for example
   `lasR::exec(lasR::write_lax(), on = files)`); they become part of the dataset
-  identity.
+  identity. COPC inputs (first VLR `copc`/1) carry their own spatial index and
+  need no `.lax`; the bridge and preflight accept them as indexed. lasR, lidR
+  and LAStools read COPC as LAS 1.4 (on the Petawawa density-1 pair the DEMs were
+  identical to those from the original LAZ + `.lax`).
 - `epsg` (optional workload parameter): lidR checks every header CRS. It refuses
   a conflicting CRS and assigns the declared CRS to the catalog, as
   `benchmark_apply_input_metadata()` does. lasR prepends `set_crs(epsg)` like the
