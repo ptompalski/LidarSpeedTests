@@ -200,3 +200,24 @@ def test_edge_points_outside_the_closed_bounds_are_foreign(scene):
     _write_outputs(scene, east=_normalized(_concat(east, _subset(scene["west"], west_edge))))
     reasons = _validate(scene).verdicts.structural.reasons
     assert any(f"e.laz: {int(west_edge.sum())} output point(s)" in r for r in reasons)
+
+
+def test_parallel_validation_matches_sequential(scene, monkeypatch):
+    west = _normalized(scene["west"])
+    west["z"][:2] = -2147483.0
+    _write_outputs(scene, west=west)
+    reports = {}
+    for workers in ("1", "2"):
+        monkeypatch.setenv("LIDARBENCH_VALIDATION_WORKERS", workers)
+        report = _validate(scene)
+        assert report.backends["decoding"]["workers"] == int(workers)
+        reports[workers] = (report.verdicts.to_record(), report.artifacts)
+    assert reports["1"] == reports["2"]
+    assert reports["2"][0]["structural"]["status"] == "failed"
+
+
+def test_worker_override_must_be_positive(scene, monkeypatch):
+    _write_outputs(scene)
+    monkeypatch.setenv("LIDARBENCH_VALIDATION_WORKERS", "0")
+    with pytest.raises(ValueError, match="positive integer"):
+        _validate(scene)

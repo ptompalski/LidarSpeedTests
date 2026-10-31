@@ -104,6 +104,15 @@ numpy + laspy) decodes each artifact once and checks, without repairing anything
   linear TIN and any convex extrapolation stay in that range; corrupt values such
   as the lasR NaN-to-integer overflow (Z ≈ −2147483.648) never do.
 
+Artifacts are checked in a process pool (validation runs between attempts, outside
+any timed interval): `min(CPUs available to the runner, artifacts, half the available
+memory / (800 B × points of the largest input tile))` workers, each given one
+contiguous block of tiles so neighbour edge strips are decoded once per worker;
+`$LIDARBENCH_VALIDATION_WORKERS` overrides the count. Matching sorts only the packed
+XY key and fully sorts just the rare XY groups of three or more points. Results do
+not depend on the worker count (recorded under `backends.decoding`). On 100
+Petawawa d10 COPC tiles this took 132 s with 22 workers instead of ~27 min.
+
 Per-artifact counts (`missing_tile_points`, `neighbour_edge_points_written`,
 `unmatched_output_points`, `implausible_heights`, ground and output Z ranges) are
 in the report. The numerical level is `unsupported` (or `unverified` in

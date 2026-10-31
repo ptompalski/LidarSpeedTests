@@ -150,13 +150,11 @@ class InputPoints:
         self._cache[tile.stem] = records
         while len(self._cache) > self.cache_size:
             self._cache.popitem(last=False)
+        # Keep the edge strip too, so a later neighbour never decodes this tile again.
+        self._remember_strip(tile, records)
         return records
 
-    def _strip(self, tile: Tile) -> PointRecords:
-        if tile.stem in self._strips:
-            self._strips.move_to_end(tile.stem)
-            return self._strips[tile.stem]
-        records = self._decoded(tile)
+    def _remember_strip(self, tile: Tile, records: PointRecords) -> PointRecords:
         min_x, min_y, max_x, max_y = tile.bounds
         b = self.buffer
         strip = records.subset(
@@ -169,6 +167,12 @@ class InputPoints:
         while len(self._strips) > self.strip_cache_size:
             self._strips.popitem(last=False)
         return strip
+
+    def _strip(self, tile: Tile) -> PointRecords:
+        if tile.stem in self._strips:
+            self._strips.move_to_end(tile.stem)
+            return self._strips[tile.stem]
+        return self._remember_strip(tile, self._decoded(tile))
 
     def neighbours(self, stem: str) -> list[Tile]:
         """Tiles (other than ``stem``) whose header bounds meet its buffered bounds."""
@@ -241,12 +245,53 @@ class PointCloudStructure:
         }
 
 
-def _keys(records: PointRecords, quantum: float, attributes: tuple[str, ...]) -> list[Any]:
+@dataclass(frozen=True)
+class _XYPacking:
+    """Packs XY grid indices relative to a tile into one int64 sort key.
+
+    Candidates lie inside the tile's closed bounds, so their indices are in
+    ``[1, sentinel)``; any coordinate outside that range maps to ``sentinel``, which
+    no candidate has, so such a point can never match. ``None`` from :meth:`for_tile`
+    means the tile is too large to pack and X and Y stay separate keys.
+    """
+
+    quantum: float
+    x0: int
+    y0: int
+    bits: int
+
+    @staticmethod
+    def for_tile(bounds: tuple[float, float, float, float], quantum: float) -> _XYPacking | None:
+        min_x, min_y, max_x, max_y = bounds
+        x0 = int(np.floor(min_x / quantum)) - 1
+        y0 = int(np.floor(min_y / quantum)) - 1
+        span = max(int(np.ceil(max_x / quantum)) - x0, int(np.ceil(max_y / quantum)) - y0) + 2
+        bits = max(1, int(span).bit_length())
+        return _XYPacking(quantum, x0, y0, bits) if 2 * bits <= 62 else None
+
+    def index(self, values: Any, origin: int) -> Any:
+        sentinel = (1 << self.bits) - 1
+        idx = np.rint(values / self.quantum).astype(np.int64) - origin
+        return np.where((idx < 1) | (idx >= sentinel), sentinel, idx)
+
+    def pack(self, records: PointRecords) -> Any:
+        return (self.index(records.x, self.x0) << self.bits) | self.index(records.y, self.y0)
+
+
+def _keys(
+    records: PointRecords,
+    quantum: float,
+    attributes: tuple[str, ...],
+    packing: _XYPacking | None = None,
+) -> list[Any]:
     """Matching key columns: XY on the input quantum, GPS time bits, packed integers."""
-    columns = [
-        np.rint(records.x / quantum).astype(np.int64),
-        np.rint(records.y / quantum).astype(np.int64),
-    ]
+    if packing is not None:
+        columns = [packing.pack(records)]
+    else:
+        columns = [
+            np.rint(records.x / quantum).astype(np.int64),
+            np.rint(records.y / quantum).astype(np.int64),
+        ]
     if "gps_time" in attributes:
         columns.append(
             np.ascontiguousarray(records.attributes["gps_time"], dtype=np.float64).view(np.int64)
@@ -257,6 +302,33 @@ def _keys(records: PointRecords, quantum: float, attributes: tuple[str, ...]) ->
             packed |= records.attributes[name].astype(np.int64) << shift
     columns.append(packed)
     return columns
+
+
+def _group_order(cols: list[Any]) -> Any:
+    """A permutation that makes rows with equal keys (all ``cols``) contiguous.
+
+    Equivalent to ``np.lexsort`` for grouping, but sorts only the first column in
+    full: most first-column values occur at most twice (an input point and its
+    output point), and a pair is contiguous whatever its other keys. Only groups
+    of three or more rows are sorted on every key.
+    """
+    first = cols[0]
+    order = np.argsort(first)
+    if len(cols) == 1:
+        return order
+    sorted_first = first[order]
+    new = np.empty(order.shape[0], dtype=bool)
+    new[0] = True
+    np.not_equal(sorted_first[1:], sorted_first[:-1], out=new[1:])
+    starts = np.flatnonzero(new)
+    sizes = np.diff(np.append(starts, order.shape[0]))
+    large = np.repeat(sizes >= 3, sizes)
+    if large.any():
+        idx = np.flatnonzero(large)
+        group = np.repeat(np.arange(starts.shape[0]), sizes)[idx]
+        rows = order[idx]
+        order[idx] = rows[np.lexsort((*(c[rows] for c in cols[:0:-1]), group))]
+    return order
 
 
 def check_point_cloud(
@@ -310,31 +382,34 @@ def check_point_cloud(
         return out
 
     quantum = min(tile.header.scale[0], tile.header.scale[1])
+    packing = _XYPacking.for_tile(tile.bounds, quantum)
     candidates = [own, *edges]
     cand_cols = [
         np.concatenate(c)
-        for c in zip(*(_keys(r, quantum, attributes) for r in candidates), strict=True)
+        for c in zip(*(_keys(r, quantum, attributes, packing) for r in candidates), strict=True)
     ]
     cand_z = np.concatenate([r.z for r in candidates])
     cand_own = np.zeros(cand_z.shape[0], dtype=bool)
     cand_own[: own.count] = True
-    out_cols = _keys(output, quantum, attributes)
+    out_cols = _keys(output, quantum, attributes, packing)
 
     n_cand = cand_z.shape[0]
-    tag = np.concatenate([np.zeros(n_cand, np.int8), np.ones(output.count, np.int8)])
     cols = [np.concatenate([a, b]) for a, b in zip(cand_cols, out_cols, strict=True)]
-    order = np.lexsort((tag, *cols[::-1]))
+    del cand_cols, out_cols
+    # Group statistics below do not depend on the order inside a group.
+    order = _group_order(cols)
     sorted_cols = [c[order] for c in cols]
-    t = tag[order]
+    del cols
+    is_cand = order < n_cand
     z = np.concatenate([cand_z, output.z])[order]
     is_own = np.concatenate([cand_own, np.zeros(output.count, dtype=bool)])[order]
-    new = np.zeros(t.shape[0], dtype=bool)
+    new = np.zeros(order.shape[0], dtype=bool)
     new[0] = True
     for c in sorted_cols:
         new[1:] |= c[1:] != c[:-1]
+    del sorted_cols, order
     starts = np.flatnonzero(new)
     group = np.cumsum(new) - 1
-    is_cand = t == 0
     n_c = np.bincount(group, weights=is_cand).astype(np.int64)
     n_o = np.bincount(group, weights=~is_cand).astype(np.int64)
     n_own = np.bincount(group, weights=is_own).astype(np.int64)
@@ -391,3 +466,128 @@ def check_point_cloud(
         "outside_surface": implementation.outside_surface,
     }
     return out
+
+
+# -- per-artifact driver (sequential or a process pool) ------------------------------
+
+WORKERS_ENV = "LIDARBENCH_VALIDATION_WORKERS"
+"""Overrides the number of point-cloud validation processes (positive integer)."""
+BYTES_PER_POINT = 800
+"""Peak memory per worker per point of the largest input tile (measured ~620 B on
+10 M-point Petawawa tiles: output, tile, neighbour strips and the matching sort)."""
+
+_WORKER: dict[str, Any] = {}
+
+
+@dataclass(frozen=True)
+class ArtifactTask:
+    """One point-cloud artifact to check against its input tile."""
+
+    name: str
+    tile: str
+    path: Path
+    size: int | None
+
+
+def validation_workers(manifest: Manifest, artifacts: int) -> tuple[int, str]:
+    """Number of validation processes and how it was chosen.
+
+    Validation runs between attempts, outside any timed interval, so it may use every
+    CPU this process may run on, bounded by half of the available memory.
+    """
+    import os
+
+    override = os.environ.get(WORKERS_ENV)
+    if override is not None:
+        try:
+            value = int(override)
+        except ValueError:
+            value = 0
+        if value < 1:
+            raise ValueError(f"{WORKERS_ENV} must be a positive integer, got {override!r}")
+        return max(1, min(value, artifacts)), f"${WORKERS_ENV}"
+    import psutil
+
+    try:
+        cpus = len(os.sched_getaffinity(0))  # type: ignore[attr-defined,unused-ignore]
+    except AttributeError:
+        cpus = os.cpu_count() or 1
+    largest = max((t.header.point_count for t in manifest.tiles.values()), default=1)
+    memory = int(psutil.virtual_memory().available * 0.5) // max(1, BYTES_PER_POINT * largest)
+    workers = max(1, min(cpus, artifacts, memory))
+    return workers, f"min(cpus {cpus}, artifacts {artifacts}, memory {memory})"
+
+
+def _init_worker(
+    manifest: Manifest,
+    buffer: float,
+    contract: WorkloadContract,
+    implementation: Implementation,
+) -> None:
+    product = contract.point_cloud
+    assert product is not None
+    _WORKER.update(
+        inputs=InputPoints(manifest, buffer, product.preserved_attributes),
+        contract=contract,
+        implementation=implementation,
+    )
+
+
+def _check_task(task: ArtifactTask) -> dict[str, Any]:
+    """Decode and check one artifact in the current (worker) process."""
+    contract: WorkloadContract = _WORKER["contract"]
+    inputs: InputPoints = _WORKER["inputs"]
+    product = contract.point_cloud
+    assert product is not None
+    before = inputs.decoded_files
+    try:
+        output = read_point_records(task.path, product.preserved_attributes)
+    except ReadError as exc:
+        return {"name": task.name, "read_error": str(exc), "decoded_inputs": 0}
+    entry: dict[str, Any] = {
+        "name": task.name,
+        "tile": task.tile,
+        "bytes": task.size,
+        "points": output.header.to_record(),
+    }
+    result: dict[str, Any] = {"name": task.name, "entry": entry}
+    if not inputs.manifest.problems:
+        structure = check_point_cloud(
+            output, task.tile, inputs, contract, _WORKER["implementation"]
+        )
+        entry["structural"] = structure.to_record()
+        result["errors"] = list(structure.errors)
+        result["accepted"] = [*structure.accepted_exceptions, *structure.numerical_caps]
+    result["decoded_inputs"] = inputs.decoded_files - before
+    return result
+
+
+def check_artifacts(
+    tasks: list[ArtifactTask],
+    manifest: Manifest,
+    contract: WorkloadContract,
+    implementation: Implementation,
+    workers: int,
+) -> list[dict[str, Any]]:
+    """Check every artifact; results in task order, identical for any ``workers``.
+
+    With several workers each process gets one contiguous block of tasks (tiles in
+    name order are spatial neighbours), so its neighbour-strip cache is reused.
+    """
+    if workers <= 1 or len(tasks) <= 1:
+        _init_worker(manifest, contract.buffer, contract, implementation)
+        try:
+            return [_check_task(t) for t in tasks]
+        finally:
+            _WORKER.clear()
+    import math
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=_init_worker,
+        initargs=(manifest, contract.buffer, contract, implementation),
+    ) as pool:
+        return list(pool.map(_check_task, tasks, chunksize=math.ceil(len(tasks) / workers)))

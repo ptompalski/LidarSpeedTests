@@ -497,12 +497,12 @@ def _validate_point_clouds(
     inventory: Inventory,
     report: ValidationReport,
 ) -> AttemptVerdicts:
-    """Artifact decoding and structural checks of point-cloud products, one at a time."""
-    from lidarbench.validation.io import ReadError, probe_point_backend
+    """Artifact decoding and structural checks of point-cloud products (process pool)."""
+    from lidarbench.validation.io import probe_point_backend
     from lidarbench.validation.pointcloud import (
-        InputPoints,
-        check_point_cloud,
-        read_point_records,
+        ArtifactTask,
+        check_artifacts,
+        validation_workers,
     )
     from lidarbench.validation.population import build_manifest
 
@@ -522,33 +522,24 @@ def _validate_point_clouds(
         )
     manifest = build_manifest(request.inputs)
     report.inputs = manifest.to_record()
-    inputs = InputPoints(manifest, contract.buffer, product.preserved_attributes)
+    tasks = [ArtifactTask(a.name, a.tile, a.path, a.size) for a in inventory.expected]
+    workers, basis = validation_workers(manifest, len(tasks))
+    results = check_artifacts(tasks, manifest, contract, impl, workers)
     read_errors: list[str] = []
     structural_errors: list[str] = []
     accepted: set[str] = set()
-    for artifact in inventory.expected:
-        try:
-            output = read_point_records(artifact.path, product.preserved_attributes)
-        except ReadError as exc:
-            read_errors.append(str(exc))
+    for result in results:
+        if "read_error" in result:
+            read_errors.append(result["read_error"])
             continue
-        entry: dict[str, Any] = {
-            "name": artifact.name,
-            "tile": artifact.tile,
-            "bytes": artifact.size,
-            "points": output.header.to_record(),
-        }
-        if not manifest.problems:
-            structure = check_point_cloud(output, artifact.tile, inputs, contract, impl)
-            entry["structural"] = structure.to_record()
-            structural_errors.extend(f"{artifact.name}: {e}" for e in structure.errors)
-            accepted.update(
-                f"structural: {e}"
-                for e in (*structure.accepted_exceptions, *structure.numerical_caps)
-            )
-        report.artifacts.append(entry)
-        del output
-    report.backends["decoding"] = {"decoded_input_files": inputs.decoded_files}
+        report.artifacts.append(result["entry"])
+        structural_errors.extend(f"{result['name']}: {e}" for e in result.get("errors", ()))
+        accepted.update(f"structural: {e}" for e in result.get("accepted", ()))
+    report.backends["decoding"] = {
+        "decoded_input_files": sum(r["decoded_inputs"] for r in results),
+        "workers": workers,
+        "workers_basis": basis,
+    }
     if read_errors:
         return _verdicts(request, impl, LevelVerdict.of(Status.FAILED, *read_errors))
     artifacts_ok = LevelVerdict.of(Status.PASSED)
