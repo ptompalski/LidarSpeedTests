@@ -33,9 +33,10 @@ same definitions plus the PDAL implementation), `workloads-v3` (frozen:
 `workloads-v2` plus LAStools `*.tfw` world files as ignored sidecars, so that
 LAStools outputs are no longer `validation_failed` at the artifacts level),
 `workloads-v4` (frozen: `workloads-v3` plus the LAStools declaration below),
-`workloads-v5` (frozen: `workloads-v4` plus the lidR extent rule below) and
-`workloads-v6` (the default: the `workloads-v5` definitions unchanged plus the
-structural-only `generate_DEM` below).
+`workloads-v5` (frozen: `workloads-v4` plus the lidR extent rule below),
+`workloads-v6` (frozen: the `workloads-v5` definitions unchanged plus the
+structural-only `generate_DEM` below) and `workloads-v7` (the default: the
+`workloads-v6` definitions unchanged plus the point-cloud `normalization` below).
 An implementation may declare `value_precision` (an output quantum, for example
 0.01 m when a tool rounds its values); the absolute tolerance is then widened by
 half of it, the reports say so, and the value is part of the contract digest. A new tool entry
@@ -80,6 +81,42 @@ trimming:
 On the Petawawa pilot pair lidR, lasR and PDAL agreed within ~1 mm on almost
 every shared cell while ~0.3 % of LAStools cells differed by more than 1 cm (up
 to 3 m); this is informal evidence, not a validation claim.
+
+**Point-cloud contracts (`normalization`, workloads-v7).** A contract declares
+exactly one product table: `[raster]` or `[point_cloud]`. A point-cloud product
+(`format = "laz"`, one `{stem}.laz` per input tile) has `z = "height_above_ground"`
+over a `surface = "linear_tin"` of `ground_classes` (2, 9) from the tile and its
+20 m buffer, `ownership = "closed_header_bounds"`, the `preserved_attributes`
+that must be unchanged and a `max_missing_fraction` (0.1%). Point-cloud contracts
+require `reference.method = "none"` and `non_comparable` implementations; each
+implementation declares `outside_surface` (`discard`, `extrapolate` or
+`undeclared`) instead of a cell convention. Validation (`validation/pointcloud.py`,
+numpy + laspy) decodes each artifact once and checks, without repairing anything:
+
+- every output point is an input point with unchanged XY (on the input
+  coordinate quantum) and preserved attributes, inside the tile's closed header
+  bounds: the tile's own points or neighbour points exactly on a shared edge
+  (a multiset match, so duplicates count); buffer points and altered attributes
+  fail;
+- at most `max_missing_fraction` of the tile's own points are absent;
+- every output Z is finite and the implied ground (input Z − output Z) lies within
+  the elevation range of the buffered ground points, plus the two Z quanta. A
+  linear TIN and any convex extrapolation stay in that range; corrupt values such
+  as the lasR NaN-to-integer overflow (Z ≈ −2147483.648) never do.
+
+Per-artifact counts (`missing_tile_points`, `neighbour_edge_points_written`,
+`unmatched_output_points`, `implausible_heights`, ground and output Z ranges) are
+in the report. The numerical level is `unsupported` (or `unverified` in
+performance-only mode), so the outcome is `unverified` and timings are
+descriptive, as for `generate_DEM`. Output heights and the CRS of point clouds
+are not checked (listed under `claims.not_established`).
+
+| Tool | Implementation | `outside_surface` |
+|---|---|---|
+| lidR | `normalize_height(tin(), use_class = c(2L, 9L))` (legacy call); half-open catalog ownership: points exactly on a tile's maximum header X/Y go to a neighbour or to no tile | `extrapolate` |
+| lasR | `normalize() + write_las()` (legacy call), `diagnostic_only`: lasR ≤ 0.21.3 writes NaN heights as Z ≈ −2147483 at collinear hull edges, which the structural level rejects | `discard` |
+| LAStools | `lasheight64 -replace_z -buffered 20` (legacy call; ground = class 2); writes exactly each tile's points | `extrapolate` |
+| PDAL | `filters.hag_delaunay` (PDAL defaults: `count = 10`, so heights differ slightly more from the other tools; class 9 relabelled to 2 and restored) → `HeightAboveGround => Z` → crop to the closed tile bounds (design/ADAPTERS.md §10) | `extrapolate` |
 
 ### Cell ownership conventions
 

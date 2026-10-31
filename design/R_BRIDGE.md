@@ -117,10 +117,11 @@ fail an attempt:
   warnings and do not fail the attempt.
 - the single exception: the lidR option `accept_known_tin_fallback_warning`
   (default false, part of the campaign identity) accepts, for `generate_DEM`
-  only, an exit 3 whose workload warnings *all* fully match lidR `tin()`'s
+  and `normalization` only, an exit 3 whose workload warnings *all* fully match lidR `tin()`'s
   "Interpolation of N points failed because they are too far from ground
   points. Nearest neighbour was used but interpolation is weak for those points"
-  (cells far from any ground point take the nearest ground point's Z). The pinned
+  (cells or points far from any ground point take the nearest ground point's Z;
+  for `normalization` this is the declared `outside_surface = "extrapolate"`). The pinned
   call must have succeeded and every other check above still applies. The
   attempt then succeeds with the declared accepted exception
   `lidr_tin_nearest_neighbour_fallback` (policy
@@ -168,11 +169,11 @@ reference BLAS, and starts *n* `future` workers (lidR) or
 
 The lidR `future` backend is the tool option `future_backend`:
 
-* `"multisession"` (default; the legacy harness and lidR's documented example):
+* `"multisession"` (the legacy harness and lidR's documented example):
   `future::plan(multisession, workers = n, rscript_startup = …)`. `plan()` returns
   once every worker runs and has executed the start-up (`lidR` loaded,
   `set_lidr_threads(1)`, `setDTthreads(1)`).
-* `"mirai"`: `future.mirai::mirai_multisession` (needs `future.mirai` and `mirai`,
+* `"mirai"` (default since workloads-v7): `future.mirai::mirai_multisession` (needs `future.mirai` and `mirai`,
   locked in `renv.lock`). `benchmark_plan_mirai()` passes the session's library
   paths to the daemons (`R_LIBS`), waits until all *n* daemons are connected and
   runs the same start-up once on each (`mirai::everywhere()`), so both backends
@@ -182,8 +183,8 @@ Both backends' workers are re-parented away from the R process but stay in its
 session and process group, so they are sampled and cleaned up as part of the
 attempt (EXECUTION.md §6); `wait4` accounting excludes both alike. The bridge
 records `future_backend`, the plan class and the worker count. Use a separate
-`[[tools]]` entry per backend, for example `id = "lidr-mirai"`,
-`adapter = "lidr"`, `options = { future_backend = "mirai" }`. With
+`[[tools]]` entry per backend, for example `id = "lidr-multisession"`,
+`adapter = "lidr"`, `options = { future_backend = "multisession" }`. With
 `multisession`, lidR's main R process saturates one core from about 16 workers
 and limits scaling; mirai's dispatch overhead is lower (diagnostic on the
 10 pts/m² Petawawa tiles, mean metric: multisession 250/201/287 s, mirai
@@ -220,7 +221,7 @@ the runner re-checks their fingerprints before every schedule entry.
 Tool options (`[[tools]] options`): `rscript`, `project` (default: the
 checkout containing the package), `renv` (default `true`),
 `require_locked_versions` (default `true`), `probe_timeout_s` (default 600) and,
-for `lidr` only, `future_backend` (`"multisession"` default or `"mirai"`, §5).
+for `lidr` only, `future_backend` (`"mirai"` default or `"multisession"`, §5).
 
 ## 7. Timing
 
@@ -306,10 +307,15 @@ declared equivalent.
 
 ## 10. Limitations
 
-- Only `pixel_metrics_1a`, `generate_DSM1` and (workloads-v6, structural
-  validation only, `non_comparable`) `generate_DEM` are runnable, with the legacy
-  `R/0_setup.R` calls. Other legacy tasks are declared `unsupported` (no
-  contract) or `blocked` (lasR TIN defects), with reasons.
+- Only `pixel_metrics_1a`, `generate_DSM1`, (workloads-v6, structural
+  validation only, `non_comparable`) `generate_DEM` and (workloads-v7, LAZ
+  output, structural validation only) `normalization` are runnable, with the
+  legacy `R/0_setup.R` calls; lasR `normalization` is `diagnostic_only` (lasR ≤
+  0.21.3 writes NaN heights as corrupt Z). Other legacy tasks are declared
+  `unsupported` (no contract) or `blocked` (lasR TIN defects), with reasons.
+- lidR `normalization` reads every attribute, so `readLAS` data-check warnings
+  (for example invalid return numbers in the unrepaired pilot inputs) fail the
+  attempt (exit 3); use repaired inputs.
 - The lasR path does not check header CRS conflicts for a declared `epsg`
   (legacy behaviour).
 - The fake-`Rscript` tests use a POSIX shebang script and are skipped on

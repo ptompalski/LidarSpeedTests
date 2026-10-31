@@ -1,0 +1,85 @@
+# Workload contract (lidarbench.workload/1). Tool-neutral definition of WHAT is
+# computed, the declared per-tool implementations and how outputs are validated.
+# Source of truth for the definition: WORKLOADS.md (workloads-v1 definitions, unchanged;
+# workloads-v2 adds the PDAL implementation, design/ADAPTERS.md §10; workloads-v3 also accepts
+# LAStools .tfw world files as ignored sidecars; workloads-v4 declares the LAStools cell rule and
+# output precision; workloads-v5 declares the lidR extent rule; workloads-v6 adds generate_DEM;
+# workloads-v7 adds normalization, definitions here unchanged). Changing any value here
+# changes the contract digest; a different definition needs a new suite.
+schema = "lidarbench.workload/1"
+suite = "workloads-v7"
+id = "pixel_metrics_1a"
+title = "Mean original elevation at 20 m"
+description = """
+Arithmetic mean of the original (unnormalized) Z of all points in each owned 20 m
+cell. No return, class, height or duplicate filter. Empty cells are NoData, never
+zero. One single-band raster per input tile."""
+
+[population]
+input = "original"            # unnormalized inputs, original datum, no conversion
+points = "all"                # no return/class/threshold filter, no deduplication
+z = "original"
+require_finite_xyz = true
+horizontal_units = "metre"    # required for "20 m" to have that meaning
+
+[spatial]
+tiling = "per_input_file"     # one output per input tile; tiles are never merged
+buffer = 20.0                 # neighbouring-file buffer; contributes only to owned cells
+
+[raster]
+resolution = 20.0
+origin = [0.0, 0.0]
+extent = "header_bounds_snapped_outward"
+cell_ownership = "right_down"
+empty_cells = "nodata"
+bands = ["z_mean"]
+nodata_source = "file_metadata"
+forbidden_values = [-9999.0, -1000000.0]   # tool NoData sentinels; a colliding value fails
+
+[reference]
+method = "cell_statistic"
+statistic = "mean"
+
+[tolerance]
+absolute = 2e-6               # |actual - reference| <= absolute + relative * |reference|
+relative = 2e-7
+
+[artifacts]
+ignored_sidecars = ["*.aux.xml", "*.vrt", "*.tfw"]   # v3: LAStools world files are sidecars
+
+[equivalence]
+group = "workloads-v7/pixel_metrics_1a"
+
+[implementations.lidR]
+status = "runnable"
+equivalence = "matched_definition"
+artifacts = ["{stem}.tif"]
+cell_ownership = "lidr_buffered_clamp"
+extent = "header_bounds_snapped_nearest"   # v5: terra::crop(snap = "near") to the header bounds
+band_names = "required"
+note = "lidR::pixel_metrics(~list(z_mean = mean(Z)), res = 20, start = c(0, 0)); catalog buffer 20, chunk 0."
+
+[implementations.lasR]
+status = "runnable"
+equivalence = "matched_definition"
+artifacts = ["{stem}.tif"]
+cell_ownership = "right_down"
+band_names = "required"
+note = "lasR rasterize(20, 'z_mean'); buffer 20, chunk 0. Float32 arithmetic."
+
+[implementations.lastools]
+status = "runnable"
+equivalence = "matched_definition"   # v4: same population, grid and statistic ...
+artifacts = ["{stem}_avg.tif"]
+cell_ownership = "pdal_binmode_floor" # ... upward-Y floor edges (same rule as PDAL binmode)
+band_names = "not_required"
+value_precision = 0.01                # lascanopy writes averages rounded to centimetres
+note = "lascanopy -avg -step 20 -height_cutoff below every header Min Z; v4 declares the upward-Y floor rule and 0.01 m output precision: on the Petawawa pilot pair (LAStools 261023) the NoData mask matched that reference exactly and every value was within 0.005 m (design/PILOT_REVIEW.md §14)."
+
+[implementations.pdal]
+status = "runnable"
+equivalence = "matched_definition"   # same population, grid and statistic ...
+artifacts = ["{stem}.tif"]
+cell_ownership = "pdal_binmode_floor" # ... but upward-Y edge ownership: functionally comparable
+band_names = "not_required"           # PDAL names the band "mean"
+note = "writers.gdal binmode=true output_type=mean resolution=20, origin/width/height = header bounds snapped outward, nodata -9999, double; readers.las of the tile and every input within the 20 m buffer (filters.merge). Running (Welford) mean in float64."

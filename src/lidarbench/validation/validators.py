@@ -148,7 +148,7 @@ def tile_reference(
     from lidarbench.validation.grid import assign_cells, ownership_differences
     from lidarbench.validation.reference import cell_statistic
 
-    base = contract.raster.cell_ownership
+    base = contract.require_raster().cell_ownership
     contract_cells = assign_cells(population.x, population.y, grid, base)
     out = TileReference(
         population.count,
@@ -169,7 +169,7 @@ def tile_reference(
 
 def declared_conventions(contract: WorkloadContract) -> set[str]:
     """Every declared cell convention of the contract and its implementations."""
-    found = {contract.raster.cell_ownership}
+    found = {contract.require_raster().cell_ownership}
     found.update(
         impl.cell_ownership for impl in contract.implementations.values() if impl.ownership_declared
     )
@@ -214,7 +214,7 @@ class CellStatisticValidator:
 
         grid = structure.expected_grid
         declared = implementation.ownership_declared
-        base = contract.raster.cell_ownership
+        base = contract.require_raster().cell_ownership
         convention = implementation.cell_ownership if declared else base
         try:
             entry: TileReference | None = None
@@ -269,7 +269,7 @@ class CellStatisticValidator:
 
         dtype = np.dtype(raster.dtypes[0])
         nodata = raster.nodata[0]
-        sentinels = tuple(contract.raster.forbidden_values)
+        sentinels = tuple(contract.require_raster().forbidden_values)
         if nodata is not None and not np.isnan(nodata):
             sentinels = (*sentinels, float(nodata))
         actual = (
@@ -300,10 +300,10 @@ class CellStatisticValidator:
         }
         if trimmed is not None:
             detail["trimmed_extent"] = trimmed
-        if declared and implementation.cell_ownership != contract.raster.cell_ownership:
+        if declared and implementation.cell_ownership != base:
             versus_contract = compare_band(actual, contract_ref, tolerance, compare_grid)
             detail["contract_convention_comparison"] = {
-                "convention": contract.raster.cell_ownership,
+                "convention": base,
                 "passed": versus_contract.passed,
                 "mask_differences": versus_contract.mask_differences,
                 "values_exceeding_tolerance": versus_contract.values_exceeding_tolerance,
@@ -318,7 +318,7 @@ class CellStatisticValidator:
                 Status.UNVERIFIED,
                 [
                     f"tool cell ownership is undeclared; the product {verdict} with the "
-                    f"{contract.raster.cell_ownership} contract reference (diagnostic only)",
+                    f"{base} contract reference (diagnostic only)",
                     *reasons,
                 ],
                 boundary,
@@ -334,7 +334,7 @@ class CellStatisticValidator:
         if boundary:
             reasons.append(
                 f"{boundary} point(s) are owned by a different cell under "
-                f"{implementation.cell_ownership} than under {contract.raster.cell_ownership}"
+                f"{implementation.cell_ownership} than under {base}"
                 + (
                     f", including {trimmed['dropped_points']} point(s) in "
                     f"{trimmed['occupied_cells_cut']} occupied edge cell(s) cut by the declared "

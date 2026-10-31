@@ -154,6 +154,19 @@ class LastoolsWorkload:
 # fmt: off
 WORKLOADS: Mapping[str, LastoolsWorkload] = MappingProxyType(
     {
+        # lasheight uses class 2 only as ground (the legacy call has no -classification 2 9).
+        # Every input point is written (points outside the ground TIN get extrapolated
+        # heights); -buffered points are used for the TIN but not written.
+        "normalization": LastoolsWorkload(
+            "normalization",
+            command="lasheight64",
+            args=(
+                "-i", "{inputs}", "-odir", "{output}", "-olaz", "-cores", "{cores}",
+                "-replace_z", "-buffered", "20",
+            ),
+            artifact_pattern="{stem}.laz",
+            kind=ArtifactKind.POINT_CLOUD,
+        ),
         "pixel_metrics_1a": LastoolsWorkload(
             "pixel_metrics_1a",
             command="lascanopy64",
@@ -198,10 +211,7 @@ _NOT_PORTED = "not yet available through the Python orchestrator: no workloads-v
 OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
     *(
         WorkloadSupport(w, ImplementationStatus.UNSUPPORTED, reason=f"{_NOT_PORTED} ({cmd})")
-        for w, cmd in (
-            ("normalization", "lasheight64"),
-            ("pixel_metrics_2", "lascanopy64"),
-        )
+        for w, cmd in (("pixel_metrics_2", "lascanopy64"),)
     ),
     WorkloadSupport(
         "generate_DSM2",
@@ -474,7 +484,7 @@ def _quote(lines: Iterable[str]) -> str:
 
 
 class LastoolsAdapter(ToolAdapter):
-    """LAStools native command-line tools (``lascanopy64``, ``lasgrid64``).
+    """LAStools native command-line tools (``lasheight64``, ``lascanopy64``, ``lasgrid64``, …).
 
     Constructor options (campaign ``[[tools]] options``):
 
@@ -784,7 +794,7 @@ class LastoolsAdapter(ToolAdapter):
         )
 
     def expected_outputs(self, invocation: Invocation) -> list[ArtifactSpec]:
-        """One raster per input tile, named as the workload contract declares."""
+        """One raster or point cloud per input tile, named as the workload contract declares."""
         workload = self._workload(invocation)
         return [
             ArtifactSpec(
@@ -886,8 +896,8 @@ class LastoolsAdapter(ToolAdapter):
                 "height_cutoff": cutoff,
                 "output_problems": outputs,
                 "note": (
-                    "Execution checks only: native numerical, cell-ownership and encoding "
-                    "conventions remain unverified (WORKLOADS.md)."
+                    "Execution checks only: native numerical, cell-ownership, edge and "
+                    "encoding conventions remain unverified (WORKLOADS.md)."
                 ),
             },
             accepted_exception=accepted,

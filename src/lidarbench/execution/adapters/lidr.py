@@ -3,13 +3,15 @@
 Threading follows the legacy harness: ``future`` workers, one per requested
 thread, ``lidR::set_lidr_threads(1)`` and data.table and BLAS/OpenMP capped at
 one thread (``benchmark_with_resources()``). The ``future`` backend is the tool
-option ``future_backend``: ``"multisession"`` (default, the legacy harness and
-lidR's documented example) or ``"mirai"`` (``future.mirai::mirai_multisession``;
-its daemons get the same start-up before the timed call).
+option ``future_backend``: ``"mirai"`` (default; ``future.mirai::mirai_multisession``,
+its daemons get the same start-up before the timed call; it scales better than
+multisession beyond ~16 workers) or ``"multisession"`` (the legacy harness and
+lidR's documented example).
 
 Option ``accept_known_tin_fallback_warning`` (default false) accepts, for
-``generate_DEM`` only, the ``tin()`` warning that cells too far from any ground point
-were filled from the nearest ground point; any other R warning still fails.
+``generate_DEM`` and ``normalization`` only, the ``tin()`` warning that cells or points
+too far from any ground point took the nearest ground point's Z; any other R warning
+still fails.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from types import MappingProxyType
 from typing import Any
 
 from lidarbench.execution.adapters.base import (
+    ArtifactKind,
     ImplementationStatus,
     Invocation,
     MetadataValue,
@@ -42,13 +45,13 @@ TIN_FALLBACK = KnownWarning(
     ),
 )
 """lidR ``tin()``: cells too far from any ground point get the nearest ground point's Z."""
-TIN_FALLBACK_WORKLOADS = frozenset({"generate_DEM"})
+TIN_FALLBACK_WORKLOADS = frozenset({"generate_DEM", "normalization"})
 
 
 class LidRAdapter(RBridgeAdapter):
     """lidR via ``Rscript`` and the legacy catalog configuration (``prepare_input()``).
 
-    Extra option: ``future_backend`` (``"multisession"`` default, or ``"mirai"``).
+    Extra option: ``future_backend`` (``"mirai"`` default, or ``"multisession"``).
     """
 
     adapter_id = "lidr"
@@ -83,13 +86,20 @@ class LidRAdapter(RBridgeAdapter):
                 ),
                 buffer=20.0,
             ),
+            "normalization": RWorkload(
+                "normalization",
+                call="lidR::normalize_height(las = ctg, algorithm = tin(), use_class = c(2L, 9L))",
+                buffer=20.0,
+                output_extension="laz",
+                artifact_pattern="{stem}.laz",
+                kind=ArtifactKind.POINT_CLOUD,
+            ),
         }
     )
     other_workloads = (
         *(
             WorkloadSupport(w, ImplementationStatus.UNSUPPORTED, reason=_NOT_PORTED)
             for w in (
-                "normalization",
                 "pixel_metrics_2",
                 "generate_DSM2",
                 "tree_detection",
@@ -108,7 +118,7 @@ class LidRAdapter(RBridgeAdapter):
     def __init__(
         self,
         *,
-        future_backend: str = "multisession",
+        future_backend: str = "mirai",
         accept_known_tin_fallback_warning: bool = False,
         **options: Any,
     ) -> None:
@@ -131,7 +141,7 @@ class LidRAdapter(RBridgeAdapter):
         )
 
     def known_warning(self, invocation: Invocation) -> KnownWarning | None:
-        """The lidR TIN nearest-neighbour fallback warning, when opted in (DEM only)."""
+        """The lidR TIN nearest-neighbour fallback warning, when opted in (TIN workloads)."""
         if (
             self.accept_known_tin_fallback_warning
             and invocation.workload_id in TIN_FALLBACK_WORKLOADS

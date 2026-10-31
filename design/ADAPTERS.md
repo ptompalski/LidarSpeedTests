@@ -332,7 +332,7 @@ with recognized warnings is labelled the same way. The recorded policy is
 `non_comparable` with `undeclared` cell ownership, so its outputs are at best
 `unverified` and descriptive only. `workloads-v3` accepts the `.tfw` world file
 LAStools writes beside every GeoTIFF as an ignored sidecar (v1/v2 report it as
-unexpected). `workloads-v4` (kept by `workloads-v5` and `workloads-v6`, the default) declares LAStools `matched_definition` with
+unexpected). `workloads-v4` (kept by `workloads-v5`, `workloads-v6` and `workloads-v7`, the default) declares LAStools `matched_definition` with
 the upward-Y floor cell rule (`pdal_binmode_floor`, the rule PDAL binmode uses)
 and, for `lascanopy -avg`, `value_precision = 0.01` (averages are written
 rounded to centimetres; the tolerance is widened by 0.005). On the Task 13 pilot
@@ -350,6 +350,15 @@ parity test checks the remaining arguments against `R/0_setup.R`, and the
 invocation metadata reports it (`legacy_deviation`). blast2dem writes a `.kml`
 despite `-no_kml`; the contract lists `*.kml` as an ignored sidecar. The
 contract is structural-only and LAStools `non_comparable`/`undeclared`.
+
+`normalization` (workloads-v7, point-cloud contract) pins the legacy call
+unchanged: `lasheight64 -i {inputs} -odir {output} -olaz -cores {cores}
+-replace_z -buffered 20` (artifact `{stem}.laz`, kind `point_cloud`). lasheight
+uses class 2 as ground (the legacy call has no `-classification 2 9`; Petawawa has
+no class 9), keeps every point of its tile and extrapolates heights outside the
+ground TIN (`outside_surface = "extrapolate"`). On the Petawawa 2×2 block it
+writes exactly each tile's points; 250–510 interior points per tile differ from
+lidR and lasR by more than 1 cm (up to ~1 m).
 
 Integration tests (`tests/python/test_lastools_integration.py`) run only when
 an installation is found, for example
@@ -430,6 +439,34 @@ not required by the probe: a PDAL without them only makes `generate_DEM`
 `unsupported`. `faceraster` samples the TIN at cell centres; on a planar ground
 surface the real-PDAL integration test reproduces it to < 1e-6 m.
 
+**Height normalization (`normalization`, workloads-v7).** A point-cloud,
+structural-only contract (design/VALIDATION.md §1):
+
+```text
+readers.las(tile) + readers.las|copc(neighbours) → filters.range(classes 2, 9)  # neighbours only
+  → filters.merge → filters.crop(tile header bounds grown by 20 m)
+  → filters.ferry(Classification => LidarbenchClassification)
+  → filters.assign("Classification = 2 WHERE Classification == 9")
+  → filters.hag_delaunay(count=10, allow_extrapolation=true)  # PDAL defaults
+  → filters.ferry(LidarbenchClassification => Classification, HeightAboveGround => Z)
+  → filters.crop(closed tile header bounds)
+  → writers.las(compression=true, forward=all, tile header version/format/scale/offset)
+```
+
+`hag_delaunay` accepts one ground class, so class 9 is relabelled to 2 for the
+filter and restored before writing. It triangulates the `count` nearest ground
+points of each point (not one global TIN). The adapter uses PDAL's defaults
+(`count = 10`, `allow_extrapolation = true`), written explicitly into the pipeline,
+which makes heights differ slightly more from the other tools: 13–23% of
+Petawawa points differ from lidR by more than 1 cm (`count = 50`: 0.3–1.1% at
+~3× the run time; 100: 0.06–0.2%, ~5.5×; `HAG_COUNT` in `pdal.py`). Outside the ground hull a
+point gets its nearest ground point's Z (`outside_surface = "extrapolate"`); a
+tile without ground fails. The scale and offset of the tile header are set
+explicitly because merged neighbours with other offsets otherwise overflowed Y.
+`_output_problems` rejects outputs whose LAZ layout differs from the input tile.
+The probe requires `filters.hag_delaunay` and `filters.assign` only for this
+workload. Not streamable: always `--nostream`.
+
 **Execution.** The benchmarked command is the stdlib launcher
 `python -m lidarbench.execution.adapters.pdal_worker --job pdal-job.json`
 (threading model `concurrent_files`, 1+). It runs
@@ -489,7 +526,8 @@ definition, different declared edge convention), `non_comparable` and
 |---|---|---|---|---|
 | `pixel_metrics_1a` | functionally | strictly | non-comparable | **functionally** |
 | `generate_DSM1` | functionally | strictly | non-comparable | **functionally** |
-| `normalization`, `generate_DEM`, `generate_DSM2`, `pixel_metrics_2`, `tree_detection`, `complex_task1/2` | — | — | — | **unsupported** (no contract; candidate PDAL stages are not evaluated) |
+| `generate_DEM` (v6), `normalization` (v7) | non-comparable | non-comparable (`normalization`: diagnostic only) | non-comparable | non-comparable (structural validation only) |
+| `generate_DSM2`, `pixel_metrics_2`, `tree_detection`, `complex_task1/2` | — | — | — | **unsupported** (no contract; candidate PDAL stages are not evaluated) |
 
 PDAL computes the same population, grid and statistic, but its upward-Y edge rule
 differs from the contract and from lidR's clamp and lasR's partition. PDAL is
@@ -510,9 +548,10 @@ installation validate the actual PDAL outputs:
 
 - Real adapters `cli` and `pylib`. The modules exist as placeholders and are
   not registered.
-- LAStools `normalization` and `pixel_metrics_2` (no contract yet).
+- LAStools `pixel_metrics_2` (no contract yet).
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
-- Equivalence data covers only the contracts in `workloads/` (`workloads-v6` is
-  the default; `workloads-v1` to `workloads-v5` are kept frozen; v1 has no PDAL
-  entry). `generate_DEM` has no numerical reference (structural validation only).
+- Equivalence data covers only the contracts in `workloads/` (`workloads-v7` is
+  the default; `workloads-v1` to `workloads-v6` are kept frozen; v1 has no PDAL
+  entry). `generate_DEM` and `normalization` have no numerical reference
+  (structural validation only).

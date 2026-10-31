@@ -64,7 +64,12 @@ def ground_scene(directory: Path) -> None:
 
 
 def _run(
-    tmp_path: Path, workload: str, mode: str = "stream", threads: int = 2, scene=neighbour_scene
+    tmp_path: Path,
+    workload: str,
+    mode: str = "stream",
+    threads: int = 2,
+    scene=neighbour_scene,
+    validate: bool = True,
 ):
     from lidarbench.validation.pipeline import ValidationRequest, validate_outputs
 
@@ -89,6 +94,8 @@ def _run(
     execution = execute_plan(plan, inv, paths["attempt"], timeout_s=600, adapter=adapter)
     record = json.loads((paths["attempt"] / "execution.json").read_text(encoding="utf-8"))
     assert str(execution.execution_status) == "succeeded", record["failure_reason"]
+    if not validate:
+        return inv, record, None
     report = validate_outputs(
         ValidationRequest(
             contract=SUITE.get(workload),
@@ -201,3 +208,103 @@ def test_real_pdal_on_copc_queries_neighbour_buffers(tmp_path, workload):
     assert v.structural.status is Status.PASSED, v.structural.reasons
     expected = Status.UNSUPPORTED if workload == "generate_DEM" else Status.PASSED
     assert v.numerical.status is expected, v.numerical.reasons
+
+
+def pond_scene(directory: Path) -> None:
+    """Two 100 m tiles: planar ground (2), a water column (9) 2 m below the plane at
+    i == 7, vegetation (1) 25 m above the plane at square centres and, in the west
+    tile, one vegetation point 3 m west of all ground points (outside the hull)."""
+    for name, x0 in (("west", X0), ("east", X0 + 100.0)):
+        xs, ys, zs, cs = [], [], [], []
+        for i in range(21):
+            for j in range(21):
+                x, y = x0 + 5.0 * i, Y0 + 5.0 * j
+                xs.append(x)
+                ys.append(y)
+                zs.append(_plane(x, y) - (2.0 if i == 7 else 0.0))
+                cs.append(9 if i == 7 else 2)
+                if i < 20 and j < 20:
+                    xs.append(x + 2.5)
+                    ys.append(y + 2.5)
+                    zs.append(_plane(x + 2.5, y + 2.5) + 25.0)
+                    cs.append(1)
+        if name == "west":
+            xs.append(X0 - 3.0)
+            ys.append(Y0 + 50.0)
+            zs.append(_plane(X0 - 3.0, Y0 + 50.0) + 25.0)
+            cs.append(1)
+        write_las(directory / f"{name}.las", xs, ys, zs, classification=cs)
+
+
+def test_real_pdal_normalization_uses_ground_and_water_and_keeps_attributes(tmp_path):
+    from collections import Counter
+
+    import laspy
+    import numpy as np
+
+    pytest.importorskip("lazrs")
+    inv, record, _ = _run(tmp_path, "normalization", scene=pond_scene, validate=False)
+    details = record["interpretation"]["details"]
+    assert details["execution_mode"] == "standard"  # filters.hag_delaunay cannot stream
+    assert details["output_problems"] == [] and details["warning_lines"] == 0
+    assert all(t["metadata"]["writers.las"]["filename"] for t in details["tiles"])
+    assert all(t["metadata"]["points_read"] > 0 for t in details["tiles"])
+    bounds = PdalAdapter().header_bounds(inv)
+    for source in inv.inputs:
+        src, out = laspy.read(source), laspy.read(inv.output_dir / f"{source.stem}.laz")
+        assert out.header.are_points_compressed
+        assert out.header.point_format.id == src.header.point_format.id
+        assert list(out.header.point_format.extra_dimension_names) == []
+        assert list(out.header.scales) == list(src.header.scales)
+        assert list(out.header.offsets) == list(src.header.offsets)
+        assert np.isfinite(out.z).all()
+
+        def key(las, i):
+            return (int(las.X[i]), int(las.Y[i]), int(las.classification[i]))
+
+        source_index = {key(src, i): i for i in range(len(src.points))}
+        assert len(source_index) == len(src.points)
+        # Every tile point is written once with X, Y and classification unchanged; the
+        # only extra points are neighbour ground points exactly on the shared edge.
+        written = Counter(key(out, i) for i in range(len(out.points)))
+        assert all(written[k] >= 1 for k in source_index)
+        min_x, min_y, max_x, max_y = bounds[source]
+        for i in range(len(out.points)):
+            k = key(out, i)
+            if written[k] == 1 and k in source_index:
+                s = source_index[k]
+                assert out.intensity[i] == src.intensity[s]
+                assert out.return_number[i] == src.return_number[s]
+                cls = int(src.classification[s])
+                x, y = float(src.x[s]), float(src.y[s])
+                if cls in (2, 9):
+                    expected = 0.0  # ground and water are the surface
+                elif x < X0:
+                    # Outside the ground hull: height above the nearest ground point.
+                    expected = float(src.z[s]) - _plane(X0, y)
+                else:
+                    # Square centres next to the water column lie 1 m above the TIN's
+                    # water-lowered surface: class 9 is ground.
+                    column = int((x - (X0 if x < X0 + 100.0 else X0 + 100.0)) // 5.0)
+                    expected = 26.0 if column in (6, 7) else 25.0
+                assert abs(float(out.z[i]) - expected) < 0.0015, (x, y, cls, float(out.z[i]))
+            else:
+                assert int(out.classification[i]) in (2, 9)
+                assert float(out.x[i]) in (min_x, max_x) or float(out.y[i]) in (min_y, max_y)
+    if "normalization" in SUITE.contracts:  # the workloads-v7 contract
+        from lidarbench.validation.pipeline import ValidationRequest, validate_outputs
+        from lidarbench.validation.status import Status
+
+        report = validate_outputs(
+            ValidationRequest(
+                contract=SUITE.get("normalization"),
+                tool="pdal",
+                inputs=inv.inputs,
+                output_dir=inv.output_dir,
+                expected_epsg=EPSG,
+            )
+        )
+        assert report.verdicts.artifacts.status is Status.PASSED
+        assert (
+            report.verdicts.structural.status is Status.PASSED
+        ), report.verdicts.structural.reasons

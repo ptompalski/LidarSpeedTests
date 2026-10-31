@@ -92,7 +92,16 @@ class ValidationReport:
                 "non-empty, has the expected format signature and decodes completely; no "
                 "unexpected product is present."
             )
-        if v.structural.status is Status.PASSED:
+        if v.structural.status is Status.PASSED and c.point_cloud is not None:
+            pc = c.point_cloud
+            established.append(
+                "Each point cloud holds only unchanged input points (x, y and the preserved "
+                f"attributes {list(pc.preserved_attributes)}) inside its tile's closed header "
+                f"bounds, misses at most {pc.max_missing_fraction:.4%} of the tile's points, "
+                "and every output Z is finite and implies a ground elevation within the range "
+                f"of the buffered ground points (classes {list(pc.ground_classes)})."
+            )
+        elif v.structural.status is Status.PASSED and c.raster is not None:
             established.append(
                 f"Each raster is a north-up GeoTIFF with {c.raster.resolution} m cells on the "
                 "zero-origin grid, the required band layout, no infinite values and the "
@@ -110,7 +119,12 @@ class ValidationReport:
             open_.append(
                 f"Numerical agreement of values and NoData masks ({v.numerical.status.value})."
             )
-        if v.boundary_difference_points == 0 and v.numerical.status is Status.PASSED:
+        if c.raster is None:
+            open_.append(
+                "Correctness of output heights (no numerical reference for point clouds) and "
+                "the horizontal CRS of the point clouds (not checked)."
+            )
+        elif v.boundary_difference_points == 0 and v.numerical.status is Status.PASSED:
             established.append(
                 f"The tool's cell ownership equals the contract's "
                 f"{c.raster.cell_ownership} partition for every point of these inputs."
@@ -138,7 +152,8 @@ class ValidationReport:
                 "digest": contract.digest,
                 "title": contract.title,
                 "equivalence_group": contract.equivalence_group,
-                "cell_ownership": contract.raster.cell_ownership,
+                "cell_ownership": contract.raster.cell_ownership if contract.raster else None,
+                **({"product": contract.product} if contract.point_cloud is not None else {}),
             },
             "tool": request.tool,
             "implementation": (
@@ -275,6 +290,8 @@ def validate_outputs(
     report.inventory = inventory
     if not inventory.complete:
         return finish(_verdicts(request, impl, LevelVerdict.of(Status.FAILED, *inventory.problems)))
+    if contract.point_cloud is not None:
+        return finish(_validate_point_clouds(request, impl, inventory, report))
     if not raster_backend.available:
         return finish(
             _verdicts(
@@ -456,4 +473,100 @@ def validate_outputs(
             LevelVerdict.of(combine(statuses), *reasons),
             boundary,
         )
+    )
+
+
+def _unreferenced_numerical(request: ValidationRequest, accepted: Sequence[str]) -> LevelVerdict:
+    """Numerical verdict when no reference is computed (performance-only or none)."""
+    if request.validation_mode == "performance-only":
+        return LevelVerdict.of(
+            Status.UNVERIFIED,
+            "performance-only validation mode: no numerical reference was computed",
+        )
+    return LevelVerdict.of(
+        Status.UNSUPPORTED,
+        f"contract {request.contract.key} declares no numerical reference "
+        "(reference.method = none): structural validation only",
+        *accepted,
+    )
+
+
+def _validate_point_clouds(
+    request: ValidationRequest,
+    impl: Implementation,
+    inventory: Inventory,
+    report: ValidationReport,
+) -> AttemptVerdicts:
+    """Artifact decoding and structural checks of point-cloud products, one at a time."""
+    from lidarbench.validation.io import ReadError, probe_point_backend
+    from lidarbench.validation.pointcloud import (
+        InputPoints,
+        check_point_cloud,
+        read_point_records,
+    )
+    from lidarbench.validation.population import build_manifest
+
+    contract = request.contract
+    product = contract.point_cloud
+    assert product is not None
+    backend = probe_point_backend()
+    report.backends["points"] = backend.to_record()
+    if not backend.available:
+        return _verdicts(
+            request,
+            impl,
+            LevelVerdict.of(
+                Status.UNAVAILABLE,
+                "inventory complete, but decoding cannot be checked: " + backend.detail,
+            ),
+        )
+    manifest = build_manifest(request.inputs)
+    report.inputs = manifest.to_record()
+    inputs = InputPoints(manifest, contract.buffer, product.preserved_attributes)
+    read_errors: list[str] = []
+    structural_errors: list[str] = []
+    accepted: set[str] = set()
+    for artifact in inventory.expected:
+        try:
+            output = read_point_records(artifact.path, product.preserved_attributes)
+        except ReadError as exc:
+            read_errors.append(str(exc))
+            continue
+        entry: dict[str, Any] = {
+            "name": artifact.name,
+            "tile": artifact.tile,
+            "bytes": artifact.size,
+            "points": output.header.to_record(),
+        }
+        if not manifest.problems:
+            structure = check_point_cloud(output, artifact.tile, inputs, contract, impl)
+            entry["structural"] = structure.to_record()
+            structural_errors.extend(f"{artifact.name}: {e}" for e in structure.errors)
+            accepted.update(
+                f"structural: {e}"
+                for e in (*structure.accepted_exceptions, *structure.numerical_caps)
+            )
+        report.artifacts.append(entry)
+        del output
+    report.backends["decoding"] = {"decoded_input_files": inputs.decoded_files}
+    if read_errors:
+        return _verdicts(request, impl, LevelVerdict.of(Status.FAILED, *read_errors))
+    artifacts_ok = LevelVerdict.of(Status.PASSED)
+    if manifest.problems:
+        return _verdicts(
+            request,
+            impl,
+            artifacts_ok,
+            LevelVerdict.of(Status.FAILED, *(f"input manifest: {p}" for p in manifest.problems)),
+        )
+    if structural_errors:
+        return _verdicts(
+            request, impl, artifacts_ok, LevelVerdict.of(Status.FAILED, *structural_errors)
+        )
+    return _verdicts(
+        request,
+        impl,
+        artifacts_ok,
+        LevelVerdict.of(Status.PASSED),
+        _unreferenced_numerical(request, sorted(accepted)),
     )

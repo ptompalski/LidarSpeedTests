@@ -16,7 +16,8 @@ fail      exits 3
 ``FAKE_LASTOOLS_MODE`` (processing):
 
 ============= ==================================================================
-ok            writes ``<stem><suffix>.tif`` and a ``.tfw`` per input, exits 0
+ok            writes ``<stem><suffix>.tif`` and a ``.tfw`` per input (``<stem>.laz``
+              and no sidecar with ``-olaz``), exits 0
 cutoff1       outputs plus the documented lascanopy cutoff warning, exits 1
               (``cutoff*`` modes act like ``ok`` for commands without a cutoff)
 cutoff0       the same warning with exit 0 (multi-core parent)
@@ -77,13 +78,16 @@ while end < len(args) and not args[end].startswith("-"):
 inputs = args[start:end]
 odir = Path(args[args.index("-odir") + 1])
 suffix = "_avg" if command.startswith("lascanopy") else ""
+laz = "-olaz" in args
+extension, payload = (".laz", b"LASF fake laz") if laz else (".tif", b"II*\x00fake tiff")
 cutoff = args[args.index("-height_cutoff") + 1] if "-height_cutoff" in args else None
 if mode.startswith("cutoff") and cutoff is None:
     mode = "ok"  # only lascanopy has a height cutoff
 
-def write(path, data=b"II*\x00fake tiff"):
+def write(path, data):
     path.write_bytes(data)
-    path.with_suffix(".tfw").write_text("1\n0\n0\n-1\n0\n0\n")
+    if not laz:
+        path.with_suffix(".tfw").write_text("1\n0\n0\n-1\n0\n0\n")
 
 if mode in ("fatal3", "crash"):
     print("FATAL: cannot open input" if mode == "fatal3" else "Segmentation fault", file=sys.stderr)
@@ -91,11 +95,11 @@ if mode in ("fatal3", "crash"):
 
 for i, tile in enumerate(inputs):
     last = i == len(inputs) - 1
-    target = odir / f"{Path(tile).stem}{suffix}.tif"
+    target = odir / f"{Path(tile).stem}{suffix}{extension}"
     if mode == "child" and last:
         print(f"child process for {Path(tile).name} exited", file=sys.stderr)
         continue
-    write(target, b"" if mode == "empty" and last else b"II*\x00fake tiff")
+    write(target, b"" if mode == "empty" and last else payload)
     if mode.startswith("cutoff"):
         named = "/elsewhere/other.las" if mode == "cutoffbad" else tile
         print(f"WARNING: z coordinates range from {float(cutoff) + 2.5} to 99.5 for '{named}'",
@@ -121,7 +125,7 @@ posix_only = sys.platform == "win32"
 
 def make_fake_lastools(
     bin_dir: Path,
-    commands: tuple[str, ...] = ("lascanopy64", "lasgrid64", "blast2dem64"),
+    commands: tuple[str, ...] = ("lascanopy64", "lasgrid64", "blast2dem64", "lasheight64"),
     exe: bool = False,
     build: str = FAKE_BUILD,
 ) -> Path:

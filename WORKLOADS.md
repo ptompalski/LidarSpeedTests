@@ -200,6 +200,16 @@ records the native defect as the skip diagnostic. Candidate artifacts remain
 specified but **no complex workload is currently runnable**. The regression
 characterizes NA before writing corrupt output and verifies all three skips.
 An authorized runtime fix plus boundary/LAZ checks is required to re-enable them.
+**Root cause (2026-10-30):** delaunator, given the ~1e-10 random XY noise that
+`triangulate()` adds, returns zero-area triangles along collinear hull edges (for
+example ground points of a tile clipped at an exact coordinate). Interpolating in
+such a triangle divides by zero; the NaN overwrites the valid height from the
+adjacent triangle (OpenMP order, so run-dependent) and passes `transform_with()`'s
+`NA_F64` check, so `write_las()` stores an overflowed integer Z. lasR 0.21.3 is also
+affected. Skipping zero-area triangles and non-finite values fixes it in a patched
+build; it was reported upstream and an official lasR release is awaited. The
+triangulation noise comes from `std::random_device`, which may also explain the
+first-return TIN repeatability blocker below.
 The user subsequently authorized **diagnostic execution without that fix** through
 the explicit flag above, including both complex candidates. Default calls remain
 disabled unless opted in; the known defect is not resolved or waived.
@@ -492,6 +502,22 @@ LAStools none, PDAL 100 m); the legacy harness is unchanged. Where cells are too
 far from any ground point, lidR `tin()` warns and uses the nearest ground point; the
 lidR option `accept_known_tin_fallback_warning` accepts exactly that warning
 (design/R_BRIDGE.md §3), otherwise the attempt fails.
+
+## Python orchestrator: `normalization` in workloads-v7
+
+`workloads/workloads-v7/normalization.toml` is the first point-cloud contract
+(`[point_cloud]`, one `{stem}.laz` per tile; design/VALIDATION.md §1): each point's
+Z becomes its height above a linear TIN of classes 2 and 9 from the tile and a 20 m
+buffer. Validation is **structural only** (no normalization reference, every
+implementation `non_comparable`, outcome `unverified`): output points must be
+unchanged input points inside the tile's closed header bounds, at most 0.1% of a
+tile's points may be missing, and every height must be finite and imply a ground
+elevation within the buffered ground range. lidR and lasR use the legacy calls
+above; lasR is `diagnostic_only` until a fixed lasR release is pinned. On the
+repaired Petawawa d10 2×2 block lidR passes (it misses ≤ 0.0023% of a tile's
+points on maximum header edges) while pinned lasR fails on 53–106 corrupt heights
+per tile. LAStools and PDAL: design/ADAPTERS.md §9–§10. The legacy harness is
+unchanged.
 
 ## Checks and remaining acceptance work
 

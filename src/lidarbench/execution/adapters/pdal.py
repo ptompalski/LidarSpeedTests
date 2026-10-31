@@ -9,6 +9,20 @@ tile (``ConfigFile`` in the attempt's work directory)::
                         origin_x, origin_y, width, height, nodata=-9999,
                         data_type=double, gdaldriver=GTiff)
 
+``generate_DEM`` is a class-filtered TIN raster (``filters.delaunay`` ->
+``filters.faceraster`` -> ``writers.raster``, see :class:`PdalWorkload`) and
+``normalization`` rewrites each tile's points as heights above a TIN of its
+ground points (see :func:`build_normalization_pipeline`)::
+
+    readers.las (tile) [+ readers.las (neighbour) -> filters.range (classes 2, 9)]
+        -> filters.merge -> filters.crop (tile + 20 m)
+        -> filters.ferry (Classification => LidarbenchClassification)
+        -> filters.assign (Classification = 2 WHERE Classification == 9)
+        -> filters.hag_delaunay (count, allow_extrapolation=true)
+        -> filters.ferry (LidarbenchClassification => Classification,
+                          HeightAboveGround => Z)
+        -> filters.crop (tile header bounds, closed) -> writers.las (LAZ)
+
 The benchmarked process is :mod:`~lidarbench.execution.adapters.pdal_worker`,
 which runs ``pdal pipeline <file> --metadata <file> [--stream|--nostream]``
 once per tile (at most ``threads`` at a time) and records exit codes and launch
@@ -37,11 +51,39 @@ Semantics (from the PDAL source, ``io/GDALWriter.cpp``,
   intersect the tile bounds grown by the buffer (the contract population).
   Points outside the fixed grid never contribute in binmode.
 
+Normalization semantics (``filters/HagDelaunayFilter.cpp``, PDAL 2.10):
+
+* ``filters.hag_delaunay`` takes ground points from **one** class (``class``,
+  default 2). Class 9 (water) is included by temporarily assigning it class 2;
+  the original classification is ferried to ``LidarbenchClassification`` first
+  and restored afterwards, so output classifications are unchanged. Ground
+  points get a height of exactly 0.
+* For every other point the ``count`` nearest ground points (2D) are
+  triangulated *locally* and the point's ground height is the linear
+  (barycentric) interpolation in the triangle that contains it. This
+  approximates a global Delaunay TIN; triangles of the local and global
+  triangulations can differ where ground points are sparse.
+* A point outside every local triangle (in practice: outside the ground hull) gets
+  the Z of its nearest ground point (``allow_extrapolation=true``; ``false`` would give
+  points outside the ground bounding box a height of 0). Points are never
+  dropped and heights are always finite. A degenerate neighbourhood (collinear
+  or duplicate ground points) gives a height of 0. A tile without ground points
+  makes PDAL log an error, which fails the attempt.
+* Neighbours contribute only ground points (``filters.range``), cropped to the
+  tile bounds grown by the buffer; the final crop to the tile's closed header
+  bounds removes them again (except neighbour ground points exactly on the tile
+  boundary). ``HeightAboveGround`` is not written (``writers.las`` writes no extra
+  dimensions unless ``extra_dims`` is set); scale, offset, point format and LAS
+  minor version are those of the tile's header, other header fields are
+  forwarded (``forward = "all"``).
+
 Discovery (never installs anything): the ``executable`` option, else
 ``$LIDARBENCH_PDAL``, else ``pdal`` on ``PATH`` (``pdal.exe`` through
 ``PATHEXT`` on Windows). ``pdal --version`` gives the version;
-``pdal --drivers --showjson`` and ``pdal --options writers.gdal --showjson``
-confirm the stages and options the pipelines use.
+``pdal --drivers --showjson`` and ``pdal --options <stage> --showjson`` (for
+``writers.gdal``, ``readers.las``, ``filters.hag_delaunay`` and ``filters.assign``)
+confirm the stages and options the pipelines use. Missing TIN or normalization
+stages/options make only those workloads unrunnable.
 """
 
 from __future__ import annotations
@@ -103,6 +145,35 @@ TIN_STAGES = (
     "writers.raster",
 )
 """Extra stages of TIN workloads; their absence makes only those workloads unrunnable."""
+NORMALIZATION_STAGES = (
+    "filters.range",
+    "filters.crop",
+    "filters.ferry",
+    "filters.assign",
+    "filters.hag_delaunay",
+    "writers.las",
+)
+"""Extra stages of the normalization workload (only it becomes unrunnable without them)."""
+STAGE_OPTIONS: Mapping[str, tuple[str, ...]] = MappingProxyType(
+    {
+        "filters.hag_delaunay": ("count", "allow_extrapolation"),
+        "filters.assign": ("value",),
+    }
+)
+"""Options probed (``--options <stage> --showjson``) when the stage is present."""
+HAG_GROUND_CLASS = 2
+"""The single ground class ``filters.hag_delaunay`` uses (its ``class`` default)."""
+HAG_COUNT = 10
+"""``filters.hag_delaunay`` ``count``: ground neighbours triangulated per point.
+
+PDAL's default (10), set explicitly so a changed PDAL default cannot alter the
+workload. With so few neighbours the local triangles often differ from the global TIN
+the workload defines, so heights differ slightly more from the other tools: on four
+Petawawa tiles (~15 M points each) 13-23 % of points were more than 1 cm from
+``lidR::normalize_height(tin())``, against 1.3-3.6 % with 30, 0.3-1.1 % with 50 and
+0.06-0.2 % with 100, at about 1x, 2x, 3x and 5.5x the run time of 10."""
+CLASSIFICATION_STASH = "LidarbenchClassification"
+"""Temporary dimension holding the original classification (never written)."""
 READER_THREADS = 1
 """``readers.las`` ``threads`` per pipeline; concurrency comes from concurrent pipelines."""
 REQUIRED_GDAL_OPTIONS = (
@@ -139,32 +210,44 @@ _LINE_LIMIT = 20
 
 @dataclass(frozen=True)
 class PdalWorkload:
-    """A workload expressed as a ``writers.gdal`` binmode cell statistic or a TIN raster.
+    """A workload expressed as a ``writers.gdal`` binmode cell statistic, a TIN raster
+    or a height normalization.
 
     ``method = "binmode"``: ``writers.gdal`` cell statistic ``output_type``.
     ``method = "tin"``: ``filters.range`` (``classes``) -> ``filters.delaunay`` ->
     ``filters.faceraster`` (sampled at cell centres) -> ``writers.raster``; the merged
     points are first cropped to the tile bounds grown by ``buffer``. Not streamable.
+    ``method = "normalization"``: ``filters.hag_delaunay`` over the ground ``classes``
+    (``hag_count`` neighbours, ``allow_extrapolation``) written back as Z with
+    ``writers.las``; see :func:`build_normalization_pipeline`. Not streamable.
     """
 
     workload_id: str
     output_type: str
-    resolution: float
+    resolution: float | None
     artifact_pattern: str = "{stem}.tif"
     buffer: float = 20.0
     method: str = "binmode"
     classes: tuple[int, ...] = ()
     max_triangle_edge_length: float | None = None
+    hag_count: int | None = None
+    allow_extrapolation: bool | None = None
 
     def __post_init__(self) -> None:
-        if self.method not in ("binmode", "tin"):
+        if self.method not in ("binmode", "tin", "normalization"):
             raise ValueError(f"unknown PDAL workload method {self.method!r}")
-        if self.method == "tin" and (self.output_type or not self.classes):
-            raise ValueError("TIN workloads take classes and no output_type")
+        if self.method != "binmode" and (self.output_type or not self.classes):
+            raise ValueError("TIN and normalization workloads take classes and no output_type")
+        if (self.method == "normalization") != (self.resolution is None):
+            raise ValueError("raster workloads need a resolution, normalization has none")
+        if self.method == "normalization" and (
+            self.hag_count is None or self.hag_count < 3 or self.allow_extrapolation is None
+        ):
+            raise ValueError("normalization needs hag_count >= 3 and allow_extrapolation")
 
     @property
     def streamable(self) -> bool:
-        """Whether every stage of the pipeline can stream (filters.delaunay cannot)."""
+        """Whether every stage can stream (filters.delaunay/hag_delaunay cannot)."""
         return self.method == "binmode"
 
     @property
@@ -172,7 +255,14 @@ class PdalWorkload:
         """PDAL stages the pipeline needs."""
         if self.method == "tin":
             return ("readers.las", "filters.merge", *TIN_STAGES)
+        if self.method == "normalization":
+            return ("readers.las", "filters.merge", *NORMALIZATION_STAGES)
         return REQUIRED_STAGES
+
+    @property
+    def stage_options(self) -> dict[str, tuple[str, ...]]:
+        """Probed options of :data:`STAGE_OPTIONS` this workload's stages need."""
+        return {s: STAGE_OPTIONS[s] for s in self.stages if s in STAGE_OPTIONS}
 
 
 WORKLOADS: Mapping[str, PdalWorkload] = MappingProxyType(
@@ -181,6 +271,17 @@ WORKLOADS: Mapping[str, PdalWorkload] = MappingProxyType(
         "generate_DSM1": PdalWorkload("generate_DSM1", "max", 1.0),
         "generate_DEM": PdalWorkload(
             "generate_DEM", "", 1.0, method="tin", classes=(2, 9), max_triangle_edge_length=100.0
+        ),
+        "normalization": PdalWorkload(
+            "normalization",
+            "",
+            None,
+            artifact_pattern="{stem}.laz",
+            method="normalization",
+            classes=(2, 9),
+            # PDAL default: slightly larger height differences from the other tools.
+            hag_count=HAG_COUNT,
+            allow_extrapolation=True,
         ),
     }
 )
@@ -191,11 +292,6 @@ OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
     *(
         WorkloadSupport(w, ImplementationStatus.UNSUPPORTED, reason=f"{_NO_CONTRACT} ({why})")
         for w, why in (
-            (
-                "normalization",
-                "candidate filters.hag_delaunay/hag_nn not yet evaluated against the legacy "
-                "TIN normalization",
-            ),
             ("generate_DSM2", "the legacy subcircle/pit-free DSM has no evaluated PDAL pipeline"),
             (
                 "pixel_metrics_2",
@@ -535,6 +631,110 @@ def build_tin_pipeline(
     return {"pipeline": stages}
 
 
+def build_normalization_pipeline(
+    tile: Path,
+    neighbours: Sequence[Path],
+    output: Path,
+    header: LasHeader,
+    workload: PdalWorkload,
+    epsg: int | None = None,
+    reader_threads: int | None = READER_THREADS,
+    *,
+    copc: Collection[Path] = (),
+    hag_class_option: bool = True,
+) -> dict[str, Any]:
+    """The PDAL height-normalization pipeline document for one tile.
+
+    Neighbours contribute only their ground points (``workload.classes``) within the
+    tile bounds grown by the buffer (COPC neighbours are queried only there). Class
+    9 is turned into ``filters.hag_delaunay``'s single ground class 2 around the
+    filter and restored from :data:`CLASSIFICATION_STASH`, ``HeightAboveGround`` is
+    ferried into Z and the result is cropped to the tile's closed header bounds.
+    ``header`` (the tile's) supplies bounds, scale, offset, point format and LAS minor
+    version for ``writers.las``; ``hag_class_option`` sets ``class`` explicitly
+    (PDAL builds without the option always use class 2).
+    """
+    if workload.hag_count is None or workload.allow_extrapolation is None:
+        raise ValueError(f"{workload.workload_id} is not a normalization workload")
+    srs = None if epsg is None else f"EPSG:{epsg}"
+    box = _box(header.bounds_xy, workload.buffer)
+    stages: list[dict[str, Any]] = [
+        reader_stage(tile, "tile", reader_threads, copc=tile in copc, srs=srs)
+    ]
+    ground_limits = _range_limits(workload.classes)
+    for i, path in enumerate(neighbours, start=1):
+        stages += [
+            reader_stage(
+                path, f"neighbour_{i}", reader_threads, copc=path in copc, bounds=box, srs=srs
+            ),
+            {
+                "type": "filters.range",
+                "inputs": [f"neighbour_{i}"],
+                "limits": ground_limits,
+                "tag": f"ground_{i}",
+            },
+        ]
+    if neighbours:
+        stages.append(
+            {
+                "type": "filters.merge",
+                "inputs": ["tile", *(f"ground_{i}" for i in range(1, len(neighbours) + 1))],
+                "tag": "merged",
+            }
+        )
+    hag: dict[str, Any] = {
+        "type": "filters.hag_delaunay",
+        "count": workload.hag_count,
+        "allow_extrapolation": workload.allow_extrapolation,
+    }
+    if hag_class_option:
+        hag["class"] = HAG_GROUND_CLASS
+    others = [c for c in workload.classes if c != HAG_GROUND_CLASS]
+    relabel = " || ".join(f"Classification == {c}" for c in others)
+    scale, offset = header.scale, header.offset
+    stages += [
+        {"type": "filters.crop", "bounds": box},
+        *(
+            [
+                {"type": "filters.ferry", "dimensions": f"Classification=>{CLASSIFICATION_STASH}"},
+                {
+                    "type": "filters.assign",
+                    "value": f"Classification = {HAG_GROUND_CLASS} WHERE {relabel}",
+                },
+            ]
+            if others
+            else []
+        ),
+        hag,
+        {
+            "type": "filters.ferry",
+            "dimensions": ", ".join(
+                [
+                    *([f"{CLASSIFICATION_STASH}=>Classification"] if others else []),
+                    "HeightAboveGround=>Z",
+                ]
+            ),
+        },
+        {"type": "filters.crop", "bounds": _box(header.bounds_xy)},
+        {
+            "type": "writers.las",
+            "filename": os.fspath(output),
+            "compression": "true",
+            "forward": "all",
+            "major_version": header.version[0],
+            "minor_version": header.version[1],
+            "dataformat_id": header.point_format,
+            "scale_x": scale[0],
+            "scale_y": scale[1],
+            "scale_z": scale[2],
+            "offset_x": offset[0],
+            "offset_y": offset[1],
+            "offset_z": offset[2],
+        },
+    ]
+    return {"pipeline": stages}
+
+
 def render_json(document: Mapping[str, Any]) -> str:
     """Stable UTF-8 JSON text (paths unescaped, floats round-trip)."""
     return json.dumps(document, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
@@ -562,7 +762,13 @@ def _metadata_facts(path: Path) -> dict[str, Any]:
     if not isinstance(stages, dict):
         return facts
     readers = []
-    for name, node in sorted(stages.items()):
+    # Real PDAL lists repeated stage types under one key; the fake numbers them.
+    nodes = [
+        (name, node)
+        for name, value in sorted(stages.items())
+        for node in (value if isinstance(value, list) else [value])
+    ]
+    for name, node in nodes:
         if not isinstance(node, dict):
             continue
         if name.startswith(("readers.las", "readers.copc")):
@@ -573,8 +779,10 @@ def _metadata_facts(path: Path) -> dict[str, Any]:
                     if isinstance(node.get(k), int | float | str)
                 }
             )
-        elif name.startswith(("writers.gdal", "writers.raster")):
-            writer = "writers.gdal" if name.startswith("writers.gdal") else "writers.raster"
+        elif name.startswith(("writers.gdal", "writers.raster", "writers.las")):
+            writer = next(
+                w for w in ("writers.gdal", "writers.raster", "writers.las") if name.startswith(w)
+            )
             facts[writer] = json.loads(json.dumps(node, allow_nan=False, default=str))
     facts["readers.las"] = readers
     facts["points_read"] = sum(
@@ -587,7 +795,7 @@ def _metadata_facts(path: Path) -> dict[str, Any]:
 
 
 class PdalAdapter(ToolAdapter):
-    """PDAL ``pdal pipeline`` with ``writers.gdal`` binmode cell statistics.
+    """PDAL ``pdal pipeline``: binmode cell statistics, TIN rasters and normalization.
 
     Constructor options (campaign ``[[tools]] options``):
 
@@ -645,6 +853,7 @@ class PdalAdapter(ToolAdapter):
         self._python: Path | None = None
         self._reader_threads: int | None = READER_THREADS
         self._stages: set[str] = set()
+        self._stage_options: dict[str, set[str]] = {}
         self._headers: dict[tuple[Path, ...], dict[Path, LasHeader]] = {}
 
     # -- probe and identity -------------------------------------------------------
@@ -717,6 +926,16 @@ class PdalAdapter(ToolAdapter):
             return Availability.unavailable(UnavailableReason.PROBE_FAILED, f"{path}: {exc}")
         self._reader_threads = READER_THREADS if "threads" in reader_options else None
         self._stages = stages
+        self._stage_options = {}
+        for stage in STAGE_OPTIONS:
+            if stage in stages:
+                try:
+                    self._stage_options[stage] = parse_stage_options(
+                        run_query(path, ["--options", stage, "--showjson"], self.version_timeout_s),
+                        stage,
+                    )
+                except ProbeError:
+                    self._stage_options[stage] = set()  # only its workloads become unrunnable
         missing = [o for o in REQUIRED_GDAL_OPTIONS if o not in options]
         if missing:
             return Availability.unavailable(
@@ -754,7 +973,10 @@ class PdalAdapter(ToolAdapter):
                 "launcher": WORKER_MODULE,
                 "job_schema": worker.JOB_SCHEMA,
                 "run_schema": worker.RUN_SCHEMA,
-                "writer": "writers.gdal binmode=true; TIN: filters.faceraster + writers.raster",
+                "writer": (
+                    "writers.gdal binmode=true; TIN: filters.faceraster + writers.raster; "
+                    "normalization: filters.hag_delaunay + writers.las"
+                ),
                 "nodata": NODATA,
                 "data_type": DATA_TYPE,
                 "required_stages": ",".join(REQUIRED_STAGES),
@@ -769,7 +991,7 @@ class PdalAdapter(ToolAdapter):
     # -- workloads and commands -------------------------------------------------------
 
     def workload_support(self) -> list[WorkloadSupport]:
-        """Two binmode cell statistics; legacy workloads without a contract are unsupported."""
+        """Binmode statistics, TIN DEM, normalization; contract-less workloads unsupported."""
         threading = ThreadingSupport(ThreadingModel.CONCURRENT_FILES, 1, None)
         return [
             *(
@@ -864,13 +1086,29 @@ class PdalAdapter(ToolAdapter):
         """``(tile, config file name, pipeline document)`` for every input, in order."""
         workload = self._workload(invocation)
         epsg = self._epsg(invocation)
+        headers = self.headers(invocation)
         bounds = self.header_bounds(invocation)
         copc = self.copc_inputs(invocation)
         out = []
         for index, tile in enumerate(invocation.inputs, start=1):
-            grid = snapped_grid(bounds[tile], workload.resolution)
             neighbours = buffered_neighbours(bounds, tile, workload.buffer)
             output = self._artifact(invocation, workload, tile)
+            if workload.method == "normalization":
+                document = build_normalization_pipeline(
+                    tile,
+                    neighbours,
+                    output,
+                    headers[tile],
+                    workload,
+                    epsg,
+                    self._reader_threads,
+                    copc=copc,
+                    hag_class_option="class" in self._stage_options.get("filters.hag_delaunay", ()),
+                )
+                out.append((tile, f"pipeline-{index:04d}.json", document))
+                continue
+            assert workload.resolution is not None
+            grid = snapped_grid(bounds[tile], workload.resolution)
             if workload.method == "tin":
                 document = build_tin_pipeline(
                     tile,
@@ -921,6 +1159,16 @@ class PdalAdapter(ToolAdapter):
             raise UnsupportedCombinationError(
                 f"PDAL {self._version} lacks stage(s) {missing} needed by {workload.workload_id}"
             )
+        lacking = [
+            f"{stage} {option}"
+            for stage, options in workload.stage_options.items()
+            for option in options
+            if option not in self._stage_options.get(stage, set())
+        ]
+        if lacking:
+            raise UnsupportedCombinationError(
+                f"PDAL {self._version} lacks option(s) {lacking} needed by {workload.workload_id}"
+            )
         python = self._python
         assert python is not None
         files = []
@@ -950,17 +1198,23 @@ class PdalAdapter(ToolAdapter):
         return CommandSpec(argv=argv, cwd=invocation.work_dir, env=env, config_files=tuple(files))
 
     def expected_outputs(self, invocation: Invocation) -> list[ArtifactSpec]:
-        """One single-band GeoTIFF per input tile, named ``{stem}.tif``."""
+        """One output per input tile: a single-band ``{stem}.tif`` or a ``{stem}.laz``."""
         workload = self._workload(invocation)
+        descriptions = {
+            "binmode": f"writers.gdal {workload.output_type}",
+            "tin": "TIN (faceraster)",
+            "normalization": "points normalized by filters.hag_delaunay (LAZ)",
+        }
+        kind = (
+            ArtifactKind.POINT_CLOUD if workload.method == "normalization" else ArtifactKind.RASTER
+        )
         return [
             ArtifactSpec(
                 self._artifact(invocation, workload, path),
-                ArtifactKind.RASTER,
+                kind,
                 required=True,
                 description=(
-                    f"{workload.workload_id} writers.gdal {workload.output_type} for {path.name}"
-                    if workload.method == "binmode"
-                    else f"{workload.workload_id} TIN (faceraster) for {path.name}"
+                    f"{workload.workload_id} {descriptions[workload.method]} for {path.name}"
                 ),
             )
             for path in invocation.inputs
@@ -978,17 +1232,44 @@ class PdalAdapter(ToolAdapter):
             "\x00".join(render_json(doc) for _, _, doc in pipelines).encode("utf-8")
         )
         tin = workload.method == "tin"
+        norm = workload.method == "normalization"
+        hag_options = self._stage_options.get("filters.hag_delaunay", set())
         return {
             "pdal_version": self._version,
-            "writer": "writers.raster" if tin else "writers.gdal",
-            "binmode": None if tin else True,
-            "output_type": "tin_faceraster" if tin else workload.output_type,
+            "writer": "writers.las" if norm else "writers.raster" if tin else "writers.gdal",
+            "binmode": None if tin or norm else True,
+            "output_type": (
+                "hag_delaunay_z" if norm else "tin_faceraster" if tin else workload.output_type
+            ),
             "classes": ",".join(map(str, workload.classes)) or None,
             "max_triangle_edge_length": workload.max_triangle_edge_length,
             "resolution": workload.resolution,
             "buffer": workload.buffer,
-            "nodata": NODATA,
-            "data_type": DATA_TYPE,
+            "nodata": None if norm else NODATA,
+            "data_type": None if norm else DATA_TYPE,
+            "ground_classes": ",".join(map(str, workload.classes)) if norm else None,
+            "ground_class_handling": (
+                f"classes {','.join(map(str, workload.classes))} relabelled to "
+                f"{HAG_GROUND_CLASS} for filters.hag_delaunay; original classification "
+                f"restored from {CLASSIFICATION_STASH}"
+                if norm
+                else None
+            ),
+            "hag_count": workload.hag_count,
+            "hag_allow_extrapolation": workload.allow_extrapolation,
+            "hag_class": (
+                (HAG_GROUND_CLASS if "class" in hag_options else f"default ({HAG_GROUND_CLASS})")
+                if norm
+                else None
+            ),
+            "outside_ground_hull": (
+                "nearest ground point Z (allow_extrapolation=true); points kept"
+                if norm and workload.allow_extrapolation
+                else "height 0 outside the ground bounding box"
+                if norm
+                else None
+            ),
+            "output_crop": "tile header bounds (closed)" if norm else None,
             "epsg": self._epsg(invocation),
             "execution_mode": self.effective_mode(workload),
             "configured_execution_mode": self.execution_mode,
@@ -1106,8 +1387,14 @@ class PdalAdapter(ToolAdapter):
                 "and upward in Y (pdal_binmode_floor); numerical agreement and comparability "
                 "are decided by validation and the workload contracts."
                 if workload.method == "binmode"
-                else "Execution checks only. TIN rasters are sampled at cell centres by "
-                "filters.faceraster; validation and the workload contract decide the rest."
+                else (
+                    "Execution checks only. TIN rasters are sampled at cell centres by "
+                    "filters.faceraster; validation and the workload contract decide the rest."
+                    if workload.method == "tin"
+                    else "Execution checks only. Heights come from filters.hag_delaunay (local "
+                    f"Delaunay of {workload.hag_count} nearest ground points; nearest ground Z "
+                    "outside the triangles); validation and the workload contract decide the rest."
+                )
             ),
         )
         failure = None
@@ -1148,13 +1435,37 @@ class PdalAdapter(ToolAdapter):
 
     def _output_problems(self, invocation: Invocation) -> list[str]:
         problems = []
-        for artifact in self.expected_outputs(invocation):
+        point_cloud = self._workload(invocation).method == "normalization"
+        outputs = zip(self.expected_outputs(invocation), invocation.inputs, strict=True)
+        for artifact, tile in outputs:
             path = Path(artifact.path)
             try:
                 if not path.is_file():
                     problems.append(f"missing {path.name}")
                 elif path.stat().st_size == 0:
                     problems.append(f"empty {path.name}")
+                elif point_cloud:
+                    problems += self._point_cloud_problems(path, self.headers(invocation)[tile])
             except OSError as exc:
                 problems.append(f"unreadable {path.name}: {exc.strerror or exc}")
+        return problems
+
+    @staticmethod
+    def _point_cloud_problems(path: Path, source: LasHeader) -> list[str]:
+        """Header checks of a normalized tile: LAZ, the tile's format, scale and offset."""
+        try:
+            header = read_las_header(path)
+        except LasHeaderError as exc:
+            return [f"{path.name} is not a readable LAS/LAZ file: {exc}"]
+        problems = []
+        if not header.compressed:
+            problems.append(f"{path.name} is not compressed (LAZ expected)")
+        for name in ("version", "point_format", "scale", "offset"):
+            if getattr(header, name) != getattr(source, name):
+                problems.append(
+                    f"{path.name} {name} {getattr(header, name)} differs from the input "
+                    f"{getattr(source, name)}"
+                )
+        if header.point_count == 0 and source.point_count > 0:
+            problems.append(f"{path.name} has no points")
         return problems

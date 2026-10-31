@@ -14,7 +14,10 @@ Environment variables read by the launched script:
 =================== =================================================================
 FAKE_PDAL_VERSION    version printed by ``--version`` (default ``2.6.3``)
 FAKE_PDAL_OPTIONS    ``ok`` | ``nobinmode`` | ``broken`` (``--options`` output)
-FAKE_PDAL_DRIVERS    ``ok`` | ``nomerge`` | ``notin`` (no TIN stages) | ``nocopc``
+FAKE_PDAL_DRIVERS    ``ok`` | ``nomerge`` | ``notin`` (no TIN stages) | ``nocopc`` |
+                     ``nohag`` (no ``filters.hag_delaunay``)
+FAKE_PDAL_HAG_OPTIONS ``ok`` | ``noclass`` (no ``class`` option, PDAL < 2.6) |
+                     ``nocount`` | ``broken`` (the options query fails)
 FAKE_PDAL_READER_THREADS ``absent``: ``readers.las`` lists no ``threads`` option
 FAKE_PDAL_MODE       ``ok`` | ``fail`` (exit 1, ``PDAL:`` error) | ``warning`` (exit 0
                      with a warning line) | ``error0`` (exit 0 with an error line) |
@@ -50,6 +53,9 @@ if args == ["--drivers", "--showjson"]:
         names += ["filters.range", "filters.delaunay", "filters.faceraster", "writers.raster"]
     if os.environ.get("FAKE_PDAL_DRIVERS") != "nocopc":
         names.append("readers.copc")
+    names += ["filters.ferry", "filters.assign", "writers.las"]
+    if os.environ.get("FAKE_PDAL_DRIVERS") != "nohag":
+        names.append("filters.hag_delaunay")
     if os.environ.get("FAKE_PDAL_DRIVERS") == "nomerge":
         names.remove("filters.merge")
     print(json.dumps([{"name": n, "description": "", "link": "", "extensions": []} for n in names]))
@@ -73,6 +79,20 @@ if args == ["--options", "readers.las", "--showjson"]:
     if os.environ.get("FAKE_PDAL_READER_THREADS") == "absent":
         names.remove("threads")
     print(json.dumps(["readers.las", [{"name": n, "description": ""} for n in names]]))
+    sys.exit(0)
+if args == ["--options", "filters.hag_delaunay", "--showjson"]:
+    mode = os.environ.get("FAKE_PDAL_HAG_OPTIONS", "ok")
+    if mode == "broken":
+        print("PDAL: options query failed", file=sys.stderr)
+        sys.exit(1)
+    names = ["where", "count", "allow_extrapolation", "class"]
+    if mode in ("noclass", "nocount"):
+        names.remove(mode[2:])
+    print(json.dumps(["filters.hag_delaunay", [{"name": n, "description": ""} for n in names]]))
+    sys.exit(0)
+if args == ["--options", "filters.assign", "--showjson"]:
+    names = ["where", "assignment", "condition", "value"]
+    print(json.dumps(["filters.assign", [{"name": n, "description": ""} for n in names]]))
     sys.exit(0)
 if not args or args[0] != "pipeline":
     print("PDAL: unknown command", file=sys.stderr)
@@ -109,6 +129,69 @@ for reader in readers:
     counts.append(int(keep.sum()))
 x, y, z = np.concatenate(xs), np.concatenate(ys), np.concatenate(zs)
 c = np.concatenate(cs)
+
+
+def _box(text):
+    return json.loads(text.replace("(", "[").replace(")", "]"))
+
+
+if writer["type"] == "writers.las":
+    # Normalization stand-in: neighbour branches keep their filters.range classes, the
+    # merged points are cropped, Z becomes Z minus the Z of the nearest (2D) ground
+    # point (no triangulation; plumbing only, not PDAL behaviour), then the final crop.
+    names = [s["type"] for s in stages]
+    assert names[-3:] == ["filters.ferry", "filters.crop", "writers.las"], names
+    keep = np.ones(len(x), dtype=bool)
+    start = 0
+    for reader, n in zip(readers, counts):
+        ranges = [s for s in stages if s["type"] == "filters.range"
+                  and s.get("inputs") == [reader["tag"]]]
+        for rng in ranges:
+            allowed = [int(p.split("[")[1].split(":")[0]) for p in rng["limits"].split(",")]
+            keep[start:start + n] &= np.isin(c[start:start + n], allowed)
+        start += n
+    crops = [s for s in stages if s["type"] == "filters.crop"]
+    (x0, x1), (y0, y1) = _box(crops[0]["bounds"])
+    keep &= (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1)
+    hag = next(s for s in stages if s["type"] == "filters.hag_delaunay")
+    ground_classes = [hag.get("class", 2)]
+    for assign in (s for s in stages if s["type"] == "filters.assign"):
+        ground_classes += [int(p.split("==")[1]) for p in assign["value"].split("WHERE")[1].split("||")]
+    ground = keep & np.isin(c, ground_classes)
+    gx, gy, gz = x[ground], y[ground], z[ground]
+    height = np.zeros(len(x))
+    for i in np.flatnonzero(keep & ~ground):
+        height[i] = z[i] - gz[np.argmin((gx - x[i]) ** 2 + (gy - y[i]) ** 2)]
+    (x0, x1), (y0, y1) = _box(crops[-1]["bounds"])
+    keep &= (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1)
+    arrays = []
+    for reader in readers:
+        las = laspy.read(reader["filename"])
+        inside = np.ones(len(las.points), dtype=bool)
+        if "bounds" in reader:
+            (bx0, bx1), (by0, by1) = _box(reader["bounds"])
+            inside = (las.x >= bx0) & (las.x <= bx1) & (las.y >= by0) & (las.y <= by1)
+        arrays.append(las.points.array[inside])
+        point_format = las.header.point_format
+    points = laspy.PackedPointRecord(np.concatenate(arrays)[keep], point_format)
+    header = laspy.LasHeader(point_format=writer["dataformat_id"],
+                             version=f"{writer['major_version']}.{writer['minor_version']}")
+    header.scales = [writer["scale_x"], writer["scale_y"], writer["scale_z"]]
+    header.offsets = [writer["offset_x"], writer["offset_y"], writer["offset_z"]]
+    out = laspy.LasData(header)
+    for name in out.point_format.dimension_names:
+        if name not in ("X", "Y", "Z"):
+            out[name] = points[name]
+    out.x, out.y, out.z = x[keep], y[keep], height[keep]
+    if mode != "nooutput":
+        out.write(writer["filename"], do_compress=writer["compression"] == "true")
+    if mode != "nometadata":
+        meta = {"stages": {
+            "readers.las": [{"count": n} for n in counts],
+            "writers.las": {"filename": [writer["filename"]]},
+        }}
+        metadata_file.write_text(json.dumps(meta), encoding="utf-8")
+    sys.exit(0)
 
 if writer["type"] == "writers.raster":
     # TIN stand-in (no triangulation): crop, class filter, then every cell centre inside
@@ -202,7 +285,7 @@ def make_fake_pdal(bin_dir: Path, name: str = "pdal") -> Path:
 def fake_env(monkeypatch, mode: str = "ok", **extra: str) -> None:
     """Select the fake behaviour for processes launched by the test."""
     monkeypatch.setenv("FAKE_PDAL_MODE", mode)
-    for key in ("VERSION", "OPTIONS", "DRIVERS", "LOG"):
+    for key in ("VERSION", "OPTIONS", "DRIVERS", "HAG_OPTIONS", "LOG"):
         monkeypatch.delenv(f"FAKE_PDAL_{key}", raising=False)
     for key, value in extra.items():
         monkeypatch.setenv(f"FAKE_PDAL_{key.upper()}", value)

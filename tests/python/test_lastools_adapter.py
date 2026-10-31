@@ -138,7 +138,7 @@ def test_workload_declarations():
         "complex_task1",
         "complex_task2",
     }
-    for workload in ("pixel_metrics_1a", "generate_DSM1", "generate_DEM"):
+    for workload in ("normalization", "pixel_metrics_1a", "generate_DSM1", "generate_DEM"):
         support = supports[workload]
         assert support.status is ImplementationStatus.RUNNABLE
         assert support.threading.model is ThreadingModel.NATIVE_THREADS
@@ -262,6 +262,7 @@ def test_probe_identifies_build_without_licensing_text(bin_dir):
         "lascanopy64": bin_dir / "lascanopy64",
         "lasgrid64": bin_dir / "lasgrid64",
         "blast2dem64": bin_dir / "blast2dem64",
+        "lasheight64": bin_dir / "lasheight64",
     }
     identity = adapter.identify()
     assert identity.tool == "LAStools" and identity.version == FAKE_BUILD
@@ -514,6 +515,55 @@ def test_dsm_command_reproduces_the_legacy_call(bin_dir, layout):
 
 
 @needs_posix
+def test_normalization_command_reproduces_the_legacy_call(bin_dir, layout):
+    adapter = _adapter(bin_dir)
+    plan = plan_invocation(
+        adapter,
+        _invocation(layout, "normalization", threads=2, epsg=2959),
+        availability=adapter.probe(PLATFORM),
+    )
+    assert plan.ready, plan.reason
+    inputs = tuple(os.fspath(p) for p in sorted(layout["inputs"].glob("*.las")))
+    assert plan.command.argv == (
+        os.fspath(bin_dir / "lasheight64"), "-i", *inputs, "-odir", os.fspath(layout["out"]),
+        "-olaz", "-cores", "2", "-replace_z", "-buffered", "20", "-epsg", "2959", LICENCE_FLAG,
+    )  # fmt: skip
+    assert plan.command.accepted_exceptions == ()
+    assert plan.metadata["lastools_command"] == "lasheight64"
+    assert plan.metadata["height_cutoff"] is None and plan.metadata["legacy_deviation"] is None
+    assert plan.metadata["buffer"] == 20.0
+    assert [a.path.name for a in plan.expected_outputs] == ["east;$tile.laz", "west tile.laz"]
+    assert all(a.kind is ArtifactKind.POINT_CLOUD and a.required for a in plan.expected_outputs)
+
+
+def test_normalization_is_the_legacy_lasheight_call():
+    """Default ground class 2 only, every point written with -replace_z, 20 m buffer."""
+    workload = WORKLOADS["normalization"]
+    assert workload.command == "lasheight64" and not workload.legacy_deviation
+    assert not workload.cutoff_warning_applies and "{height_cutoff}" not in workload.args
+    assert "-replace_z" in workload.args and "-olaz" in workload.args
+    for flag in ("-classification", "-drop_below", "-drop_above", "-skip_files", "-use_orig_bb"):
+        assert flag not in workload.args
+    assert (workload.artifact_pattern, workload.kind) == ("{stem}.laz", ArtifactKind.POINT_CLOUD)
+
+
+@needs_posix
+def test_cutoff_exception_never_applies_to_normalization(bin_dir, layout, tmp_path):
+    adapter = _adapter(bin_dir, accept_known_cutoff_warning=True)
+    inv = _invocation(layout, "normalization")
+    command = adapter.build_command(inv)
+    assert command.accepted_exceptions == ()
+    assert adapter.invocation_metadata(inv)["accepted_exception_policy"] is None
+    _outputs(layout, "normalization")
+    stderr = "".join(_warning(os.fspath(p), "-13.25") for p in inv.inputs)
+    refused = adapter.interpret(inv, _process(tmp_path, command.argv, 1, stderr=stderr))
+    assert refused.accepted_exception is None and "status 1" in refused.failure_reason
+    accepted = adapter.interpret(inv, _process(tmp_path, command.argv, 0))
+    assert accepted.failure_reason is None and accepted.details["output_problems"] == []
+    assert accepted.details["height_cutoff"] is None
+
+
+@needs_posix
 def test_thread_environment_follows_legacy_harness(bin_dir, layout):
     adapter = _adapter(bin_dir)
     env = adapter.build_command(_invocation(layout, threads=4)).env
@@ -760,6 +810,9 @@ def test_opted_in_cutoff_warning_is_a_named_exception(
         ("error0", False, "generate_DSM1", "interpretation", "error despite exit status 0"),
         ("fatal3", False, "generate_DSM1", "process", "status 3: FATAL: cannot open input"),
         ("child", False, "generate_DSM1", "interpretation", "missing west tile.tif"),
+        ("child", False, "normalization", "interpretation", "missing west tile.laz"),
+        ("empty", False, "normalization", "interpretation", "empty west tile.laz"),
+        ("error0", False, "normalization", "interpretation", "error despite exit status 0"),
         ("empty", True, "pixel_metrics_1a", "interpretation", "empty west tile_avg.tif"),
         ("unlicensed", False, "generate_DSM1", "interpretation", "unlicensed run"),
         ("crash", False, "generate_DSM1", "process", "exited with status 139"),

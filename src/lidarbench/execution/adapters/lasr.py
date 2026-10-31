@@ -13,13 +13,23 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from lidarbench.execution.adapters.base import ImplementationStatus, ThreadingModel, WorkloadSupport
+from lidarbench.execution.adapters.base import (
+    ArtifactKind,
+    ImplementationStatus,
+    ThreadingModel,
+    WorkloadSupport,
+)
 from lidarbench.execution.adapters.rscript import RBridgeAdapter, RWorkload
 
 _NOT_PORTED = "not yet available through the Python orchestrator: no workloads-v1 contract"
 _TIN_NORMALIZATION = (
     "pinned lasR 0.21.2 TIN normalization produces NA at ground hull boundaries and corrupt "
     "LAZ elevations (blocked in the legacy harness)"
+)
+_NAN_HEIGHTS = (
+    "lasR <= 0.21.3 interpolates zero-area ground triangles on collinear hull edges to NaN, "
+    "which is written to LAZ as Z near -2147483 (reported upstream); diagnostic until a "
+    "fixed lasR release is pinned"
 )
 _UNSTABLE_TIN = (
     "pinned lasR 0.21.2 first-return TIN is non-repeatable near duplicate XY with different Z "
@@ -63,12 +73,25 @@ class LasRAdapter(RBridgeAdapter):
                 ),
                 buffer=20.0,
             ),
+            "normalization": RWorkload(
+                "normalization",
+                call=(
+                    "exec(pipeline = normalize() + write_las(fout), on = f, "
+                    "with = list(buffer = 20, chunk = 0, progress = FALSE))"
+                ),
+                buffer=20.0,
+                output_extension="laz",
+                artifact_pattern="{stem}.laz",
+                kind=ArtifactKind.POINT_CLOUD,
+                status=ImplementationStatus.DIAGNOSTIC_ONLY,
+                reason=_NAN_HEIGHTS,
+            ),
         }
     )
     other_workloads = (
         *(
             WorkloadSupport(w, ImplementationStatus.BLOCKED, reason=_TIN_NORMALIZATION)
-            for w in ("normalization", "complex_task1", "complex_task2")
+            for w in ("complex_task1", "complex_task2")
         ),
         WorkloadSupport("generate_DSM2", ImplementationStatus.BLOCKED, reason=_UNSTABLE_TIN),
         *(

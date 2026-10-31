@@ -116,6 +116,15 @@ class RWorkload:
     output_extension: str = "tif"
     artifact_pattern: str = "{stem}.tif"
     kind: ArtifactKind = ArtifactKind.RASTER
+    status: ImplementationStatus = ImplementationStatus.RUNNABLE
+    """``runnable`` or ``diagnostic_only`` (which then needs ``reason``)."""
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.status.dispatchable:
+            raise ValueError("pinned R workloads must be runnable or diagnostic_only")
+        if self.status is not ImplementationStatus.RUNNABLE and not self.reason:
+            raise ValueError(f"{self.workload_id}: a {self.status.value} workload needs a reason")
 
     @property
     def call_sha256(self) -> str:
@@ -418,10 +427,10 @@ class RBridgeAdapter(ToolAdapter):
     # -- workloads and commands -----------------------------------------------------
 
     def workload_support(self) -> list[WorkloadSupport]:
-        """Pinned workloads are runnable; other legacy workloads are declared explicitly."""
+        """Pinned workloads are dispatchable; other legacy workloads are declared explicitly."""
         threading = ThreadingSupport(self.threading_model, 1, None)
         runnable = [
-            WorkloadSupport(w.workload_id, ImplementationStatus.RUNNABLE, threading=threading)
+            WorkloadSupport(w.workload_id, w.status, reason=w.reason, threading=threading)
             for w in self.workloads.values()
         ]
         return runnable + list(self.other_workloads)

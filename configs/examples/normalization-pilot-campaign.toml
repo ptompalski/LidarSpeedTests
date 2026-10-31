@@ -1,0 +1,71 @@
+# normalization pilot (workloads-v7): height above a linear TIN of ground (2) and water (9)
+# points, one LAZ per tile, all four tools, 1 and 2 CPUs. Edit the /path/to placeholders,
+# then:
+#
+#   uv run lidarbench preflight configs/examples/normalization-pilot-campaign.toml
+#   uv run lidarbench run configs/examples/normalization-pilot-campaign.toml
+#   uv run lidarbench report WORKSPACE/campaigns/normalization-pilot-example-001 --mode performance-only
+#
+# The contract has no numerical reference (structural validation only), so every
+# attempt is "unverified" and every implementation non_comparable: the timings are
+# descriptive and appear only in performance-only reports (design/VALIDATION.md §1).
+# lasR is diagnostic_only: lasR <= 0.21.3 writes NaN heights as corrupt Z, which the
+# structural level rejects. lidR reads every attribute, so use repaired inputs (readLAS
+# data-check warnings fail the attempt). lasR refuses inputs without .lax indexes.
+# Normalized LAZ outputs are about as large as the inputs: size the scratch root.
+schema = "lidarbench.campaign-config/1"
+campaign_id = "normalization-pilot-example-001"
+description = "normalization pilot: lidR, lasR (diagnostic), LAStools, PDAL; ground TIN; 1-2 CPUs"
+workspace = "/path/to/lidarbench-pilot/workspace"
+validation_mode = "numerical"
+cpu_counts = [1, 2]
+timeout_s = 3600
+
+[scheduling]
+seed = 20261030
+repetitions = 3
+warmups = 1
+tool_order = "balanced"
+cooldown_s = 5.0
+cache_policy = "uncontrolled-warm"
+cpu_affinity = "pinned"
+
+[monitoring]
+enabled = true
+backend = "psutil"
+interval_s = 0.5
+required = true
+
+[scratch]
+roots = { local = "/path/to/lidarbench-pilot/scratch" }
+retain = "on-failure"
+
+[validation]
+reuse_identical_outputs = true
+
+[integrity]
+record_output_digests = true
+verify_inputs_at_end = true
+
+[[datasets]]
+id = "pilot-block"
+path = "/path/to/prepared/1_org/tile_1000_density_10"
+include = ["298000_5093000.laz", "298000_5094000.laz", "299000_5093000.laz", "299000_5094000.laz"]
+
+[[workloads]]
+id = "normalization"            # height above a linear TIN of classes 2 and 9
+parameters = { epsg = 2959 }
+
+[[tools]]
+id = "lidr"
+
+[[tools]]
+id = "lasr"
+
+[[tools]]
+id = "lastools"
+options = { bin_dir = "/path/to/LAStools/bin" }
+
+[[tools]]
+id = "pdal"
+options = { executable = "/path/to/conda/envs/pdal/bin/pdal" }

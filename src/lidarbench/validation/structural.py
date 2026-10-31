@@ -130,7 +130,7 @@ def check_raster(
     policies: Policies,
 ) -> RasterStructure:
     """Run every structural check on one decoded raster."""
-    product = contract.raster
+    product = contract.require_raster()
     r = product.resolution
     out = RasterStructure(expected_grid=expected_grid(tile_bounds, r))
     if raster.driver != "GTiff":

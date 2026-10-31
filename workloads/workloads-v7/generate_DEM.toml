@@ -1,0 +1,77 @@
+# Workload contract (lidarbench.workload/1). See pixel_metrics_1a.toml for the layout.
+# New in workloads-v6 (unchanged in workloads-v7). Structural validation only: no independent TIN reference exists
+# yet, so every implementation is non_comparable and its timings are descriptive
+# (numerical level "unsupported", outcome "unverified"; WORKLOADS.md, design/VALIDATION.md).
+schema = "lidarbench.workload/1"
+suite = "workloads-v7"
+id = "generate_DEM"
+title = "TIN terrain model at 1 m"
+description = """
+Linear Delaunay TIN of the ground (2) and water (9) points, original Z, sampled at the
+centre of each 1 m cell. One single-band terrain-elevation raster per input tile. The
+tools differ in duplicate-XY handling, hull masking and long-triangle trimming, so the
+values and NoData support are tool-specific and not compared."""
+
+[population]
+input = "original"
+points = "classes"
+classes = [2, 9]
+z = "original"
+require_finite_xyz = true
+horizontal_units = "metre"
+
+[spatial]
+tiling = "per_input_file"
+buffer = 20.0
+
+[raster]
+resolution = 1.0
+origin = [0.0, 0.0]
+extent = "header_bounds_snapped_outward"
+cell_ownership = "cell_centre_sample"
+empty_cells = "nodata"
+bands = []                    # single band; band description is tool-specific
+nodata_source = "file_metadata"
+forbidden_values = [-9999.0, -999999.0, -1000000.0]
+
+[reference]
+method = "none"               # no TIN reference validator: structural validation only
+
+[artifacts]
+ignored_sidecars = ["*.aux.xml", "*.vrt", "*.tfw", "*.kml"]   # blast2dem writes a KML despite -no_kml
+
+[equivalence]
+group = "workloads-v7/generate_DEM"
+
+[implementations.lidR]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "cell_centre_sample"
+extent = "header_bounds_snapped_nearest"   # same terra crop as the lidR DSM (workloads-v5)
+band_names = "not_required"
+note = "lidR::rasterize_terrain(res = 1, tin(), use_class = c(2L, 9L), shape = 'convex'); catalog buffer 20, chunk 0. Convex-hull mask of the buffered ground points; duplicate XY keep their lowest Z."
+
+[implementations.lasR]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "cell_centre_sample"
+band_names = "not_required"
+note = "lasR dtm(res = 1) = triangulate(keep_ground_and_water()) + rasterize; buffer 20, chunk 0. No maximum edge trim."
+
+[implementations.lastools]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "undeclared"
+band_names = "not_required"
+note = "blast2dem64 -keep_class 2 9 -elevation -step 1 -kill 100000 -buffered 20 -use_orig_bb. Deviates from the legacy -kill 100 so that, like lasR, no long triangle is dropped. On the Petawawa pilot pair ~0.3% of shared cells differ from lidR/lasR/PDAL by > 1 cm (up to 3 m); the sampling convention is not established."
+
+[implementations.pdal]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "cell_centre_sample"
+band_names = "not_required"
+note = "readers.las (tile + inputs within the 20 m buffer) -> filters.merge -> filters.crop (tile bounds + 20 m) -> filters.range Classification[2:2],[9:9] -> filters.delaunay -> filters.faceraster (1 m, header bounds snapped outward, max_triangle_edge_length = 100) -> writers.raster (double, nodata -9999). Not streamable: always runs with --nostream."

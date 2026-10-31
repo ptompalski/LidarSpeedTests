@@ -12,16 +12,22 @@ multi-core parents may exit 0 while printing the same warning, and both are
 accepted only under the explicit opt-in, as a named exception. Successful
 execution is not validation: native cell ownership is undeclared, so outputs
 are at best ``unverified`` and never comparable with other tools.
+
+``normalization`` (``lasheight64``) runs on its own two-tile scene with a planar
+ground (class 2), where the exact heights are known: every input point is
+written once to its own tile, buffer points are not, heights are exact inside
+the ground TIN and extrapolated (kept, finite) outside it.
 """
 
 from __future__ import annotations
 
 import json
+import random
 import shutil
 from pathlib import Path
 
 import pytest
-from validation_fixtures import EPSG, neighbour_scene
+from validation_fixtures import EPSG, X0, Y0, neighbour_scene, write_las
 
 from lidarbench.campaign.results import collect_rows
 from lidarbench.campaign.runner import CampaignRunner, RunOptions
@@ -222,3 +228,85 @@ def test_execution_is_not_validation_and_never_comparable(opted_in, tmp_path):
         assert primary.artifacts.status.value == "passed", primary.to_record()
         assert primary.outcome is not Outcome.VALIDATED
         assert primary.comparability()[0] is not Comparability.COMPARABLE
+
+
+# -- normalization (lasheight64) -------------------------------------------------------
+
+
+def _ground(x: float, y: float) -> float:
+    return 150.0 + 0.05 * (x - X0) + 0.02 * (y - Y0)
+
+
+def _planar_scene(directory: Path) -> dict[str, list[tuple[float, float, float, int]]]:
+    """Two 100 m tiles: a 2 m class-2 ground grid on a plane, class-5 points above it."""
+    rng = random.Random(20261030)
+    directory.mkdir(parents=True)
+    tiles = {}
+    for name, x0 in (("west", X0), ("east", X0 + 100.0)):
+        points = [
+            (x0 + 1.0 + 2 * i, Y0 + 1.0 + 2 * j, 0.0, 2) for i in range(50) for j in range(50)
+        ]
+        points += [
+            (round(rng.uniform(x0, x0 + 99.99), 2), round(rng.uniform(Y0, Y0 + 100.0), 2),
+             round(rng.uniform(0.5, 30.0), 2), 5)
+            for _ in range(500)
+        ]  # fmt: skip
+        xs, ys, hs, classes = zip(*points, strict=True)
+        write_las(
+            directory / f"{name}.las",
+            xs,
+            ys,
+            [round(_ground(x, y) + h, 3) for x, y, h in zip(xs, ys, hs, strict=True)],
+            classification=classes,
+        )
+        tiles[name] = points
+    return tiles
+
+
+def test_normalization_writes_exact_heights_per_tile(tmp_path):
+    laspy = pytest.importorskip("laspy")
+    np = pytest.importorskip("numpy")
+    adapter = LastoolsAdapter()
+    availability = adapter.probe(PLATFORM)
+    if not availability.available:
+        pytest.skip(f"LAStools unavailable: {availability.detail}")
+    if adapter.support_for("normalization", 2).status.value != "runnable":
+        pytest.skip("LAStools installation lacks lasheight64")
+    dirs = [tmp_path / n for n in ("lidar inputs", "out dir", "work", "attempt")]
+    tiles = _planar_scene(dirs[0])
+    for path in dirs[1:]:
+        path.mkdir()
+    before = sorted(p.name for p in dirs[0].iterdir())
+    inputs = tuple(sorted(dirs[0].glob("*.las")))
+    inv = Invocation(
+        "normalization", inputs, dirs[1], dirs[2], threads=2, parameters={"epsg": EPSG}
+    )
+    plan = plan_invocation(adapter, inv, availability=availability)
+    assert plan.ready, plan.reason
+    execution = execute_plan(plan, inv, dirs[3], timeout_s=300, adapter=adapter)
+    assert str(execution.execution_status) == "succeeded", execution.failure_reason
+    assert execution.accepted_exception is None and not execution.missing_required_outputs
+    assert sorted(p.name for p in dirs[0].iterdir()) == before  # no .lax next to inputs
+    assert sorted(p.name for p in dirs[1].iterdir()) == ["east.laz", "west.laz"]
+    for name, points in tiles.items():
+        las = laspy.read(dirs[1] / f"{name}.laz")
+        assert len(las.points) == len(points)  # every tile point, no buffer points
+        got = sorted(
+            zip(
+                np.round(np.asarray(las.x), 2).tolist(),
+                np.round(np.asarray(las.y), 2).tolist(),
+                np.asarray(las.classification).tolist(),
+                np.asarray(las.z).tolist(),
+                strict=True,
+            )
+        )
+        want = sorted((round(x, 2), round(y, 2), c, h) for x, y, h, c in points)
+        assert [g[:3] for g in got] == [w[:3] for w in want]
+        heights = np.asarray([g[3] for g in got])
+        error = np.abs(heights - np.asarray([w[3] for w in want]))
+        x, y = np.asarray([g[0] for g in got]), np.asarray([g[1] for g in got])
+        hull = (x >= X0 + 1) & (x <= X0 + 199) & (y >= Y0 + 1) & (y <= Y0 + 99)
+        assert np.isfinite(heights).all()
+        assert error[hull].max() <= 0.002  # exact inside the ground TIN, across the tile edge
+        # Outside the ground TIN lasheight keeps the points with extrapolated heights.
+        assert (~hull).any() and error[~hull].max() < 0.1

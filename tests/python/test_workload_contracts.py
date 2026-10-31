@@ -25,10 +25,15 @@ def _data(name: str = "pixel_metrics_1a") -> dict:
         return tomllib.load(handle)
 
 
-def test_suite_defines_the_cell_statistic_workloads_and_the_dem():
+def test_suite_defines_the_cell_statistic_workloads_the_dem_and_normalization():
     suite = load_suite(SUITE)
-    assert suite.name == "workloads-v6"
-    assert sorted(suite.contracts) == ["generate_DEM", "generate_DSM1", "pixel_metrics_1a"]
+    assert suite.name == "workloads-v7"
+    assert sorted(suite.contracts) == [
+        "generate_DEM",
+        "generate_DSM1",
+        "normalization",
+        "pixel_metrics_1a",
+    ]
     mean = suite.get("pixel_metrics_1a")
     assert (mean.statistic, mean.raster.resolution, mean.raster.bands) == (
         "mean",
@@ -167,7 +172,7 @@ def test_suite_errors(tmp_path: Path):
     with pytest.raises(ContractError, match="invalid TOML"):
         load_contract(bad)
     with pytest.raises(ContractError, match="defines no contract"):
-        load_suite(SUITE).get("normalization")
+        load_suite(SUITE).get("tree_detection")
 
 
 def test_v3_differs_from_v2_only_by_tfw_sidecars():
@@ -298,3 +303,88 @@ def test_value_precision_must_be_a_positive_float():
     data["implementations"]["lastools"]["value_precision"] = 0.01
     assert parse_contract(data).implementation("lastools").value_precision == 0.01
     assert "value_precision" in parse_contract(data).record["implementations"]["lastools"]
+
+
+def test_v7_keeps_the_v6_definitions_and_adds_point_cloud_normalization():
+    v6 = load_suite(default_suite_dir("workloads-v6"))
+    v7 = load_suite(default_suite_dir("workloads-v7"))
+    for workload_id, old in v6.contracts.items():
+        new, old_record = dict(v7.get(workload_id).record), dict(old.record)
+        for record in (new, old_record):
+            record.pop("suite")
+            record.pop("equivalence")
+        assert new == old_record
+    norm = v7.get("normalization")
+    assert norm.product == "point_cloud" and norm.raster is None
+    assert "raster" not in norm.record and norm.record["reference"] == {"method": "none"}
+    assert not norm.has_reference and norm.buffer == 20.0
+    pc = norm.point_cloud
+    assert pc is not None
+    assert (pc.format, pc.z, pc.ground_classes, pc.surface, pc.ownership) == (
+        "laz",
+        "height_above_ground",
+        (2, 9),
+        "linear_tin",
+        "closed_header_bounds",
+    )
+    assert {"x", "y", "gps_time", "classification"} <= set(pc.preserved_attributes)
+    assert {t: (i.status, norm.declared_comparability(t)) for t, i in norm.implementations.items()}[
+        "lasR"
+    ] == (ImplementationStatus.DIAGNOSTIC_ONLY, "non_comparable")
+    assert {norm.declared_comparability(t) for t in norm.implementations} == {"non_comparable"}
+    assert norm.implementation("lidR").expected_names("t") == ("t.laz",)
+    assert norm.implementation("lidR").outside_surface == "extrapolate"
+    assert norm.implementation("lasR").outside_surface == "discard"
+    assert "cell_ownership" not in norm.record["implementations"]["lidR"]
+    with pytest.raises(ContractError, match="no raster product"):
+        norm.require_raster()
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda d: d.update(raster={}), "exactly one product table"),
+        (lambda d: d.pop("point_cloud"), "exactly one product table"),
+        (lambda d: d["point_cloud"].update(format="las"), "point_cloud.format"),
+        (lambda d: d["point_cloud"].update(z="original"), "point_cloud.z"),
+        (lambda d: d["point_cloud"].update(ground_classes=[9, 2]), "sorted, distinct"),
+        (lambda d: d["point_cloud"].update(ground_classes=[300]), r"ground_classes\[0\]"),
+        (lambda d: d["point_cloud"].update(preserved_attributes=["x"]), "include x and y"),
+        (lambda d: d["point_cloud"].update(preserved_attributes=["x", "y", "rgb"]), "rgb"),
+        (lambda d: d["point_cloud"].update(max_missing_fraction=1.0), "< 1.0"),
+        (lambda d: d["point_cloud"].update(max_missing_fraction=0), "finite float"),
+        (lambda d: d["point_cloud"].pop("surface"), "surface"),
+        (lambda d: d["point_cloud"].update(extra=1), "unknown key"),
+        (
+            lambda d: d["population"].update(points="classes", classes=[2]),
+            'population.points = "all"',
+        ),
+        (lambda d: d["spatial"].update(buffer=0.0), "buffer must be > 0"),
+        (lambda d: d["reference"].update(method="cell_statistic", statistic="max"), "none"),
+        (
+            lambda d: d["implementations"]["lidR"].update(cell_ownership="right_down"),
+            "unknown key",
+        ),
+        (lambda d: d["implementations"]["lidR"].pop("outside_surface"), "outside_surface"),
+        (
+            lambda d: d["implementations"]["lidR"].update(outside_surface="keep"),
+            "outside_surface",
+        ),
+        (
+            lambda d: d["implementations"]["lidR"].update(equivalence="matched_definition"),
+            "must be non_comparable",
+        ),
+    ],
+)
+def test_invalid_point_cloud_contracts_name_the_key(mutate, message):
+    data = copy.deepcopy(_data("normalization"))
+    mutate(data)
+    with pytest.raises(ContractError, match=message):
+        parse_contract(data)
+
+
+def test_raster_contracts_reject_point_cloud_implementation_keys():
+    data = _data()
+    data["implementations"]["lidR"]["outside_surface"] = "discard"
+    with pytest.raises(ContractError, match="unknown key"):
+        parse_contract(data)

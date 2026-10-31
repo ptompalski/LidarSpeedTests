@@ -29,7 +29,7 @@ from lidarbench.core.canonical import digest
 from lidarbench.execution.adapters.base import WORKLOAD_ID_PATTERN, ImplementationStatus
 
 CONTRACT_SCHEMA = "lidarbench.workload/1"
-DEFAULT_SUITE = "workloads-v6"
+DEFAULT_SUITE = "workloads-v7"
 
 SUITE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 TOOL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -64,6 +64,40 @@ CELL_OWNERSHIP = {
     ),
 }
 """Named cell-ownership conventions a contract or implementation may declare."""
+
+PRODUCTS = ("raster", "point_cloud")
+"""Output product kinds; a contract declares exactly one table of these names."""
+POINT_FORMATS = ("laz",)
+POINT_Z = {
+    "height_above_ground": (
+        "Output Z = input Z minus the ground surface (point_cloud.surface built from the "
+        "point_cloud.ground_classes points of the tile and its buffer) at the point's XY."
+    ),
+}
+SURFACES = ("linear_tin",)
+POINT_OWNERSHIP = {
+    "closed_header_bounds": (
+        "An artifact holds unchanged input points lying inside its tile's closed header "
+        "bounds: the tile's own points, plus points of neighbouring tiles lying exactly on "
+        "a shared edge (tools differ on which tile owns those). No buffer point is written."
+    ),
+}
+POINT_ATTRIBUTES = (
+    "x",
+    "y",
+    "gps_time",
+    "intensity",
+    "return_number",
+    "number_of_returns",
+    "classification",
+)
+"""Point attributes a point-cloud contract may require to be unchanged (``x``/``y`` required)."""
+OUTSIDE_SURFACE = {
+    "discard": "Points the ground surface does not cover are not written.",
+    "extrapolate": "Points the ground surface does not cover get an extrapolated ground.",
+    "undeclared": "The tool's handling of points outside the ground surface is not established.",
+}
+"""Declared per-implementation handling of points outside the ground surface."""
 
 POPULATION_INPUTS = ("original",)
 POPULATION_POINTS = ("all", "classes")
@@ -180,6 +214,21 @@ class RasterProduct:
 
 
 @dataclass(frozen=True)
+class PointCloudProduct:
+    """Required point-cloud product semantics (one artifact per input tile)."""
+
+    format: str
+    z: str
+    ground_classes: tuple[int, ...]
+    surface: str
+    ownership: str
+    preserved_attributes: tuple[str, ...]
+    max_missing_fraction: float
+    """Largest fraction of a tile's own points that may be absent from its artifact
+    (points outside the ground surface, or edge points written to a neighbour)."""
+
+
+@dataclass(frozen=True)
 class Tolerance:
     """Per-value numerical acceptance: ``|a - r| <= absolute + relative * |r|``."""
 
@@ -210,6 +259,9 @@ class Implementation:
     """Declared extent rule of the tool's rasters when it differs from the contract's
     (``header_bounds_snapped_nearest``: each header bound rounded to the nearest grid
     line, so up to one edge cell holding points can be cut off); ``None`` = contract."""
+    outside_surface: str | None = None
+    """Point-cloud products only: declared handling of points outside the ground
+    surface (:data:`OUTSIDE_SURFACE`); ``None`` for rasters."""
 
     def expected_names(self, stem: str) -> tuple[str, ...]:
         """Primary artifact file names expected for one input tile stem."""
@@ -232,7 +284,8 @@ class WorkloadContract:
     population: Population
     tiling: str
     buffer: float
-    raster: RasterProduct
+    raster: RasterProduct | None
+    """The raster product, or ``None`` for a point-cloud contract."""
     reference_method: str
     statistic: str
     tolerance: Tolerance
@@ -241,6 +294,19 @@ class WorkloadContract:
     implementations: Mapping[str, Implementation]
     record: Mapping[str, Any] = field(repr=False, compare=False, default_factory=dict)
     source: Path | None = field(default=None, compare=False)
+    point_cloud: PointCloudProduct | None = None
+    """The point-cloud product, or ``None`` for a raster contract."""
+
+    @property
+    def product(self) -> str:
+        """``raster`` or ``point_cloud`` (one of :data:`PRODUCTS`)."""
+        return "point_cloud" if self.point_cloud is not None else "raster"
+
+    def require_raster(self) -> RasterProduct:
+        """The raster product; raises :class:`ContractError` for a point-cloud contract."""
+        if self.raster is None:
+            raise ContractError(f"contract {self.key} declares no raster product")
+        return self.raster
 
     @property
     def key(self) -> str:
@@ -278,7 +344,11 @@ class WorkloadContract:
         impl = self.implementations.get(tool)
         if impl is None or not impl.status.dispatchable:
             return "unsupported"
-        if impl.equivalence != "matched_definition" or not impl.ownership_declared:
+        if (
+            impl.equivalence != "matched_definition"
+            or not impl.ownership_declared
+            or self.raster is None
+        ):
             return "non_comparable"
         if impl.cell_ownership == self.raster.cell_ownership:
             return "strictly_comparable"
@@ -289,7 +359,9 @@ class WorkloadContract:
         return any(fnmatch.fnmatchcase(name, pattern) for pattern in self.ignored_sidecars)
 
 
-def _implementation(tool: str, value: Any, where: str) -> Implementation:
+def _implementation(tool: str, value: Any, where: str, product: str = "raster") -> Implementation:
+    raster_keys = {"cell_ownership", "band_names", "value_precision", "extent"}
+    point_keys = {"outside_surface"}
     table = _table(
         value,
         where,
@@ -297,12 +369,9 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
             "status",
             "equivalence",
             "artifacts",
-            "cell_ownership",
-            "band_names",
             "note",
             "reason",
-            "value_precision",
-            "extent",
+            *(raster_keys if product == "raster" else point_keys),
         },
         ("status", "equivalence"),
     )
@@ -318,7 +387,8 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
         raise ContractError(f"{where}: diagnostic_only implementations must be non_comparable")
     artifacts: list[str] = []
     if status.dispatchable:
-        for key in ("artifacts", "cell_ownership", "band_names"):
+        required = ("cell_ownership", "band_names") if product == "raster" else ("outside_surface",)
+        for key in ("artifacts", *required):
             if key not in table:
                 raise ContractError(f"{where}.{key} is required for a dispatchable status")
         for i, pattern in enumerate(_list(table["artifacts"], f"{where}.artifacts")):
@@ -349,6 +419,11 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
     )
     if extent is not None and ownership == "undeclared":
         raise ContractError(f"{where}.extent requires a declared cell_ownership")
+    outside = (
+        _choice(table["outside_surface"], f"{where}.outside_surface", OUTSIDE_SURFACE)
+        if "outside_surface" in table
+        else None
+    )
     return Implementation(
         tool=tool,
         status=status,
@@ -360,6 +435,113 @@ def _implementation(tool: str, value: Any, where: str) -> Implementation:
         reason=reason,
         value_precision=precision,
         extent=extent,
+        outside_surface=outside,
+    )
+
+
+def _classes(value: Any, where: str) -> tuple[int, ...]:
+    raw = _list(value, where)
+    for i, item in enumerate(raw):
+        if isinstance(item, bool) or not isinstance(item, int) or not 0 <= item <= 255:
+            raise ContractError(f"{where}[{i}] must be an ASPRS class 0-255, got {item!r}")
+    if not raw or len(set(raw)) != len(raw) or list(raw) != sorted(raw):
+        raise ContractError(f"{where} must be a non-empty, sorted, distinct list")
+    return tuple(raw)
+
+
+def _raster(value: Any, buffer: float) -> RasterProduct:
+    rt = _table(
+        value,
+        "raster",
+        {
+            "resolution",
+            "origin",
+            "extent",
+            "cell_ownership",
+            "empty_cells",
+            "bands",
+            "nodata_source",
+            "forbidden_values",
+        },
+        (
+            "resolution",
+            "origin",
+            "extent",
+            "cell_ownership",
+            "empty_cells",
+            "bands",
+            "nodata_source",
+        ),
+    )
+    resolution = _float(rt["resolution"], "raster.resolution", positive=True)
+    origin_list = _list(rt["origin"], "raster.origin")
+    if len(origin_list) != 2:
+        raise ContractError("raster.origin must have two values [x, y]")
+    origin = (
+        _float(origin_list[0], "raster.origin[0]"),
+        _float(origin_list[1], "raster.origin[1]"),
+    )
+    if origin != (0.0, 0.0):
+        raise ContractError("raster.origin must be [0.0, 0.0] in this schema version")
+    ownership = _choice(rt["cell_ownership"], "raster.cell_ownership", CELL_OWNERSHIP)
+    if ownership == "undeclared":
+        raise ContractError("raster.cell_ownership must be a declared convention")
+    bands = tuple(
+        _str(b, f"raster.bands[{i}]") for i, b in enumerate(_list(rt["bands"], "raster.bands"))
+    )
+    if len(set(bands)) != len(bands):
+        raise ContractError("raster.bands must be distinct")
+    if buffer < resolution:
+        raise ContractError(
+            "spatial.buffer must be >= raster.resolution so snapped cells are filled"
+        )
+    return RasterProduct(
+        resolution=resolution,
+        origin=origin,
+        extent=_choice(rt["extent"], "raster.extent", EXTENT_RULES),
+        cell_ownership=ownership,
+        empty_cells=_choice(rt["empty_cells"], "raster.empty_cells", EMPTY_CELLS),
+        bands=bands,
+        nodata_source=_choice(rt["nodata_source"], "raster.nodata_source", NODATA_SOURCES),
+        forbidden_values=tuple(
+            _float(v, f"raster.forbidden_values[{i}]")
+            for i, v in enumerate(_list(rt.get("forbidden_values", []), "raster.forbidden_values"))
+        ),
+    )
+
+
+def _point_cloud(value: Any, buffer: float, population: Population) -> PointCloudProduct:
+    keys = {
+        "format",
+        "z",
+        "ground_classes",
+        "surface",
+        "ownership",
+        "preserved_attributes",
+        "max_missing_fraction",
+    }
+    pc = _table(value, "point_cloud", keys, keys)
+    if population.points != "all":
+        raise ContractError('point_cloud products require population.points = "all"')
+    if buffer <= 0:
+        raise ContractError("spatial.buffer must be > 0 for a point_cloud ground surface")
+    attributes = tuple(
+        _choice(a, f"point_cloud.preserved_attributes[{i}]", POINT_ATTRIBUTES)
+        for i, a in enumerate(_list(pc["preserved_attributes"], "point_cloud.preserved_attributes"))
+    )
+    if len(set(attributes)) != len(attributes) or not {"x", "y"} <= set(attributes):
+        raise ContractError("point_cloud.preserved_attributes must be distinct and include x and y")
+    missing = _float(pc["max_missing_fraction"], "point_cloud.max_missing_fraction", minimum=0.0)
+    if missing >= 1.0:
+        raise ContractError("point_cloud.max_missing_fraction must be < 1.0")
+    return PointCloudProduct(
+        format=_choice(pc["format"], "point_cloud.format", POINT_FORMATS),
+        z=_choice(pc["z"], "point_cloud.z", POINT_Z),
+        ground_classes=_classes(pc["ground_classes"], "point_cloud.ground_classes"),
+        surface=_choice(pc["surface"], "point_cloud.surface", SURFACES),
+        ownership=_choice(pc["ownership"], "point_cloud.ownership", POINT_OWNERSHIP),
+        preserved_attributes=attributes,
+        max_missing_fraction=missing,
     )
 
 
@@ -377,6 +559,7 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
             "population",
             "spatial",
             "raster",
+            "point_cloud",
             "reference",
             "tolerance",
             "artifacts",
@@ -390,7 +573,6 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
             "title",
             "population",
             "spatial",
-            "raster",
             "reference",
             "equivalence",
             "implementations",
@@ -440,64 +622,14 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
     tiling = _choice(spatial["tiling"], "spatial.tiling", TILINGS)
     buffer = _float(spatial["buffer"], "spatial.buffer", minimum=0.0)
 
-    rt = _table(
-        top["raster"],
-        "raster",
-        {
-            "resolution",
-            "origin",
-            "extent",
-            "cell_ownership",
-            "empty_cells",
-            "bands",
-            "nodata_source",
-            "forbidden_values",
-        },
-        (
-            "resolution",
-            "origin",
-            "extent",
-            "cell_ownership",
-            "empty_cells",
-            "bands",
-            "nodata_source",
-        ),
-    )
-    resolution = _float(rt["resolution"], "raster.resolution", positive=True)
-    origin_list = _list(rt["origin"], "raster.origin")
-    if len(origin_list) != 2:
-        raise ContractError("raster.origin must have two values [x, y]")
-    origin = (
-        _float(origin_list[0], "raster.origin[0]"),
-        _float(origin_list[1], "raster.origin[1]"),
-    )
-    if origin != (0.0, 0.0):
-        raise ContractError("raster.origin must be [0.0, 0.0] in this schema version")
-    ownership = _choice(rt["cell_ownership"], "raster.cell_ownership", CELL_OWNERSHIP)
-    if ownership == "undeclared":
-        raise ContractError("raster.cell_ownership must be a declared convention")
-    bands = tuple(
-        _str(b, f"raster.bands[{i}]") for i, b in enumerate(_list(rt["bands"], "raster.bands"))
-    )
-    if len(set(bands)) != len(bands):
-        raise ContractError("raster.bands must be distinct")
-    if buffer < resolution:
+    has_raster, has_points = "raster" in top, "point_cloud" in top
+    if has_raster == has_points:
         raise ContractError(
-            "spatial.buffer must be >= raster.resolution so snapped cells are filled"
+            "contract must declare exactly one product table: [raster] or [point_cloud]"
         )
-    raster = RasterProduct(
-        resolution=resolution,
-        origin=origin,
-        extent=_choice(rt["extent"], "raster.extent", EXTENT_RULES),
-        cell_ownership=ownership,
-        empty_cells=_choice(rt["empty_cells"], "raster.empty_cells", EMPTY_CELLS),
-        bands=bands,
-        nodata_source=_choice(rt["nodata_source"], "raster.nodata_source", NODATA_SOURCES),
-        forbidden_values=tuple(
-            _float(v, f"raster.forbidden_values[{i}]")
-            for i, v in enumerate(_list(rt.get("forbidden_values", []), "raster.forbidden_values"))
-        ),
-    )
+    raster = _raster(top["raster"], buffer) if has_raster else None
+    point_cloud = _point_cloud(top["point_cloud"], buffer, population) if has_points else None
+    product = "raster" if raster is not None else "point_cloud"
 
     ref = _table(top["reference"], "reference", {"method", "statistic"}, ("method",))
     method = _choice(ref["method"], "reference.method", REFERENCE_METHODS)
@@ -505,6 +637,8 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
         if "statistic" not in ref:
             raise ContractError("reference: missing required key(s) ['statistic']")
         statistic = _choice(ref["statistic"], "reference.statistic", STATISTICS)
+        if raster is None:
+            raise ContractError('point_cloud contracts require reference.method = "none"')
         if raster.band_count != 1:
             raise ContractError("cell_statistic references produce exactly one band")
         if population.points != "all":
@@ -542,9 +676,16 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
     if not isinstance(impl_table, dict) or not impl_table:
         raise ContractError("implementations must be a non-empty table of tools")
     implementations = {
-        tool: _implementation(tool, value, f"implementations.{tool}")
+        tool: _implementation(tool, value, f"implementations.{tool}", product)
         for tool, value in sorted(impl_table.items())
     }
+    if point_cloud is not None:
+        for tool, impl in implementations.items():
+            if impl.equivalence != "non_comparable":
+                raise ContractError(
+                    f"implementations.{tool}.equivalence must be non_comparable: point_cloud "
+                    "contracts define no numerical reference in this schema version"
+                )
     lowered = [t.lower() for t in implementations]
     if len(set(lowered)) != len(lowered):
         raise ContractError("implementations: tool names must differ by more than case")
@@ -557,16 +698,37 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
         **({"description": description} if description else {}),
         "population": dict(pop),
         "spatial": {"tiling": tiling, "buffer": buffer},
-        "raster": {
-            "resolution": resolution,
-            "origin": list(origin),
-            "extent": raster.extent,
-            "cell_ownership": ownership,
-            "empty_cells": raster.empty_cells,
-            "bands": list(bands),
-            "nodata_source": raster.nodata_source,
-            "forbidden_values": list(raster.forbidden_values),
-        },
+        **(
+            {
+                "raster": {
+                    "resolution": raster.resolution,
+                    "origin": list(raster.origin),
+                    "extent": raster.extent,
+                    "cell_ownership": raster.cell_ownership,
+                    "empty_cells": raster.empty_cells,
+                    "bands": list(raster.bands),
+                    "nodata_source": raster.nodata_source,
+                    "forbidden_values": list(raster.forbidden_values),
+                }
+            }
+            if raster is not None
+            else {}
+        ),
+        **(
+            {
+                "point_cloud": {
+                    "format": point_cloud.format,
+                    "z": point_cloud.z,
+                    "ground_classes": list(point_cloud.ground_classes),
+                    "surface": point_cloud.surface,
+                    "ownership": point_cloud.ownership,
+                    "preserved_attributes": list(point_cloud.preserved_attributes),
+                    "max_missing_fraction": point_cloud.max_missing_fraction,
+                }
+            }
+            if point_cloud is not None
+            else {}
+        ),
         "reference": {"method": method, **({"statistic": statistic} if statistic else {})},
         **(
             {"tolerance": {"absolute": tolerance.absolute, "relative": tolerance.relative}}
@@ -580,8 +742,16 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
                 "status": impl.status.value,
                 "equivalence": impl.equivalence,
                 "artifacts": list(impl.artifacts),
-                "cell_ownership": impl.cell_ownership,
-                "band_names": impl.band_names,
+                **(
+                    {"cell_ownership": impl.cell_ownership, "band_names": impl.band_names}
+                    if product == "raster"
+                    else {}
+                ),
+                **(
+                    {"outside_surface": impl.outside_surface}
+                    if impl.outside_surface is not None
+                    else {}
+                ),
                 **({"note": impl.note} if impl.note else {}),
                 **({"reason": impl.reason} if impl.reason else {}),
                 **(
@@ -611,6 +781,7 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
         implementations=implementations,
         record=record,
         source=source,
+        point_cloud=point_cloud,
     )
 
 

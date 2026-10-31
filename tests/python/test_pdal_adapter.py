@@ -15,6 +15,7 @@ import math
 import os
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 
@@ -36,6 +37,7 @@ from lidarbench.execution.adapters import (
 from lidarbench.execution.adapters import pdal_worker as worker
 from lidarbench.execution.adapters.pdal import (
     EXECUTABLE_ENV,
+    HAG_COUNT,
     JOB_FILE,
     NODATA,
     OTHER_WORKLOADS,
@@ -700,6 +702,288 @@ def test_dem_runs_standard_and_validates_structurally(pdal, layout, monkeypatch,
     assert v.comparability()[0] is Comparability.DESCRIPTIVE_ONLY
     assert v.report_inclusion("performance-only") == (True, "unverified (unsupported)")
     assert v.report_inclusion("validated")[0] is False
+
+
+NORMALIZATION_STAGES_IN_ORDER = [
+    "readers.las",
+    "readers.las",
+    "filters.range",
+    "filters.merge",
+    "filters.crop",
+    "filters.ferry",
+    "filters.assign",
+    "filters.hag_delaunay",
+    "filters.ferry",
+    "filters.crop",
+    "writers.las",
+]
+
+
+@needs_posix
+def test_normalization_pipeline_relabels_water_and_writes_z_as_laz(pdal, layout):
+    from validation_fixtures import X0, Y0
+
+    _ground_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, "normalization", epsg=EPSG)
+    (east_tile, _, _), (west_tile, _, west) = adapter.pipelines(inv)
+    assert [s["type"] for s in west["pipeline"]] == NORMALIZATION_STAGES_IN_ORDER
+    stages = west["pipeline"]
+    tile, neighbour, ground, merge = stages[:4]
+    assert tile["filename"] == os.fspath(west_tile) and tile["tag"] == "tile"
+    assert neighbour["filename"] == os.fspath(east_tile) and neighbour["tag"] == "neighbour_1"
+    assert all(s["override_srs"] == f"EPSG:{EPSG}" and s["threads"] == 1 for s in stages[:2])
+    # Neighbours contribute ground (2) and water (9) only; the tile is read whole.
+    assert ground == {
+        "type": "filters.range",
+        "inputs": ["neighbour_1"],
+        "limits": "Classification[2:2],Classification[9:9]",
+        "tag": "ground_1",
+    }
+    assert merge["inputs"] == ["tile", "ground_1"]
+    grown = f"([{X0 - 20.0!r}, {X0 + 120.0!r}], [{Y0 - 20.0!r}, {Y0 + 120.0!r}])"
+    closed = f"([{X0!r}, {X0 + 100.0!r}], [{Y0!r}, {Y0 + 100.0!r}])"
+    assert stages[4] == {"type": "filters.crop", "bounds": grown}
+    assert stages[5]["dimensions"] == "Classification=>LidarbenchClassification"
+    assert stages[6]["value"] == "Classification = 2 WHERE Classification == 9"
+    assert stages[7] == {
+        "type": "filters.hag_delaunay",
+        "count": HAG_COUNT,
+        "allow_extrapolation": True,
+        "class": 2,
+    }
+    assert stages[8]["dimensions"] == (
+        "LidarbenchClassification=>Classification, HeightAboveGround=>Z"
+    )
+    assert stages[9] == {"type": "filters.crop", "bounds": closed}
+    writer = stages[10]
+    assert writer == {
+        "type": "writers.las",
+        "filename": os.fspath(layout["out"] / "west tile.laz"),
+        "compression": "true",
+        "forward": "all",
+        "major_version": 1,
+        "minor_version": 2,
+        "dataformat_id": 0,
+        "scale_x": 0.01,
+        "scale_y": 0.01,
+        "scale_z": 0.001,
+        "offset_x": X0,
+        "offset_y": Y0,
+        "offset_z": 0.0,
+    }
+    assert "extra_dims" not in writer  # HeightAboveGround is never written
+    outputs = adapter.expected_outputs(inv)
+    assert [a.path.name for a in outputs] == ["east tile.laz", "west tile.laz"]
+    assert {str(a.kind) for a in outputs} == {"point_cloud"}
+    plan = plan_invocation(adapter, inv, adapter.probe(PLATFORM))
+    assert plan.ready, plan.reason
+    meta = plan.metadata
+    assert meta["writer"] == "writers.las" and meta["output_type"] == "hag_delaunay_z"
+    assert meta["binmode"] is None and meta["resolution"] is None and meta["nodata"] is None
+    assert meta["ground_classes"] == "2,9" and meta["hag_class"] == 2
+    assert meta["hag_count"] == HAG_COUNT and meta["hag_allow_extrapolation"] is True
+    assert "LidarbenchClassification" in str(meta["ground_class_handling"])
+    assert "nearest ground point" in str(meta["outside_ground_hull"])
+    assert meta["execution_mode"] == "standard" and meta["configured_execution_mode"] == "stream"
+    assert meta["neighbour_reads"] == 2
+
+
+def test_normalization_pipeline_without_water_or_class_option():
+    from lidarbench.datasets.lasheader import LasHeader
+    from lidarbench.execution.adapters.pdal import PdalWorkload, build_normalization_pipeline
+
+    header = LasHeader(
+        path=Path("/d/a.laz"),
+        version=(1, 4),
+        point_format=6,
+        compressed=True,
+        point_record_length=30,
+        point_count=1,
+        scale=(0.001, 0.001, 0.01),
+        offset=(1.0, 2.0, 3.0),
+        min_xyz=(0.0, 0.0, 0.0),
+        max_xyz=(10.0, 10.0, 1.0),
+        header_size=375,
+        offset_to_points=375,
+        vlr_count=0,
+        crs_wkt=None,
+        has_geotiff_keys=False,
+    )
+    ground_only = PdalWorkload(
+        "n", "", None, "{stem}.laz", method="normalization", classes=(2,), hag_count=5,
+        allow_extrapolation=False,
+    )  # fmt: skip
+    doc = build_normalization_pipeline(
+        Path("/d/a.laz"), [], Path("/o/a.laz"), header, ground_only, hag_class_option=False
+    )
+    types = [s["type"] for s in doc["pipeline"]]
+    assert types == [
+        "readers.las",
+        "filters.crop",
+        "filters.hag_delaunay",
+        "filters.ferry",
+        "filters.crop",
+        "writers.las",
+    ]
+    assert doc["pipeline"][2] == {
+        "type": "filters.hag_delaunay",
+        "count": 5,
+        "allow_extrapolation": False,
+    }
+    assert doc["pipeline"][3]["dimensions"] == "HeightAboveGround=>Z"
+    writer = doc["pipeline"][-1]
+    assert (writer["minor_version"], writer["dataformat_id"]) == (4, 6)
+    assert (writer["scale_z"], writer["offset_x"], writer["offset_z"]) == (0.01, 1.0, 3.0)
+    with pytest.raises(ValueError):
+        build_normalization_pipeline(
+            Path("/d/a.laz"), [], Path("/o/a.laz"), header, WORKLOADS["generate_DEM"]
+        )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"resolution": 1.0},
+        {"hag_count": 2},
+        {"allow_extrapolation": None},
+        {"classes": ()},
+        {"output_type": "mean"},
+    ],
+)
+def test_invalid_normalization_workloads(kwargs):
+    from lidarbench.execution.adapters.pdal import PdalWorkload
+
+    good = {
+        "workload_id": "n",
+        "output_type": "",
+        "resolution": None,
+        "method": "normalization",
+        "classes": (2, 9),
+        "hag_count": 10,
+        "allow_extrapolation": True,
+    }
+    PdalWorkload(**good)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        PdalWorkload(**{**good, **kwargs})  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        PdalWorkload("dem", "", None, method="tin", classes=(2,))
+
+
+@needs_posix
+@pytest.mark.parametrize(
+    ("env", "text"),
+    [
+        ({"drivers": "nohag"}, "filters.hag_delaunay"),
+        ({"hag_options": "nocount"}, "filters.hag_delaunay count"),
+        ({"hag_options": "broken"}, "filters.hag_delaunay allow_extrapolation"),
+    ],
+)
+def test_normalization_needs_hag_delaunay_and_its_options(pdal, layout, monkeypatch, env, text):
+    fake_env(monkeypatch, **env)
+    _ground_scene(layout)
+    adapter = _adapter(pdal)  # the other workloads stay runnable
+    plan = plan_invocation(adapter, _invocation(layout, "normalization"), adapter.probe(PLATFORM))
+    assert plan.status is PlanStatus.SKIPPED_UNSUPPORTED and text in plan.reason
+    plan = plan_invocation(adapter, _invocation(layout, "generate_DEM"), adapter.probe(PLATFORM))
+    assert plan.ready, plan.reason
+
+
+@needs_posix
+def test_normalization_without_the_class_option_relies_on_the_default(pdal, layout, monkeypatch):
+    fake_env(monkeypatch, hag_options="noclass")
+    _ground_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, "normalization")
+    for _, _, doc in adapter.pipelines(inv):
+        hag = next(s for s in doc["pipeline"] if s["type"] == "filters.hag_delaunay")
+        assert "class" not in hag
+    plan = plan_invocation(adapter, inv, adapter.probe(PLATFORM))
+    assert plan.ready and plan.metadata["hag_class"] == "default (2)"
+
+
+@pytest.mark.platform
+@needs_posix
+def test_normalization_runs_standard_and_writes_laz_per_tile(pdal, layout, monkeypatch):
+    pytest.importorskip("lazrs")
+    laspy = pytest.importorskip("laspy")
+    np = pytest.importorskip("numpy")
+    fake_env(monkeypatch, "ok", log=os.fspath(layout["attempt"].parent / "pdal-calls.jsonl"))
+    _ground_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, "normalization", epsg=EPSG)
+    plan = plan_invocation(adapter, inv, availability=adapter.probe(PLATFORM))
+    assert plan.ready, plan.reason
+    execution = execute_plan(plan, inv, layout["attempt"], timeout_s=120, adapter=adapter)
+    record = json.loads((layout["attempt"] / "execution.json").read_text(encoding="utf-8"))
+    assert str(execution.execution_status) == "succeeded", record["failure_reason"]
+    details = record["interpretation"]["details"]
+    assert details["execution_mode"] == "standard" and details["output_problems"] == []
+    assert "filters.hag_delaunay" in details["note"]
+    for tile in details["tiles"]:
+        assert tile["metadata"]["writers.las"]["filename"]
+        assert tile["metadata"]["points_read"] > 0
+    pipelines = [c for c in _calls(layout) if c[0] == "pipeline"]
+    assert len(pipelines) == 2 and all(c[-1] == "--nostream" for c in pipelines)
+    for source in inv.inputs:
+        out = laspy.read(layout["out"] / f"{source.stem}.laz")
+        src = laspy.read(source)
+        assert out.header.are_points_compressed
+        assert out.header.point_format.id == src.header.point_format.id
+        assert list(out.header.scales) == list(src.header.scales)
+        tile_keys = Counter(
+            zip(np.round(src.x, 2), np.round(src.y, 2), src.classification, strict=True)
+        )
+        out_keys = Counter(
+            zip(np.round(out.x, 2), np.round(out.y, 2), out.classification, strict=True)
+        )
+        assert not tile_keys - out_keys  # nothing of the tile is lost
+        extra = out_keys - tile_keys  # neighbour ground points exactly on the shared edge
+        assert extra and {k[2] for k in extra} <= {2, 9}
+        min_x, min_y, max_x, max_y = adapter.header_bounds(inv)[source]
+        assert all(
+            min(abs(k[0] - min_x), abs(k[0] - max_x), abs(k[1] - min_y), abs(k[1] - max_y)) < 1e-6
+            for k in extra
+        )
+        assert np.all(out.z[np.isin(out.classification, [2, 9])] == 0.0)
+
+
+@needs_posix
+def test_normalization_output_checks_fail_closed(pdal, layout):
+    _ground_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, "normalization")
+    assert adapter._output_problems(inv) == ["missing east tile.laz", "missing west tile.laz"]
+    write_las(layout["out"] / "east tile.laz", [500100.5], [5000000.5], [1.0])
+    (layout["out"] / "west tile.laz").write_bytes(b"not a point cloud")
+    problems = adapter._output_problems(inv)
+    assert problems[0] == "east tile.laz is not compressed (LAZ expected)"
+    assert problems[1].startswith("west tile.laz is not a readable LAS/LAZ file")
+    assert len(problems) == 2
+    write_las(layout["out"] / "east tile.laz", [500100.5], [5000000.5], [1.0], scale=(1, 1, 1))
+    problems = adapter._output_problems(inv)
+    assert any(p.startswith("east tile.laz scale (1.0, 1.0, 1.0) differs") for p in problems)
+
+
+def test_metadata_facts_accept_pdal_stage_lists(tmp_path):
+    from lidarbench.execution.adapters.pdal import _metadata_facts
+
+    path = tmp_path / "meta.json"
+    path.write_text(
+        json.dumps(
+            {
+                "stages": {
+                    "readers.las": [{"count": 3, "minx": 1.0}, {"count": 4}],
+                    "filters.crop": [{}, {}],
+                    "writers.las": {"filename": ["/o/a.laz"]},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    facts = _metadata_facts(path)
+    assert facts["points_read"] == 7 and len(facts["readers.las"]) == 2
+    assert facts["writers.las"] == {"filename": ["/o/a.laz"]}
 
 
 @pytest.mark.platform

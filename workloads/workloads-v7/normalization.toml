@@ -1,0 +1,76 @@
+# Workload contract (lidarbench.workload/1). See pixel_metrics_1a.toml for the layout.
+# New in workloads-v7. Height normalization writes point clouds, so the product is a
+# [point_cloud] table instead of [raster]. Structural validation only: there is no
+# independent normalization reference, so every implementation is non_comparable and its
+# timings are descriptive (numerical level "unsupported", outcome "unverified";
+# WORKLOADS.md, design/VALIDATION.md).
+schema = "lidarbench.workload/1"
+suite = "workloads-v7"
+id = "normalization"
+title = "Height normalization with a ground TIN"
+description = """
+Every point's Z is replaced by its height above a linear Delaunay TIN of the ground (2)
+and water (9) points of the tile and a 20 m buffer from neighbouring tiles. One LAZ per
+input tile holding the tile's points with every other attribute unchanged. The tools
+differ in which tile owns points exactly on a shared edge, in whether points outside the
+ground TIN are discarded or extrapolated, and in duplicate-XY handling, so heights are not
+compared between tools; the structural level rejects lost attributes, foreign points,
+non-finite heights and heights implying a ground outside the buffered ground range."""
+
+[population]
+input = "original"
+points = "all"
+z = "original"
+require_finite_xyz = true
+horizontal_units = "metre"
+
+[spatial]
+tiling = "per_input_file"
+buffer = 20.0
+
+[point_cloud]
+format = "laz"
+z = "height_above_ground"
+ground_classes = [2, 9]
+surface = "linear_tin"
+ownership = "closed_header_bounds"
+preserved_attributes = ["x", "y", "gps_time", "intensity", "return_number", "number_of_returns", "classification"]
+max_missing_fraction = 0.001  # Petawawa pilot tiles: lidR and lasR miss < 0.002%
+
+[reference]
+method = "none"               # no normalization reference validator: structural validation only
+
+[artifacts]
+ignored_sidecars = ["*.lax"]
+
+[equivalence]
+group = "workloads-v7/normalization"
+
+[implementations.lidR]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.laz"]
+outside_surface = "extrapolate"
+note = "lidR::normalize_height(las = ctg, algorithm = tin(), use_class = c(2L, 9L)); catalog buffer 20, chunk 0. tin() extrapolates points outside the ground hull from the nearest ground points (knnidw). The catalog owns points half-open on the header bounds: a point exactly on a tile's maximum header X or Y is written to a neighbour whose bounds include it, or to no tile (Petawawa d10 pilot block: <= 0.0023% of a tile's points)."
+
+[implementations.lasR]
+status = "diagnostic_only"
+equivalence = "non_comparable"
+artifacts = ["{stem}.laz"]
+outside_surface = "discard"
+reason = "lasR <= 0.21.3: zero-area ground triangles on collinear hull edges interpolate to NaN, which overwrites valid heights and is written to LAZ as Z near -2147483 (reported upstream; diagnostic until a fixed lasR release is pinned). The structural level rejects such outputs."
+note = "exec(pipeline = normalize() + write_las(fout), on = f, with = list(buffer = 20, chunk = 0, progress = FALSE)); normalize() = triangulate(keep_ground_and_water()) + transform_with(). Points outside the ground TIN are discarded; points exactly on a shared edge are written to both tiles."
+
+[implementations.lastools]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.laz"]
+outside_surface = "extrapolate"
+note = "lasheight64 -i {inputs} -odir {output} -olaz -cores {cores} -replace_z -buffered 20 (legacy call). Ground = class 2 only (lasheight default; the legacy call has no -classification 2 9; Petawawa has no class 9). Keeps every point of its tile and extrapolates heights outside the ground TIN (not linearly). On the Petawawa 2x2 block 250-510 interior points per tile differ from lidR and lasR by > 1 cm (up to ~1 m)."
+
+[implementations.pdal]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.laz"]
+outside_surface = "extrapolate"
+note = "readers.las (tile + neighbours, classes 2/9 only) -> filters.merge -> filters.crop (tile + 20 m) -> class 9 relabelled to 2 (original classification restored afterwards) -> filters.hag_delaunay (PDAL defaults, set explicitly: count = 10, allow_extrapolation = true) -> filters.ferry HeightAboveGround=>Z -> filters.crop (closed tile header bounds) -> writers.las (LAZ, input header layout). hag_delaunay triangulates only the 10 nearest ground points of each point, not one global TIN, so heights differ slightly more from the other tools: on the Petawawa 2x2 block 13-23% of points differ from lidR by > 1 cm (0.3-1.1% with count = 50 at ~3x the run time). Outside the ground hull a point gets the nearest ground Z. Not streamable: always --nostream."

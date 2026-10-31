@@ -134,8 +134,8 @@ def campaign(adapters, indexed_scene):
                 'include = ["*.las"]',
                 workloads,
                 '[[tools]]\nid = "lidr"\n[[tools]]\nid = "lasr"\n'
-                '[[tools]]\nid = "lidr-mirai"\nadapter = "lidr"\n'
-                'options = { future_backend = "mirai" }\n',
+                '[[tools]]\nid = "lidr-multisession"\nadapter = "lidr"\n'
+                'options = { future_backend = "multisession" }\n',
             ]
         ),
         encoding="utf-8",
@@ -172,7 +172,7 @@ def test_campaign_runs_both_tools_with_common_schema(campaign, adapters):
     assert summary.statuses == {"succeeded": 6}, summary.to_record()
     rows = collect_rows(summary.campaign_path)
     assert {(r["tool"], r["workload_id"]) for r in rows} == {
-        (t, w) for t in ("lidr", "lasr", "lidr-mirai") for w in WORKLOADS
+        (t, w) for t in ("lidr", "lasr", "lidr-multisession") for w in WORKLOADS
     }
     for row in rows:
         assert row["execution_status"] == "succeeded" and row["exit_code"] == 0
@@ -207,7 +207,7 @@ def test_bridge_records_versions_threads_and_inner_timing(campaign, adapters):
         assert record["catalog"]["buffer"] == 20 and record["catalog"]["crs"] == f"EPSG:{EPSG}"
         threads = record["threads"]
         if adapter.r_package == "lidR":
-            backend = "mirai" if result["entry"]["tool"] == "lidr-mirai" else "multisession"
+            backend = "multisession" if result["entry"]["tool"] == "lidr-multisession" else "mirai"
             assert threads["future_backend"] == backend
             assert threads["future_plan"] == PLANS[backend] and threads["future_workers"] == 2
             assert threads["lidr_threads"] == 1

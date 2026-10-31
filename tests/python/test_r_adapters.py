@@ -47,6 +47,7 @@ from lidarbench.execution.adapters.rscript import (
     RSCRIPT_ENV,
     ProbeError,
     RBridgeAdapter,
+    RWorkload,
     default_project_root,
     exit_code_meaning,
 )
@@ -166,19 +167,37 @@ def test_adapters_are_registered_entry_points():
 def test_workload_declarations(cls, model):
     adapter = cls()
     support = {s.workload_id: s for s in adapter.workload_support()}
-    runnable = ("pixel_metrics_1a", "generate_DSM1", "generate_DEM")
-    for workload in runnable:
-        assert support[workload].status is ImplementationStatus.RUNNABLE
+    pinned = ("pixel_metrics_1a", "generate_DSM1", "generate_DEM", "normalization")
+    for workload in pinned:
+        assert support[workload].status is cls.workloads[workload].status
+        assert support[workload].status.dispatchable
         assert support[workload].threading.model is model
-        assert adapter.support_for(workload, 64).status is ImplementationStatus.RUNNABLE
-    others = [s for w, s in support.items() if w not in runnable]
+        assert adapter.support_for(workload, 64).status is cls.workloads[workload].status
+    others = [s for w, s in support.items() if w not in pinned]
     assert others and all(s.reason and not s.status.dispatchable for s in others)
 
 
 def test_lasr_declares_legacy_blocked_workloads():
     support = {s.workload_id: s for s in LasRAdapter().workload_support()}
-    for workload in ("normalization", "complex_task1", "complex_task2", "generate_DSM2"):
+    for workload in ("complex_task1", "complex_task2", "generate_DSM2"):
         assert support[workload].status is ImplementationStatus.BLOCKED
+
+
+def test_normalization_writes_laz_and_lasr_is_diagnostic_only():
+    lidr = LidRAdapter.workloads["normalization"]
+    lasr = LasRAdapter.workloads["normalization"]
+    for workload in (lidr, lasr):
+        assert (workload.output_extension, workload.artifact_pattern) == ("laz", "{stem}.laz")
+        assert workload.kind is ArtifactKind.POINT_CLOUD
+    assert lidr.status is ImplementationStatus.RUNNABLE
+    assert lasr.status is ImplementationStatus.DIAGNOSTIC_ONLY
+    assert "NaN" in lasr.reason
+    support = LasRAdapter().support_for("normalization", 4)
+    assert support.status is ImplementationStatus.DIAGNOSTIC_ONLY and support.reason == lasr.reason
+    with pytest.raises(ValueError, match="needs a reason"):
+        RWorkload("x", "call", 20.0, status=ImplementationStatus.DIAGNOSTIC_ONLY)
+    with pytest.raises(ValueError, match="runnable or diagnostic_only"):
+        RWorkload("x", "call", 20.0, status=ImplementationStatus.BLOCKED, reason="r")
 
 
 @pytest.mark.parametrize("cls", ADAPTERS)
@@ -189,7 +208,7 @@ def test_pinned_definitions_match_contracts_and_legacy_calls(cls):
     for workload in cls.workloads.values():
         contract = suite.get(workload.workload_id)
         impl = contract.implementation(cls.contract_tool)
-        assert impl is not None and impl.status is ImplementationStatus.RUNNABLE
+        assert impl is not None and impl.status is workload.status
         # generate_DEM (workloads-v6) has no numerical reference: non_comparable.
         expected = "matched_definition" if contract.has_reference else "non_comparable"
         assert impl.equivalence == expected
@@ -222,13 +241,13 @@ def test_invalid_options_raise_type_error(options):
 
 
 def test_lidr_future_backend_option(layout, project):
-    default = LidRAdapter(project=str(project))
-    assert default.future_backend == "multisession"
-    assert default.required_packages == LidRAdapter.required_packages
-    mirai = _ready(LidRAdapter(project=str(project), future_backend="mirai"))
-    assert mirai.required_packages == (*LidRAdapter.required_packages, "future.mirai", "mirai")
+    default = _ready(LidRAdapter(project=str(project)))
+    assert default.future_backend == "mirai"
+    assert default.required_packages == (*LidRAdapter.required_packages, "future.mirai", "mirai")
+    multisession = LidRAdapter(project=str(project), future_backend="multisession")
+    assert multisession.required_packages == LidRAdapter.required_packages
     assert LidRAdapter.required_packages == ("lidR", "future", "data.table", "jsonlite")
-    for adapter, backend in ((_ready(default), "multisession"), (mirai, "mirai")):
+    for adapter, backend in ((default, "mirai"), (_ready(multisession), "multisession")):
         inv = _invocation(layout, threads=3, epsg=2959)
         plan = plan_invocation(adapter, inv, availability=_available(adapter))
         document = json.loads(plan.command.config_files[0].content)
@@ -268,7 +287,7 @@ def test_plan_builds_rscript_command(cls, layout, project):
     assert document["expected_call"] == cls.workloads["pixel_metrics_1a"].call
     assert document["buffer"] == 20.0 and document["threads"] == 3 and document["epsg"] == 2959
     assert document["inputs"] == [str(p) for p in inv.inputs]  # spaces/metacharacters intact
-    assert document["required_packages"] == list(cls.required_packages)
+    assert document["required_packages"] == list(adapter.required_packages)
     names = sorted(a.path.name for a in plan.expected_outputs)
     assert names == ["east;$tile.tif", "west tile.tif"]
     assert all(a.kind is ArtifactKind.RASTER and a.required for a in plan.expected_outputs)
@@ -449,13 +468,12 @@ def test_identify_records_versions_and_bridge_files(project, tmp_path):
     assert details["locked.lidR"] == FAKE_VERSION and details["renv"] is True
     assert re.fullmatch(r"[0-9a-f]{64}", details["renv_lockfile_sha256"])
     assert all(isinstance(v, str | int | float | bool | type(None)) for v in details.values())
-    assert details["future_backend"] == "multisession"
-    mirai = LidRAdapter(project=str(project), rscript=str(rscript), future_backend="mirai")
-    assert mirai.probe(PLATFORM).available
-    mirai_details = mirai.identify().details
-    assert mirai_details["future_backend"] == "mirai"
-    assert mirai_details["package.mirai"] == FAKE_VERSION
-    assert mirai_details["package.future.mirai"] == FAKE_VERSION
+    assert details["future_backend"] == "mirai"
+    assert details["package.mirai"] == FAKE_VERSION
+    assert details["package.future.mirai"] == FAKE_VERSION
+    legacy = LidRAdapter(project=str(project), rscript=str(rscript), future_backend="multisession")
+    assert legacy.probe(PLATFORM).available
+    assert legacy.identify().details["future_backend"] == "multisession"
 
 
 # -- interpretation --------------------------------------------------------------------
@@ -778,3 +796,11 @@ def test_campaign_run_uses_common_schema(tmp_path, project, monkeypatch):
     tools = json.loads((summary.campaign_path / "identity" / "tools.json").read_text("utf-8"))
     text = json.dumps(tools)
     assert "legacy_functions" in text and "renv_lockfile_sha256" in text
+
+
+def test_lidr_tin_fallback_covers_both_tin_workloads(layout, project):
+    adapter = LidRAdapter(project=str(project), accept_known_tin_fallback_warning=True)
+    for workload in ("generate_DEM", "normalization"):
+        assert adapter.known_warning(_invocation(layout, workload)) is TIN_FALLBACK
+    assert adapter.known_warning(_invocation(layout, "generate_DSM1")) is None
+    assert LidRAdapter(project=str(project)).known_warning(_invocation(layout)) is None
