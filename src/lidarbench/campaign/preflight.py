@@ -40,6 +40,7 @@ from lidarbench.campaign.identity import (
     hash_dataset,
     package_root,
     resolve_tool,
+    variant_check,
     workloads_component,
 )
 from lidarbench.campaign.schedule import campaign_schedule, schedule_record
@@ -409,8 +410,15 @@ class _Preflight:
     # -- datasets -------------------------------------------------------------------
 
     def check_datasets(self, full_hash: bool) -> None:
-        lasr = any(t.adapter == LASR_ADAPTER for t in self.config.tools)
-        for dataset in self.config.datasets:
+        cfg = self.config
+        lasr_reads = {
+            cfg.input_dataset(t.id, d.id)
+            for t in cfg.tools
+            if t.adapter == LASR_ADAPTER
+            for d in cfg.datasets
+            if d.variant_of is None
+        }
+        for dataset in cfg.datasets:
             prefix = f"dataset.{dataset.id}"
             details: dict[str, Any] = {"path": dataset.path}
             if not dataset.path.is_dir():
@@ -435,12 +443,46 @@ class _Preflight:
             )
             self.check_headers(prefix, files)
             self.check_protection(prefix, dataset, files)
-            if lasr:
+            if dataset.id in lasr_reads:
                 self.check_lax(prefix, files)
             if dataset.manifest is not None and not full_hash:
                 self.check_manifest(prefix, dataset)
             if full_hash:
                 self.check_hash(prefix, dataset)
+        for dataset in cfg.datasets:
+            if dataset.variant_of is not None:
+                self.check_variant(dataset)
+
+    def check_variant(self, dataset: DatasetConfig) -> None:
+        """A format variant must hold the same tiles as its base (headers only)."""
+        assert dataset.variant_of is not None
+        check_id = f"dataset.{dataset.id}.variant"
+        base, variant = self.inputs.get(dataset.variant_of), self.inputs.get(dataset.id)
+        if base is None or variant is None:
+            self.add(check_id, "skipped", "base or variant dataset is not usable")
+            return
+        try:
+            check = variant_check(base, variant)
+        except IdentityError as exc:
+            self.add(check_id, "error", f"not a variant of {dataset.variant_of!r}: {exc}")
+            return
+        if dataset.id in self.dataset_records:
+            self.dataset_records[dataset.id].update(
+                variant_of=dataset.variant_of, variant_check=check
+            )
+        readers = sorted(
+            t.id
+            for t in self.config.tools
+            if t.dataset_variants.get(dataset.variant_of) == dataset.id
+        )
+        self.add(
+            check_id,
+            "ok" if readers else "warn",
+            f"same {check['tiles']} tile(s) as {dataset.variant_of!r} (point counts and header "
+            "bounds); read by "
+            + (", ".join(readers) if readers else "no tool (set [[tools]] dataset_variants)"),
+            {**check, "variant_of": dataset.variant_of, "tools": readers},
+        )
 
     def check_headers(self, prefix: str, files: list[Path]) -> None:
         clouds = [f for f in files if f.suffix.lower() in POINT_CLOUD_SUFFIXES]
@@ -652,13 +694,16 @@ class _Preflight:
                     continue
                 rows: list[dict[str, Any]] = []
                 for dataset_id in cfg.workload_datasets(workload):
-                    inputs = self.inputs.get(dataset_id)
+                    input_id = cfg.input_dataset(tool.id, dataset_id)
+                    inputs = self.inputs.get(input_id)
                     for cpus in cfg.cpu_counts:
                         row: dict[str, Any] = {"dataset": dataset_id, "cpus": cpus}
+                        if input_id != dataset_id:
+                            row["input_dataset"] = input_id
                         if inputs is None:
                             row.update(status="not_planned", reason="dataset is not usable")
                         else:
-                            row.update(self._plan(resolved, workload, dataset_id, inputs, cpus))
+                            row.update(self._plan(resolved, workload, input_id, inputs, cpus))
                         rows.append(row)
                 self.add_plan_item(check_id, rows)
 

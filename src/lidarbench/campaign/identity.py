@@ -60,6 +60,7 @@ from lidarbench.config.campaign import (
 from lidarbench.core.canonical import digest, sha256_bytes, sha256_file
 from lidarbench.core.platform import PlatformInfo
 from lidarbench.core.store import iter_files
+from lidarbench.datasets.lasheader import LasHeaderError, read_las_header
 from lidarbench.datasets.manifest import DatasetManifest
 from lidarbench.execution.adapters.base import (
     Availability,
@@ -498,6 +499,82 @@ def manifest_problems(manifest: DatasetManifest, files: Iterable[Mapping[str, An
     return problems
 
 
+VARIANT_SUFFIXES = (".copc.laz", ".laz", ".las")
+
+
+def tile_key(path: Path) -> str:
+    """Name of a tile independent of its format (``a.copc.laz``, ``a.laz`` -> ``a``)."""
+    name = path.name
+    for suffix in VARIANT_SUFFIXES:
+        if name.lower().endswith(suffix):
+            return name[: -len(suffix)]
+    return path.stem
+
+
+VARIANT_KEYS = ("variant_of", "variant_check")
+"""Keys :func:`compute_identity` adds to the record of a format-variant dataset."""
+
+
+def content_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    """A dataset record without the variant keys (what :func:`hash_dataset` produces)."""
+    return {k: v for k, v in record.items() if k not in VARIANT_KEYS}
+
+
+def variant_check(base: Iterable[Path], variant: Iterable[Path]) -> dict[str, Any]:
+    """Check that a format variant holds the same tiles as its base dataset.
+
+    Tiles are matched by :func:`tile_key`; each pair must have the same point count
+    and the same header XYZ bounds (within half the coarser coordinate scale).
+    Point-by-point identity is not checked here (it is the producer's claim, for
+    example the COPC conversion manifest).
+
+    Raises:
+        IdentityError: Different tile sets, an unreadable header or a mismatch.
+    """
+
+    def keyed(inputs: Iterable[Path]) -> dict[str, Path]:
+        out: dict[str, Path] = {}
+        for path in inputs:
+            key = tile_key(path)
+            if key in out:
+                raise IdentityError(f"two inputs map to tile {key!r}: {out[key].name}, {path.name}")
+            out[key] = path
+        return out
+
+    a, b = keyed(base), keyed(variant)
+    if set(a) != set(b):
+        only_a, only_b = sorted(set(a) - set(b)), sorted(set(b) - set(a))
+        raise IdentityError(
+            f"variant tiles differ from the base: only in base {only_a[:5]}, only in "
+            f"variant {only_b[:5]}"
+        )
+    problems = []
+    for key in sorted(a):
+        try:
+            ha, hb = read_las_header(a[key]), read_las_header(b[key])
+        except (LasHeaderError, OSError) as exc:
+            raise IdentityError(f"tile {key!r}: unreadable LAS header: {exc}") from exc
+        if ha.point_count != hb.point_count:
+            problems.append(f"{key}: {ha.point_count} != {hb.point_count} points")
+            continue
+        for axis in range(3):
+            tol = max(ha.scale[axis], hb.scale[axis]) / 2 + 1e-9
+            if (
+                abs(ha.min_xyz[axis] - hb.min_xyz[axis]) > tol
+                or abs(ha.max_xyz[axis] - hb.max_xyz[axis]) > tol
+            ):
+                problems.append(f"{key}: header bounds differ ({'XYZ'[axis]})")
+                break
+    if problems:
+        raise IdentityError("variant differs from its base: " + "; ".join(problems[:10]))
+    return {
+        "tiles": len(a),
+        "matched_by": "file name without .copc.laz/.laz/.las",
+        "compared": ["point_count", "header_bounds_xyz"],
+        "point_identity": "not checked (claim of the variant's producer)",
+    }
+
+
 def resolve_tools(
     config: CampaignConfig, registry: AdapterRegistry, platform_info: PlatformInfo
 ) -> dict[str, ResolvedTool]:
@@ -515,6 +592,16 @@ def compute_identity(
     """Compute the full campaign identity (hashes every input file once)."""
     files = code_files()
     datasets = {d.id: hash_dataset(d, cancelled) for d in config.datasets}
+    for dataset in config.datasets:
+        if dataset.variant_of is None:
+            continue
+        try:
+            check = variant_check(datasets[dataset.variant_of].inputs, datasets[dataset.id].inputs)
+        except IdentityError as exc:
+            raise IdentityError(
+                f"dataset {dataset.id!r} (variant_of {dataset.variant_of!r}): {exc}"
+            ) from exc
+        datasets[dataset.id].record.update(variant_of=dataset.variant_of, variant_check=check)
     components: dict[str, Any] = {
         "code": code_component(files),
         "config": config.to_record(),

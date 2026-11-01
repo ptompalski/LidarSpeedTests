@@ -41,6 +41,7 @@ RESULT_COLUMNS: tuple[str, ...] = (
     "workload",
     "workload_id",
     "dataset",
+    "input_dataset",
     "cpus",
     "tool",
     "tool_adapter",
@@ -120,6 +121,8 @@ def attempt_row(info: AttemptInfo, store: CampaignStore) -> dict[str, Any]:
         repetition=entry.get("repetition"),
         workload=entry.get("workload"),
         dataset=entry.get("dataset"),
+        # The dataset the tool read: a declared format variant of ``dataset`` or itself.
+        input_dataset=started.get("input_dataset", entry.get("dataset")),
         cpus=entry.get("cpus"),
         tool=entry.get("tool"),
         tool_position=entry.get("tool_position"),

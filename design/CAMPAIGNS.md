@@ -58,6 +58,29 @@ manifest dataset is resolved through the machine's data roots, its inputs are
 the manifest's `input` files, and the campaign refuses bytes that differ from
 the manifest. See [DATASETS.md §8](DATASETS.md).
 
+**Format variants.** A dataset may declare `variant_of = "<base dataset id>"`: the
+same tiles in another file format or layout, for example verified COPC copies of
+LAZ+LAX tiles. A tool reads a variant instead of the base when its `[[tools]]` entry
+lists it, `dataset_variants = { <base id> = "<variant id>" }`; every other tool reads
+the base. Variants are never schedule units. Units, tool interleaving, `--dataset`
+filters, report groups and cross-tool comparisons all use the base dataset, so all
+tools of a unit are scheduled and compared together. Each attempt records the dataset
+it actually read (`input_dataset` in `started.json`, `result.json`, `results.csv` and
+the report's `summary`). Comparisons between tools that read different datasets are
+labelled in `accepted_differences` ("input datasets differ (declared format variants
+of …)"). Workloads may select only base datasets, and a variant cannot have variants.
+
+Every variant is hashed like any dataset. Identity creation and preflight
+(`dataset.<id>.variant`) also require it to hold the same tiles as its base: tiles are
+matched by file name without `.copc.laz`/`.laz`/`.las`, and every pair must have the
+same point count and header XYZ bounds (within half the coarser coordinate scale). The
+check is recorded as `variant_of`/`variant_check` in the identity's dataset record.
+Point-by-point identity is the variant producer's claim (for example
+`scripts/convert_to_copc.py`, which verifies the multiset of points); lidarbench does
+not re-check it. Preflight warns about a variant that no tool reads, and runs the lasR
+`.lax` check only on the datasets lasR reads. Configurations without variants freeze
+exactly as before (no new keys in `identity/config.json` or the dataset records).
+
 The schedule is the cross product of workloads × their datasets × CPU counts
 (a *unit*) × tools. A tool that cannot run a unit (unavailable, unsupported,
 blocked, thread count out of range) still gets schedule rows; they are recorded

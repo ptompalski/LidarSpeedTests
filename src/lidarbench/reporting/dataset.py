@@ -209,6 +209,7 @@ UNIT_COLUMNS = ("workload", "workload_id", "dataset", "cpus", "tool")
 
 SUMMARY_COLUMNS = (
     *UNIT_COLUMNS,
+    "input_dataset",
     "tool_adapter",
     "tool_version",
     "contract_tool",
@@ -359,6 +360,7 @@ TOOL_COLUMNS = (
 TOOL_DETAIL_COLUMNS = ("tool", "kind", "key", "value")
 DATASET_COLUMNS = (
     "dataset",
+    "variant_of",
     "input_count",
     "file_count",
     "total_bytes",
@@ -615,6 +617,12 @@ def _json(value: Any) -> str | None:
     return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
+def _input_datasets(rows: Iterable[Mapping[str, Any]]) -> str | None:
+    """The dataset(s) the rows' attempts read (``;``-joined if they differ)."""
+    found = sorted({str(r["input_dataset"]) for r in rows if r.get("input_dataset")})
+    return ";".join(found) or None
+
+
 def _weakest(tiers: Iterable[str]) -> str | None:
     present = set(tiers)
     for tier in TIERS:
@@ -825,7 +833,9 @@ class _Builder:
             section = (
                 "no_measurements"
                 if not included
-                else "validated" if evidence == "validated" else "descriptive"
+                else "validated"
+                if evidence == "validated"
+                else "descriptive"
             )
             skip_reasons = sorted({str(r["skip_reason"]) for r in selected if r["skip_reason"]})
             exclusions = Counter(r["exclusion"] for r in measured if r["exclusion"] != "included")
@@ -837,6 +847,7 @@ class _Builder:
                 dataset=dataset,
                 cpus=cpus,
                 tool=tool,
+                input_dataset=_input_datasets(unit_rows) or dataset,
                 tool_adapter=tool_record.get("adapter"),
                 tool_version=tool_record.get("version"),
                 contract_tool=self.contract_tool(tool),
@@ -1002,8 +1013,25 @@ class _Builder:
                     policy = self.comparability_policy
                     gate = comparison_gate(sa, sb, self.policy.mode, policy)
                     reasons = list(gate.reasons) + extra_a + extra_b
-                    ta, tb = describe(r["elapsed_s"] for r in ra), describe(
-                        r["elapsed_s"] for r in rb
+                    notes = list(gate.notes)
+                    inputs = {
+                        ua[3]: _input_datasets(ra) or dataset,
+                        ub[3]: _input_datasets(rb) or dataset,
+                    }
+                    for side, value in inputs.items():
+                        if ";" in value:
+                            reasons.append(f"{side}: attempts read different datasets ({value})")
+                    if len(set(inputs.values())) > 1:
+                        # Declared format variants: same tiles (identity checks point counts
+                        # and header bounds), different files and formats.
+                        notes.append(
+                            "input datasets differ (declared format variants of "
+                            f"{dataset!r}): "
+                            + ", ".join(f"{t} reads {d!r}" for t, d in inputs.items())
+                        )
+                    ta, tb = (
+                        describe(r["elapsed_s"] for r in ra),
+                        describe(r["elapsed_s"] for r in rb),
                     )
                     ratio_median = ratio_mean = None
                     if not reasons:
@@ -1032,7 +1060,7 @@ class _Builder:
                         comparability_policy=policy,
                         speedup_a_vs_b_median=ratio_median,
                         speedup_a_vs_b_mean=ratio_mean,
-                        accepted_differences="; ".join(gate.notes) or None,
+                        accepted_differences="; ".join(notes) or None,
                         reasons="; ".join(reasons) or None,
                     )
 
@@ -1274,6 +1302,7 @@ class _Builder:
             manifest = record.get("manifest") or {}
             table.add(
                 dataset=dataset_id,
+                variant_of=record.get("variant_of"),
                 input_count=len(record.get("inputs") or []),
                 file_count=record.get("file_count"),
                 total_bytes=record.get("total_bytes"),

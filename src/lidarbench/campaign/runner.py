@@ -51,6 +51,7 @@ from lidarbench.campaign.identity import (
     HashingCancelledError,
     ResolvedTool,
     compute_identity,
+    content_record,
     fingerprint_problems,
     git_provenance,
     hash_dataset,
@@ -215,7 +216,8 @@ class Selection:
         """Reject filters naming things that are not in the campaign."""
         known: dict[str, tuple[frozenset[Any], set[Any]]] = {
             "workload": (self.workloads, {w.name for w in config.workloads}),
-            "dataset": (self.datasets, {d.id for d in config.datasets}),
+            # Format variants are not schedule units: filter by their base dataset.
+            "dataset": (self.datasets, {d.id for d in config.datasets if d.variant_of is None}),
             "tool": (self.tools, {t.id for t in config.tools}),
             "cpus": (self.cpus, set(config.cpu_counts)),
             "phase": (self.phases, {"warmup", "measurement"}),
@@ -586,7 +588,7 @@ class CampaignRunner:
 
     def _preview(self, entry: ScheduleEntry, identity: CampaignIdentity) -> dict[str, Any]:
         cfg = self.config
-        dataset = cfg.dataset(entry.dataset)
+        dataset = cfg.dataset(cfg.input_dataset(entry.tool, entry.dataset))
         workload = cfg.workload(entry.workload)
         tool = identity.tools[entry.tool]
         fake = cfg.scratch.roots[dataset.scratch] / f"{SCRATCH_PREFIX}DRY-RUN"
@@ -791,7 +793,7 @@ class CampaignRunner:
             self.options.selection,
             self.options.retry_failed,
         )
-        guard = _Guard(store, identity)
+        guard = _Guard(store, identity, self.config.input_dataset)
         backend = (
             load_monitor_backend(cfg)
             if isinstance(self._monitor_choice, str)
@@ -858,7 +860,7 @@ class CampaignRunner:
             except Exception as exc:
                 problems.append(f"{dataset.id}: {exc}")
                 continue
-            if again.record != identity.datasets[dataset.id].record:
+            if again.record != content_record(identity.datasets[dataset.id].record):
                 problems.append(f"{dataset.id}: content differs from the frozen identity")
         self.store.log(
             "integrity_checked",
@@ -884,7 +886,8 @@ class CampaignRunner:
         cfg, store = self.config, self.store
         entry = decision.entry
         workload = cfg.workload(entry.workload)
-        dataset = cfg.dataset(entry.dataset)
+        # A tool may read a declared format variant of the entry's (base) dataset.
+        dataset = cfg.dataset(cfg.input_dataset(entry.tool, entry.dataset))
         tool = identity.tools[entry.tool]
         attempt_id = new_sortable_id()
         attempt_dir = store.new_attempt_dir(attempt_id)
@@ -903,6 +906,7 @@ class CampaignRunner:
             "run_id": run_id,
             "sequence": started_event["seq"],
             "entry": entry.to_record(),
+            "input_dataset": dataset.id,
             "reason": str(decision.action),
             "previous_attempts": list(decision.previous_attempts),
             "host": socket.gethostname(),
@@ -933,7 +937,9 @@ class CampaignRunner:
                     state.warnings.append("inputs changed during the attempt: " + "; ".join(after))
                     state.stop_reason = "inputs_changed"
                 state.outputs = self._inventory(scratch.output_dir)
-                self._validate(state, attempt_id, attempt_dir, entry, workload, tool, scratch)
+                self._validate(
+                    state, attempt_id, attempt_dir, entry, workload, tool, scratch, dataset.id
+                )
                 if not after:
                     late = guard.input_problems(dataset.id)
                     if late:
@@ -1050,6 +1056,7 @@ class CampaignRunner:
         workload: WorkloadConfig,
         tool: ResolvedTool,
         scratch: ScratchDir,
+        input_dataset: str,
     ) -> None:
         """Validate the outputs before scratch disposal (untimed; never fails the run)."""
         if self._validator is None or state.status != "succeeded":
@@ -1061,7 +1068,7 @@ class CampaignRunner:
                 attempt_dir=attempt_dir,
                 workload=workload,
                 tool=tool,
-                dataset_id=entry.dataset,
+                dataset_id=input_dataset,
                 output_dir=scratch.output_dir,
                 execution_status=state.status,
                 outputs=state.outputs,
@@ -1158,6 +1165,7 @@ class CampaignRunner:
             "run_id": run_id,
             "sequence": started["sequence"],
             "entry": started["entry"],
+            "input_dataset": started["input_dataset"],
             "attempt_reason": str(decision.action),
             "previous_attempts": list(decision.previous_attempts),
             "workload_id": workload.id,
@@ -1286,9 +1294,15 @@ def _invocation_record(
 class _Guard:
     """Cheap per-entry checks against the identity verified at the start of the run."""
 
-    def __init__(self, store: CampaignStore, identity: CampaignIdentity) -> None:
+    def __init__(
+        self,
+        store: CampaignStore,
+        identity: CampaignIdentity,
+        input_dataset: Callable[[str, str], str] = lambda tool, dataset: dataset,
+    ) -> None:
         self.store = store
         self.identity = identity
+        self.input_dataset = input_dataset
 
     def check(self, entry: ScheduleEntry) -> list[str]:
         problems = self.store.frozen_file_problems()
@@ -1302,7 +1316,7 @@ class _Guard:
         problems += [
             f"tool {entry.tool}: {p}" for p in fingerprint_problems(tool.executable_fingerprints)
         ]
-        problems += self.input_problems(entry.dataset)
+        problems += self.input_problems(self.input_dataset(entry.tool, entry.dataset))
         return problems
 
     def input_problems(self, dataset_id: str) -> list[str]:

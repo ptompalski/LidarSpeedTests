@@ -41,12 +41,22 @@ Example::
     # id = "pair"
     # manifest = "synthetic-tiles-v1/pair"
 
+    # A format variant (the same tiles, for example verified COPC copies) that only
+    # the tools listing it in ``dataset_variants`` read; schedule units, reports and
+    # comparisons stay on the base dataset (design/CAMPAIGNS.md).
+    # [[datasets]]
+    # id = "tiny-copc"
+    # path = "data/tiny-copc"
+    # include = ["*.copc.laz"]
+    # variant_of = "tiny"
+
     [[workloads]]
     id = "synthetic.hashchain"
     parameters = { iterations = 20000 }
 
     [[tools]]
     id = "synthetic"
+    # dataset_variants = { tiny = "tiny-copc" }
 """
 
 from __future__ import annotations
@@ -290,6 +300,8 @@ class DatasetConfig:
     include: tuple[str, ...] = ("*",)
     scratch: str = ""
     manifest: DatasetManifest | None = None
+    variant_of: str | None = None
+    """Base dataset this one is a format variant of (same tiles); ``None`` = a base."""
 
     def input_files(self) -> list[Path]:
         """Input files, sorted.
@@ -322,18 +334,21 @@ class DatasetConfig:
 
     def to_record(self) -> dict[str, Any]:
         """JSON-ready representation."""
+        variant = {"variant_of": self.variant_of} if self.variant_of is not None else {}
         if self.manifest is not None:
             return {
                 "id": self.id,
                 "path": os.fspath(self.path),
                 "manifest": manifest_reference(self.manifest),
                 "scratch": self.scratch,
+                **variant,
             }
         return {
             "id": self.id,
             "path": os.fspath(self.path),
             "include": list(self.include),
             "scratch": self.scratch,
+            **variant,
         }
 
 
@@ -377,10 +392,19 @@ class ToolConfig:
     id: str
     adapter: str
     options: Mapping[str, ParameterValue] = field(default_factory=dict)
+    dataset_variants: Mapping[str, str] = field(default_factory=dict)
+    """Base dataset id -> the variant dataset id this tool reads instead."""
 
     def to_record(self) -> dict[str, Any]:
         """JSON-ready representation."""
-        return {"id": self.id, "adapter": self.adapter, "options": dict(self.options)}
+        record: dict[str, Any] = {
+            "id": self.id,
+            "adapter": self.adapter,
+            "options": dict(self.options),
+        }
+        if self.dataset_variants:
+            record["dataset_variants"] = dict(sorted(self.dataset_variants.items()))
+        return record
 
 
 @dataclass(frozen=True)
@@ -426,8 +450,16 @@ class CampaignConfig:
         raise KeyError(tool_id)
 
     def workload_datasets(self, workload: WorkloadConfig) -> tuple[str, ...]:
-        """Datasets a workload runs on (all datasets if none were listed)."""
-        return workload.datasets or tuple(d.id for d in self.datasets)
+        """Base datasets a workload runs on (all base datasets if none were listed).
+
+        Format variants are never schedule units: a tool reads its variant in place of
+        the base dataset (:meth:`input_dataset`).
+        """
+        return workload.datasets or tuple(d.id for d in self.datasets if d.variant_of is None)
+
+    def input_dataset(self, tool_id: str, dataset_id: str) -> str:
+        """The dataset a tool actually reads for the (base) dataset ``dataset_id``."""
+        return self.tool(tool_id).dataset_variants.get(dataset_id, dataset_id)
 
     def timeout_for(self, workload: WorkloadConfig) -> float | None:
         """Per-attempt timeout: the workload's own or the campaign default."""
@@ -651,9 +683,10 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
         d = _table(
             raw,
             where,
-            {"id", "path", "include", "scratch", "manifest", "manifest_sha256"},
+            {"id", "path", "include", "scratch", "manifest", "manifest_sha256", "variant_of"},
             {"id"},
         )
+        variant_of = _name(d["variant_of"], f"{where}.variant_of") if "variant_of" in d else None
         label = d.get("scratch")
         if label is None:
             if len(roots) != 1:
@@ -668,7 +701,7 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
             if "include" in d:
                 raise ConfigError(f"{where}.include is not allowed with 'manifest'")
             manifest, path = _manifest_dataset(d, where, *data_context_for())
-            datasets.append(DatasetConfig(dataset_id, path, (), label, manifest))
+            datasets.append(DatasetConfig(dataset_id, path, (), label, manifest, variant_of))
             continue
         if "manifest_sha256" in d:
             raise ConfigError(f"{where}.manifest_sha256 requires 'manifest'")
@@ -685,10 +718,19 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
                 path=_path(d["path"], f"{where}.path", base_dir),
                 include=tuple(include),
                 scratch=label,
+                variant_of=variant_of,
             )
         )
     _unique([d.id for d in datasets], "datasets")
-    dataset_ids = {d.id for d in datasets}
+    bases = {d.id for d in datasets if d.variant_of is None}
+    for i, dataset in enumerate(datasets):
+        if dataset.variant_of is not None and dataset.variant_of not in bases:
+            raise ConfigError(
+                f"datasets[{i}].variant_of must name a base dataset (one without variant_of) "
+                f"from {sorted(bases)}, got {dataset.variant_of!r}"
+            )
+    variants = {d.id: d.variant_of for d in datasets if d.variant_of is not None}
+    dataset_ids = bases
 
     workloads = []
     for i, raw in enumerate(_list(top["workloads"], "workloads")):
@@ -718,13 +760,25 @@ def parse_config(data: Mapping[str, Any], base_dir: Path) -> CampaignConfig:
     tools = []
     for i, raw in enumerate(_list(top["tools"], "tools")):
         where = f"tools[{i}]"
-        t = _table(raw, where, {"id", "adapter", "options"}, {"id"})
+        t = _table(raw, where, {"id", "adapter", "options", "dataset_variants"}, {"id"})
         tool_id = _name(t["id"], f"{where}.id")
         adapter = t.get("adapter", tool_id)
         if not isinstance(adapter, str) or not ADAPTER_ID_PATTERN.match(adapter):
             raise ConfigError(f"{where}.adapter is not a valid adapter id: {adapter!r}")
+        chosen = _table(t.get("dataset_variants", {}), f"{where}.dataset_variants", None)
+        for base, variant in chosen.items():
+            if not isinstance(variant, str) or variants.get(variant) != base:
+                raise ConfigError(
+                    f"{where}.dataset_variants.{base} must name a dataset declared with "
+                    f"variant_of = {base!r}, got {variant!r}"
+                )
         tools.append(
-            ToolConfig(tool_id, adapter, _params(t.get("options", {}), f"{where}.options"))
+            ToolConfig(
+                tool_id,
+                adapter,
+                _params(t.get("options", {}), f"{where}.options"),
+                dict(sorted(chosen.items())),
+            )
         )
     _unique([t.id for t in tools], "tools")
 
