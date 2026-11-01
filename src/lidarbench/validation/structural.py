@@ -128,19 +128,27 @@ def check_raster(
     tile_bounds: tuple[float, float, float, float],
     expected_epsg: int | None,
     policies: Policies,
+    bands: tuple[str, ...] | None = None,
 ) -> RasterStructure:
-    """Run every structural check on one decoded raster."""
+    """Run every structural check on one decoded raster.
+
+    ``bands`` are the contract bands this artifact holds (default: all of them); a
+    per-band artifact (``Implementation.artifact_bands``) holds exactly one.
+    """
     product = contract.require_raster()
     r = product.resolution
     out = RasterStructure(expected_grid=expected_grid(tile_bounds, r))
+    expected_bands = product.bands if bands is None else bands
+    band_count = max(1, len(expected_bands))
     if raster.driver != "GTiff":
         out.errors.append(f"driver is {raster.driver}, not GeoTIFF")
-    if raster.count != product.band_count:
-        out.errors.append(f"{raster.count} band(s); the contract requires {product.band_count}")
-    elif product.bands and implementation.band_names == "required":
+    if raster.count != band_count:
+        held = "" if bands is None else f" for its band(s) {list(expected_bands)}"
+        out.errors.append(f"{raster.count} band(s); the contract requires {band_count}{held}")
+    elif expected_bands and implementation.band_names == "required":
         names = tuple(raster.descriptions)
-        if names != product.bands:
-            out.errors.append(f"band names {list(names)} != required {list(product.bands)}")
+        if names != expected_bands:
+            out.errors.append(f"band names {list(names)} != required {list(expected_bands)}")
     for i, dtype in enumerate(raster.dtypes):
         if np.dtype(dtype).kind not in "fiu":
             out.errors.append(f"band {i + 1} has non-numeric type {dtype}")

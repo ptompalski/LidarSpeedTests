@@ -109,9 +109,14 @@ class ValidationReport:
             )
         if v.numerical.status in (Status.PASSED, Status.ACCEPTED_EXCEPTION):
             convention = impl.cell_ownership if impl else "?"
+            what = (
+                f"per-cell metrics {list(c.require_raster().bands)}"
+                if c.reference_method == "cell_metrics"
+                else c.statistic
+            )
             established.append(
                 f"Every owned cell value and the NoData mask match an independent float64 "
-                f"{c.statistic} of original Z (all points, {c.buffer} m buffer from "
+                f"{what} of original Z (all points, {c.buffer} m buffer from "
                 f"neighbouring tiles) under the {convention} cell convention within "
                 f"|error| <= {c.tolerance.absolute} + {c.tolerance.relative}*|reference|."
             )
@@ -344,6 +349,9 @@ def validate_outputs(
             manifest.tiles[artifact.tile].bounds,
             request.expected_epsg,
             request.policies,
+            impl.bands_of(artifact.tile, artifact.name, contract.require_raster().bands)
+            if impl.artifact_bands
+            else None,
         )
         if (
             request.validation_mode == "performance-only" or not contract.has_reference

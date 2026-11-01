@@ -35,8 +35,10 @@ LAStools outputs are no longer `validation_failed` at the artifacts level),
 `workloads-v4` (frozen: `workloads-v3` plus the LAStools declaration below),
 `workloads-v5` (frozen: `workloads-v4` plus the lidR extent rule below),
 `workloads-v6` (frozen: the `workloads-v5` definitions unchanged plus the
-structural-only `generate_DEM` below) and `workloads-v7` (the default: the
-`workloads-v6` definitions unchanged plus the point-cloud `normalization` below).
+structural-only `generate_DEM` below), `workloads-v7` (frozen: the
+`workloads-v6` definitions unchanged plus the point-cloud `normalization` below) and
+`workloads-v8` (the default: the `workloads-v7` definitions unchanged plus the
+structural-only `generate_DSM2` and the nine-band `pixel_metrics_2` below).
 An implementation may declare `value_precision` (an output quantum, for example
 0.01 m when a tool rounds its values); the absolute tolerance is then widened by
 half of it, the reports say so, and the value is part of the contract digest. A new tool entry
@@ -81,6 +83,52 @@ trimming:
 On the Petawawa pilot pair lidR, lasR and PDAL agreed within ~1 mm on almost
 every shared cell while ~0.3 % of LAStools cells differed by more than 1 cm (up
 to 3 m); this is informal evidence, not a validation claim.
+
+**First-return TIN (`generate_DSM2`, workloads-v8).** Structural-only like
+`generate_DEM`, with `population.points = "first_returns"` (return number 1, single
+returns included; only `reference.method = "none"` contracts may filter the
+population). lidR `dsmtin(max_edge = 0, highest = FALSE)` (`cell_centre_sample`,
+`extent = "header_bounds_snapped_nearest"`), lasR `dsm(1, tin = TRUE)`
+(`cell_centre_sample`; not repeatable near first returns sharing XY with different
+Z, ~0.025 % of cells, user-accepted with the structural pass criterion; WORKLOADS.md),
+LAStools `blast2dem64 -keep_return 1 -kill 100000` (`undeclared`), PDAL
+`filters.range ReturnNumber[1:1]` → TIN without an edge limit (`cell_centre_sample`).
+All four ran and passed the structural level on Petawawa 2×2 blocks.
+
+**Per-cell metrics (`pixel_metrics_2`, workloads-v8).** `reference.method =
+"cell_metrics"` (no `statistic`) computes one float64 reference per raster band;
+every band name must be a metric of `workloads.contract.METRICS` (`z_max`, `z_mean`,
+`z_sd` with denominator n − 1 and NoData for n < 2, `z_above2` = count(Z > 2)/n, and
+the type-7 percentiles `z_p5` … `z_p95`). Validator `cell-metrics/1`
+(`CellMetricsValidator`) shares the cell-statistic machinery: the same population,
+conventions, extent rules, sentinel checks and tolerance per band. An artifact passes
+only if every band does, and failure reasons name the band. The report holds one
+comparison record per band (`comparison.bands`).
+
+An implementation may write one single-band raster per contract band:
+`artifact_bands` lists, per entry of `artifacts`, the band that file holds (every
+band exactly once; LAStools `_max`, `_avg`, `_std`, `_dns`, `_p05` … `_p95`). Each
+such file must then have exactly one band.
+
+Two implementation declarations (raster `cell_metrics` contracts only, part of the
+digest) change the reference for that implementation and are reproduced exactly,
+without widening the tolerance:
+
+- `single_point_sd = "zero"`: `z_sd` is 0, not NoData, in single-point cells
+  (LAStools `-std`). The reports count those cells.
+- `percentile_rank = "float32"`: the type-7 rank is computed in binary32 as
+  `(p / 100.0f) * (float)(n - 1) + 1` and its fraction weights the two neighbouring
+  values (lasR Metrics.cpp). Across a large gap between sorted values this moves a
+  percentile by ~1e-4 m.
+
+References are cached per convention *and* declared variant (`reference_key`).
+
+| Tool | Implementation | Declared |
+|---|---|---|
+| lidR | `pixel_metrics(~metrics_multiple(Z), res = 20, start = c(0, 0))` | matched, `lidr_buffered_clamp`, `extent = "header_bounds_snapped_nearest"` |
+| lasR | `rasterize(20, c('z_max', …, 'z_p95'))` | matched, `right_down`, `percentile_rank = "float32"` |
+| LAStools | `lascanopy64 -max -avg -std -dns -p 5 25 50 75 95 -cover_cutoff 2 -fractions` | matched, `pdal_binmode_floor`, `value_precision = 0.01`, `single_point_sd = "zero"`, `artifact_bands` |
+| PDAL | — | `unsupported` (`writers.gdal` has no percentiles) |
 
 **Point-cloud contracts (`normalization`, workloads-v7).** A contract declares
 exactly one product table: `[raster]` or `[point_cloud]`. A point-cloud product

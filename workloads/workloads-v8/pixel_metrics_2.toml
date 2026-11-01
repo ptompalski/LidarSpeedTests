@@ -1,0 +1,93 @@
+# Workload contract (lidarbench.workload/1). See pixel_metrics_1a.toml for the layout.
+# New in workloads-v8. Nine per-cell metrics of original Z at 20 m with an independent
+# float64 reference for every band (reference.method = "cell_metrics"; WORKLOADS.md,
+# design/VALIDATION.md). PDAL is unsupported: writers.gdal has no percentile or
+# above-threshold statistic.
+schema = "lidarbench.workload/1"
+suite = "workloads-v8"
+id = "pixel_metrics_2"
+title = "Nine elevation metrics at 20 m"
+description = """
+Per owned 20 m cell, from the original (unnormalized) Z of all points: maximum, mean,
+sample standard deviation (n - 1), fraction of points with Z > 2, and the 5th, 25th, 50th,
+75th and 95th percentiles (R type 7). No return, class, height or duplicate filter. Empty
+cells are NoData in every band, never zero; z_sd is NoData in cells with one point. On
+original elevations z_above2 is an elevation statistic, not canopy cover."""
+
+[population]
+input = "original"
+points = "all"
+z = "original"
+require_finite_xyz = true
+horizontal_units = "metre"
+
+[spatial]
+tiling = "per_input_file"
+buffer = 20.0
+
+[raster]
+resolution = 20.0
+origin = [0.0, 0.0]
+extent = "header_bounds_snapped_outward"
+cell_ownership = "right_down"
+empty_cells = "nodata"
+bands = ["z_max", "z_mean", "z_sd", "z_above2", "z_p5", "z_p25", "z_p50", "z_p75", "z_p95"]
+nodata_source = "file_metadata"
+forbidden_values = [-9999.0, -1000000.0]   # tool NoData sentinels; a colliding value fails
+
+[reference]
+method = "cell_metrics"       # one float64 reference per band (METRICS in workloads/contract.py)
+
+[tolerance]
+absolute = 2e-6               # |actual - reference| <= absolute + relative * |reference|
+relative = 2e-7
+
+[artifacts]
+ignored_sidecars = ["*.aux.xml", "*.vrt", "*.tfw"]
+
+[equivalence]
+group = "workloads-v8/pixel_metrics_2"
+
+[implementations.lidR]
+status = "runnable"
+equivalence = "matched_definition"
+artifacts = ["{stem}.tif"]
+cell_ownership = "lidr_buffered_clamp"
+extent = "header_bounds_snapped_nearest"   # terra::crop(snap = "near") as in pixel_metrics_1a
+band_names = "required"
+note = "lidR::pixel_metrics(~metrics_multiple(Z), res = 20, start = c(0, 0)); catalog buffer 20, chunk 0. metrics_multiple() is defined in R/1_functions.R (stats::sd, mean(Z > 2), stats::quantile type 7)."
+
+[implementations.lasR]
+status = "runnable"
+equivalence = "matched_definition"
+artifacts = ["{stem}.tif"]
+cell_ownership = "right_down"
+band_names = "required"
+percentile_rank = "float32"           # lasR Metrics.cpp: the type-7 rank is computed in binary32
+note = "lasR rasterize(20, c('z_max', 'z_mean', 'z_sd', 'z_above2', 'z_p5', 'z_p25', 'z_p50', 'z_p75', 'z_p95')); buffer 20, chunk 0. Float32 output. Percentiles use the type-7 rank (p / 100.0f) * (float)(n - 1) + 1 in binary32 (user-accepted declaration): on the Petawawa 2x2 block about one z_p95 cell per block differs from the exact rank by ~1e-4 m (declared, reproduced exactly by the reference)."
+
+[implementations.lastools]
+status = "runnable"
+equivalence = "matched_definition"   # same population, grid and metrics ...
+artifacts = [
+    "{stem}_max.tif",
+    "{stem}_avg.tif",
+    "{stem}_std.tif",
+    "{stem}_dns.tif",
+    "{stem}_p05.tif",
+    "{stem}_p25.tif",
+    "{stem}_p50.tif",
+    "{stem}_p75.tif",
+    "{stem}_p95.tif",
+]
+artifact_bands = ["z_max", "z_mean", "z_sd", "z_above2", "z_p5", "z_p25", "z_p50", "z_p75", "z_p95"]
+cell_ownership = "pdal_binmode_floor" # ... upward-Y floor edges (the pixel_metrics_1a rule)
+band_names = "not_required"
+value_precision = 0.01                # lascanopy rounds averages and standard deviations to cm
+single_point_sd = "zero"              # lascanopy -std writes 0, not NoData, for one point
+note = "lascanopy64 -max -avg -std -dns -p 5 25 50 75 95 -cover_cutoff 2 -fractions -step 20 -height_cutoff below every header Min Z; nine single-band rasters per tile. On a Petawawa 2x2 block (LAStools 261023, densities 1 and 10) every band and NoData mask matched the reference: -std is the n - 1 standard deviation, -p are type-7 percentiles, -dns -fractions the all-return fraction above 2; -avg and -std are rounded to centimetres. -std is 0 in single-point cells (1-4 cells per block; user-accepted declaration single_point_sd = zero)."
+
+[implementations.pdal]
+status = "unsupported"
+equivalence = "non_comparable"
+reason = "writers.gdal offers min, max, mean, idw, count and stdev only: no percentiles and no above-threshold fraction"

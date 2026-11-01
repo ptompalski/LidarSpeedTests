@@ -5,8 +5,9 @@ native names; missing and partial installations), version detection and
 normalization (licensing text is never recorded), command construction (argv
 only, legacy arguments, paths with spaces and shell metacharacters, the height
 cutoff port), conservative interpretation (exit statuses, ``ERROR``/``WARNING``
-lines, unlicensed notices, incomplete outputs), the opt-in cutoff-warning
-exception, and a campaign run through the generic execution engine.
+lines, unlicensed notices, incomplete outputs), the opt-in cutoff-warning and
+duplicate-XY warning exceptions, and a campaign run through the generic
+execution engine.
 """
 
 from __future__ import annotations
@@ -39,6 +40,8 @@ from lidarbench.execution.adapters.lastools import (
     CUTOFF_EXCEPTION,
     CUTOFF_POLICY,
     CUTOFF_SUGGESTION,
+    DUPLICATE_XY_EXCEPTION,
+    DUPLICATE_XY_POLICY,
     LICENCE_FLAG,
     WORKLOADS,
     LastoolsAdapter,
@@ -50,6 +53,7 @@ from lidarbench.execution.adapters.lastools import (
     height_cutoff,
     inputs_height_cutoff,
     known_cutoff_warnings,
+    known_duplicate_xy_warnings,
     locate_bin_dir,
     parse_version,
     query_version,
@@ -138,7 +142,8 @@ def test_workload_declarations():
         "complex_task1",
         "complex_task2",
     }
-    for workload in ("normalization", "pixel_metrics_1a", "generate_DSM1", "generate_DEM"):
+    assert set(WORKLOADS) == set(supports) - {"tree_detection", "complex_task1", "complex_task2"}
+    for workload in WORKLOADS:
         support = supports[workload]
         assert support.status is ImplementationStatus.RUNNABLE
         assert support.threading.model is ThreadingModel.NATIVE_THREADS
@@ -162,11 +167,20 @@ def _legacy_lastools_call(task_id: str) -> tuple[str, tuple[str, ...]]:
 @pytest.mark.parametrize("workload_id", sorted(WORKLOADS))
 def test_pinned_templates_match_legacy_calls_and_contracts(workload_id):
     workload = WORKLOADS[workload_id]
-    assert (workload.command, workload.legacy_args()) == _legacy_lastools_call(workload_id)
     contract = load_suite(default_suite_dir()).get(workload_id)
     impl = contract.implementation("lastools")
     assert impl is not None and impl.status is ImplementationStatus.RUNNABLE
-    assert list(impl.artifacts) == [workload.artifact_pattern]
+    assert impl.artifacts == workload.artifact_patterns
+    if not workload.legacy_call:
+        # workloads-v8 generate_DSM2: no legacy LAStools call; the contract note pins it.
+        assert workload_id == "generate_DSM2" and not workload.legacy_deviation
+        assert f"{workload.command} -keep_return 1" in impl.note
+        assert "no legacy LAStools call" in impl.note
+        with pytest.raises(ValueError, match="no legacy LAStools call"):
+            workload.legacy_args()
+        assert impl.equivalence == "non_comparable" and impl.cell_ownership == "undeclared"
+        return
+    assert (workload.command, workload.legacy_args()) == _legacy_lastools_call(workload_id)
     assert workload.buffer == 20.0 and "-buffered" in workload.args
     assert workload.args[workload.args.index("-buffered") + 1] == "20"
     for flag, legacy, pinned in workload.legacy_deviation:
@@ -178,7 +192,8 @@ def test_pinned_templates_match_legacy_calls_and_contracts(workload_id):
     assert not workload.legacy_deviation
     assert impl.equivalence == "matched_definition"
     assert impl.cell_ownership == "pdal_binmode_floor"
-    assert impl.value_precision == (0.01 if workload_id == "pixel_metrics_1a" else None)
+    rounded = ("pixel_metrics_1a", "pixel_metrics_2")
+    assert impl.value_precision == (0.01 if workload_id in rounded else None)
 
 
 def test_dem_drops_no_long_triangles():
@@ -193,9 +208,47 @@ def test_dem_drops_no_long_triangles():
             "x",
             "blast2dem64",
             ("-kill", "5"),
-            "{stem}.tif",
+            ("{stem}.tif",),
             legacy_deviation=(("-kill", "100", "100000"),),
         )
+
+
+def test_dsm2_is_the_dem_call_with_first_returns():
+    """workloads-v8: blast2dem64 with -keep_return 1 instead of -keep_class 2 9."""
+    dem, dsm2 = WORKLOADS["generate_DEM"], WORKLOADS["generate_DSM2"]
+    assert dsm2.command == dem.command == "blast2dem64"
+    keep = dem.args.index("-keep_class")
+    assert dsm2.args == (*dem.args[:keep], "-keep_return", "1", *dem.args[keep + 3 :])
+    assert "-first_only" not in dsm2.args  # it would also keep return number 0
+    assert dsm2.duplicate_xy_warning_applies and not dem.duplicate_xy_warning_applies
+    assert not dsm2.cutoff_warning_applies and not dsm2.legacy_call
+    with pytest.raises(ValueError, match="needs a legacy call"):
+        LastoolsWorkload(
+            "x",
+            "blast2dem64",
+            ("-kill", "5"),
+            ("{stem}.tif",),
+            legacy_deviation=(("-kill", "100", "5"),),
+            legacy_call=False,
+        )
+
+
+@pytest.mark.parametrize("patterns", [(), ("{stem}.tif", "{stem}.tif"), ("out.tif",), "{stem}.tif"])
+def test_artifact_patterns_must_be_distinct_stem_names(patterns):
+    with pytest.raises(ValueError, match="artifact_patterns"):
+        LastoolsWorkload("x", "lasgrid64", (), patterns)
+
+
+def test_nine_metrics_are_the_legacy_lascanopy_call_in_contract_band_order():
+    workload = WORKLOADS["pixel_metrics_2"]
+    contract = load_suite(default_suite_dir()).get("pixel_metrics_2")
+    impl = contract.implementation("lastools")
+    assert workload.artifact_patterns == impl.artifacts
+    assert impl.artifact_bands == contract.raster.bands
+    assert workload.cutoff_warning_applies and not workload.duplicate_xy_warning_applies
+    assert workload.args[workload.args.index("-p") : workload.args.index("-p") + 6] == (
+        "-p", "5", "25", "50", "75", "95",
+    )  # fmt: skip
 
 
 def test_unknown_placeholder_is_rejected():
@@ -515,6 +568,43 @@ def test_dsm_command_reproduces_the_legacy_call(bin_dir, layout):
 
 
 @needs_posix
+def test_metrics_and_dsm2_commands_and_outputs(bin_dir, layout):
+    adapter = _adapter(bin_dir, accept_known_duplicate_xy_warning=True)
+    inputs = tuple(os.fspath(p) for p in sorted(layout["inputs"].glob("*.las")))
+    plan = plan_invocation(
+        adapter, _invocation(layout, "pixel_metrics_2", threads=2), adapter.probe(PLATFORM)
+    )
+    assert plan.ready, plan.reason
+    assert plan.command.argv == (
+        os.fspath(bin_dir / "lascanopy64"), "-i", *inputs, "-step", "20", "-max", "-avg",
+        "-std", "-dns", "-p", "5", "25", "50", "75", "95", "-odir", os.fspath(layout["out"]),
+        "-otif", "-cores", "2", "-buffered", "20", "-use_orig_bb", "-height_cutoff", "-13.25",
+        "-cover_cutoff", "2", "-fractions", "-grid_ll", "0", "0", "-no_data", "-9999",
+        "-no_kml", LICENCE_FLAG,
+    )  # fmt: skip
+    names = [a.path.name for a in plan.expected_outputs]
+    assert len(names) == 18 and names[:2] == ["east;$tile_max.tif", "east;$tile_avg.tif"]
+    assert names[-1] == "west tile_p95.tif"
+    assert plan.command.accepted_exceptions == ()  # duplicate-XY: generate_DSM2 only
+
+    plan = plan_invocation(
+        adapter, _invocation(layout, "generate_DSM2", threads=1), adapter.probe(PLATFORM)
+    )
+    assert plan.ready, plan.reason
+    assert plan.command.argv == (
+        os.fspath(bin_dir / "blast2dem64"), "-i", *inputs, "-otif", "-odir",
+        os.fspath(layout["out"]), "-step", "1", "-cores", "1", "-keep_return", "1",
+        "-elevation", "-kill", "100000", "-buffered", "20", "-use_orig_bb", "-no_data",
+        "-9999", "-no_kml", LICENCE_FLAG,
+    )  # fmt: skip
+    assert plan.command.accepted_exceptions == (DUPLICATE_XY_EXCEPTION,)
+    assert plan.metadata["accepted_exception_policy"] == DUPLICATE_XY_POLICY
+    assert plan.metadata["legacy_call"] is False and plan.metadata["legacy_deviation"] is None
+    assert [a.path.name for a in plan.expected_outputs] == ["east;$tile.tif", "west tile.tif"]
+    assert adapter.identify().details["accept_known_duplicate_xy_warning"] is True
+
+
+@needs_posix
 def test_normalization_command_reproduces_the_legacy_call(bin_dir, layout):
     adapter = _adapter(bin_dir)
     plan = plan_invocation(
@@ -544,7 +634,10 @@ def test_normalization_is_the_legacy_lasheight_call():
     assert "-replace_z" in workload.args and "-olaz" in workload.args
     for flag in ("-classification", "-drop_below", "-drop_above", "-skip_files", "-use_orig_bb"):
         assert flag not in workload.args
-    assert (workload.artifact_pattern, workload.kind) == ("{stem}.laz", ArtifactKind.POINT_CLOUD)
+    assert (workload.artifact_patterns, workload.kind) == (
+        ("{stem}.laz",),
+        ArtifactKind.POINT_CLOUD,
+    )
 
 
 @needs_posix
@@ -721,6 +814,67 @@ def test_known_cutoff_warning_rules(argv_cutoff, warning_cutoff, low, path, know
     assert bool(known_cutoff_warnings(lines, argv, [supplied], "-13.25")) is known
 
 
+def _duplicates(merged: int = 8, total: int = 10) -> str:
+    return (
+        f"read {total} points. produced TIN with {merged} vertices and 9 triangles\n"
+        f"WARNING: set nverts {total} but v_count {merged}\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("argv0", "line", "known"),
+    [
+        ("/x/blast2dem64", "WARNING: set nverts 10 but v_count 8", True),
+        ("C:/x/blast2dem.exe", "  WARNING: set nverts 10 but v_count 9  ", True),
+        ("/x/blast2dem64", "WARNING: set nverts 10 but v_count 10", False),  # nothing merged
+        ("/x/blast2dem64", "WARNING: set nverts 10 but v_count 11", False),
+        ("/x/blast2dem64", "WARNING: set nverts 10 but v_count 0", False),
+        ("/x/blast2dem64", "WARNING: set nverts 10 but v_count 8 (more)", False),
+        ("/x/las2dem64", "WARNING: set nverts 10 but v_count 8", False),
+        ("/x/lascanopy64", "WARNING: set nverts 10 but v_count 8", False),
+    ],
+)
+def test_known_duplicate_xy_warning_rules(argv0, line, known):
+    lines = ["read 10 points.", line, "done"]
+    assert known_duplicate_xy_warnings(lines, [argv0, "-i", "a.las"]) == ([1] if known else [])
+    assert known_duplicate_xy_warnings(lines, []) == []
+
+
+@needs_posix
+def test_interpret_accepts_duplicate_xy_warnings_only_for_dsm2_when_opted_in(
+    bin_dir, layout, tmp_path
+):
+    stderr = _duplicates() * 2
+    for workload, opted, accepted in (
+        ("generate_DSM2", True, True),
+        ("generate_DSM2", False, False),
+        ("generate_DEM", True, False),
+    ):
+        adapter = _adapter(bin_dir, accept_known_duplicate_xy_warning=opted)
+        inv = _invocation(layout, workload)
+        _outputs(layout, workload)
+        argv = adapter.build_command(inv).argv
+        result = adapter.interpret(inv, _process(tmp_path, argv, 0, stderr=stderr))
+        if accepted:
+            assert result.failure_reason is None
+            assert result.accepted_exception.name == DUPLICATE_XY_EXCEPTION
+            assert result.accepted_exception.policy == DUPLICATE_XY_POLICY
+            assert result.accepted_exception.exit_code == 0
+            assert (
+                result.accepted_exception.evidence == ("WARNING: set nverts 10 but v_count 8",) * 2
+            )
+            assert result.details["accepted_duplicate_xy_warnings"] == 2
+        else:
+            assert result.accepted_exception is None
+            assert "accept_known_duplicate_xy_warning=" in result.failure_reason
+    # Only the cutoff warning is documented with a raw exit status of 1.
+    adapter = _adapter(bin_dir, accept_known_duplicate_xy_warning=True)
+    inv = _invocation(layout, "generate_DSM2")
+    argv = adapter.build_command(inv).argv
+    refused = adapter.interpret(inv, _process(tmp_path, argv, 1, stderr=stderr))
+    assert refused.accepted_exception is None and "status 1" in refused.failure_reason
+
+
 def test_known_cutoff_warning_requires_lascanopy_and_one_cutoff():
     supplied = "/d/t.las"
     lines = _warning(supplied, "-1").splitlines()
@@ -799,6 +953,33 @@ def test_opted_in_cutoff_warning_is_a_named_exception(
 @pytest.mark.platform
 @needs_posix
 @pytest.mark.parametrize(
+    ("mode", "opt_in", "accepted"),
+    [("duplicates", True, True), ("duplicates", False, False), ("duplicatesbad", True, False)],
+)
+def test_opted_in_duplicate_xy_warning_is_a_named_exception(
+    bin_dir, layout, monkeypatch, mode, opt_in, accepted
+):
+    execution, record = _execute(
+        bin_dir,
+        layout,
+        monkeypatch,
+        mode,
+        "generate_DSM2",
+        accept_known_duplicate_xy_warning=opt_in,
+    )
+    if not accepted:
+        assert str(execution.execution_status) == "failed"
+        assert "warnings outside the accepted exceptions" in record["failure_reason"]
+        return
+    assert str(execution.execution_status) == "succeeded", record["failure_reason"]
+    exception = record["accepted_exception"]
+    assert exception["name"] == DUPLICATE_XY_EXCEPTION and exception["exit_code"] == 0
+    assert exception["policy"] == DUPLICATE_XY_POLICY and len(exception["evidence"]) == 2
+
+
+@pytest.mark.platform
+@needs_posix
+@pytest.mark.parametrize(
     ("mode", "opt_in", "workload", "phase", "text"),
     [
         ("cutoff1", False, "pixel_metrics_1a", "process", "exited with status 1"),
@@ -814,6 +995,8 @@ def test_opted_in_cutoff_warning_is_a_named_exception(
         ("empty", False, "normalization", "interpretation", "empty west tile.laz"),
         ("error0", False, "normalization", "interpretation", "error despite exit status 0"),
         ("empty", True, "pixel_metrics_1a", "interpretation", "empty west tile_avg.tif"),
+        ("empty", True, "pixel_metrics_2", "interpretation", "empty west tile_p95.tif"),
+        ("child", True, "pixel_metrics_2", "interpretation", "missing west tile_max.tif"),
         ("unlicensed", False, "generate_DSM1", "interpretation", "unlicensed run"),
         ("crash", False, "generate_DSM1", "process", "exited with status 139"),
     ],

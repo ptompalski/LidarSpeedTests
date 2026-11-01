@@ -42,6 +42,104 @@ def cell_statistic(z: FloatArray, cells: IntArray, grid: GridSpec, statistic: st
     return out.reshape(grid.shape)
 
 
+PERCENTILES = {"z_p5": 0.05, "z_p25": 0.25, "z_p50": 0.50, "z_p75": 0.75, "z_p95": 0.95}
+ABOVE_THRESHOLD = {"z_above2": 2.0}
+
+
+def _float32_rank_weights(n: Any, p: float) -> tuple[Any, Any, Any]:
+    """lasR's type-7 rank in binary32: ``(p / 100.0f) * (float)(n - 1) + 1``.
+
+    Returns 0-based lower and upper indices and the binary32 fraction (Metrics.cpp).
+    """
+    f32 = np.float32
+    with np.errstate(over="ignore"):
+        rank = (f32(round(p * 100)) / f32(100.0)) * (n - 1).astype(f32) + f32(1.0)
+    rank = rank.astype(f32)
+    floor = np.floor(rank)
+    lo = floor.astype(np.int64) - 1
+    hi = np.minimum(np.ceil(rank).astype(np.int64) - 1, n - 1)
+    return lo, hi, (rank - floor).astype(np.float64)
+
+
+def cell_metrics(
+    z: FloatArray,
+    cells: IntArray,
+    grid: GridSpec,
+    bands: tuple[str, ...],
+    *,
+    single_point_sd: str | None = None,
+    percentile_rank: str | None = None,
+) -> dict[str, FloatArray]:
+    """Per-cell metrics (``workloads.contract.METRICS``) of ``z`` over owned points.
+
+    Returns one north-up ``(rows, cols)`` float64 array per band; empty cells are
+    NaN in every band and ``z_sd`` is NaN in cells with fewer than two points.
+    Percentiles are R type 7 on the sorted values of each cell.
+
+    Declared implementation conventions (``workloads.contract``):
+    ``single_point_sd = "zero"`` makes ``z_sd`` 0 in single-point cells, and
+    ``percentile_rank = "float32"`` computes the type-7 rank in binary32 as lasR does.
+    """
+    owned = cells >= 0
+    index = cells[owned]
+    values = z[owned]
+    counts = np.bincount(index, minlength=grid.size)
+    occupied = counts > 0
+    safe = np.maximum(counts, 1)
+    out: dict[str, FloatArray] = {}
+
+    def finish(name: str, data: FloatArray, valid: Any = occupied) -> None:
+        result = np.full(grid.size, np.nan, dtype=np.float64)
+        result[valid] = data[valid]
+        out[name] = result.reshape(grid.shape)
+
+    mean = np.bincount(index, weights=values, minlength=grid.size) / safe
+    for band in bands:
+        if band == "z_max":
+            peak = np.full(grid.size, -np.inf, dtype=np.float64)
+            np.maximum.at(peak, index, values)
+            finish(band, peak)
+        elif band == "z_mean":
+            finish(band, mean)
+        elif band == "z_sd":
+            # Two-pass (centred) sum of squares: no cancellation for large elevations.
+            squares = np.bincount(index, weights=(values - mean[index]) ** 2, minlength=grid.size)
+            sd = np.sqrt(squares / np.maximum(counts - 1, 1))
+            if single_point_sd == "zero":
+                finish(band, np.where(counts == 1, 0.0, sd))
+            elif single_point_sd is None:
+                finish(band, sd, counts > 1)
+            else:
+                raise ValueError(f"unsupported single_point_sd {single_point_sd!r}")
+        elif band in ABOVE_THRESHOLD:
+            above = (values > ABOVE_THRESHOLD[band]).astype(np.float64)
+            finish(band, np.bincount(index, weights=above, minlength=grid.size) / safe)
+        elif band not in PERCENTILES:
+            raise ValueError(f"unsupported metric {band!r}")
+    wanted = [b for b in bands if b in PERCENTILES]
+    if wanted:
+        order = np.lexsort((values, index))
+        ordered = values[order]
+        starts = np.concatenate(([0], np.cumsum(counts)[:-1]))
+        n = counts[occupied]
+        first = starts[occupied]
+        for band in wanted:
+            if percentile_rank == "float32":
+                lo, hi, weight = _float32_rank_weights(n, PERCENTILES[band])
+            elif percentile_rank is None:
+                h = (n - 1) * PERCENTILES[band]
+                lo = np.floor(h).astype(np.int64)
+                hi = np.minimum(lo + 1, n - 1)
+                weight = h - lo
+            else:
+                raise ValueError(f"unsupported percentile_rank {percentile_rank!r}")
+            low = ordered[first + lo]
+            data = np.zeros(grid.size, dtype=np.float64)
+            data[occupied] = low + (ordered[first + hi] - low) * weight
+            finish(band, data)
+    return {band: out[band] for band in bands}
+
+
 @dataclass
 class Comparison:
     """Cell-by-cell comparison of an output band with its reference."""

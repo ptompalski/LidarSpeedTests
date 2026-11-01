@@ -27,12 +27,14 @@ def _data(name: str = "pixel_metrics_1a") -> dict:
 
 def test_suite_defines_the_cell_statistic_workloads_the_dem_and_normalization():
     suite = load_suite(SUITE)
-    assert suite.name == "workloads-v7"
+    assert suite.name == "workloads-v8"
     assert sorted(suite.contracts) == [
         "generate_DEM",
         "generate_DSM1",
+        "generate_DSM2",
         "normalization",
         "pixel_metrics_1a",
+        "pixel_metrics_2",
     ]
     mean = suite.get("pixel_metrics_1a")
     assert (mean.statistic, mean.raster.resolution, mean.raster.bands) == (
@@ -44,6 +46,7 @@ def test_suite_defines_the_cell_statistic_workloads_the_dem_and_normalization():
     assert (dsm.statistic, dsm.raster.resolution, dsm.raster.bands) == ("max", 1.0, ())
     for contract in (c for c in suite.contracts.values() if c.has_reference):
         assert contract.buffer == 20.0
+        assert contract.reference_method in ("cell_statistic", "cell_metrics")
         assert contract.raster.cell_ownership == "right_down"
         assert contract.tolerance.absolute == 2e-6 and contract.tolerance.relative == 2e-7
         assert contract.implementation("lidR").cell_ownership == "lidr_buffered_clamp"
@@ -51,7 +54,8 @@ def test_suite_defines_the_cell_statistic_workloads_the_dem_and_normalization():
         lastools = contract.implementation("lastools")
         assert lastools.equivalence == "matched_definition"
         assert lastools.cell_ownership == "pdal_binmode_floor"
-        assert contract.implementation("pdal").cell_ownership == "pdal_binmode_floor"
+        if contract.reference_method == "cell_statistic":
+            assert contract.implementation("pdal").cell_ownership == "pdal_binmode_floor"
 
 
 def test_frozen_v1_suite_has_no_pdal():
@@ -338,6 +342,62 @@ def test_v7_keeps_the_v6_definitions_and_adds_point_cloud_normalization():
     assert "cell_ownership" not in norm.record["implementations"]["lidR"]
     with pytest.raises(ContractError, match="no raster product"):
         norm.require_raster()
+
+
+def test_v8_keeps_the_v7_definitions_and_adds_dsm2_and_nine_metrics():
+    v7 = load_suite(default_suite_dir("workloads-v7"))
+    v8 = load_suite(default_suite_dir("workloads-v8"))
+    assert set(v8.contracts) - set(v7.contracts) == {"generate_DSM2", "pixel_metrics_2"}
+    for workload_id, old in v7.contracts.items():
+        new, old_record = dict(v8.get(workload_id).record), dict(old.record)
+        for record in (new, old_record):
+            record.pop("suite")
+            record.pop("equivalence")
+        assert new == old_record
+    for contract in v8.contracts.values():
+        assert contract.equivalence_group == f"workloads-v8/{contract.id}"
+
+    dsm2 = v8.get("generate_DSM2")
+    assert dsm2.population.points == "first_returns" and dsm2.population.classes == ()
+    assert not dsm2.has_reference and dsm2.raster.resolution == 1.0
+    assert dsm2.raster.cell_ownership == "cell_centre_sample"
+    assert {t: i.status for t, i in dsm2.implementations.items()} == dict.fromkeys(
+        ("lidR", "lasR", "lastools", "pdal"), ImplementationStatus.RUNNABLE
+    )
+    assert {dsm2.declared_comparability(t) for t in dsm2.implementations} == {"non_comparable"}
+    assert "not repeatable" in dsm2.implementation("lasR").note.lower()
+    assert dsm2.implementation("lastools").cell_ownership == "undeclared"
+
+    metrics = v8.get("pixel_metrics_2")
+    assert metrics.reference_method == "cell_metrics" and metrics.raster.resolution == 20.0
+    assert metrics.raster.bands == (
+        "z_max",
+        "z_mean",
+        "z_sd",
+        "z_above2",
+        "z_p5",
+        "z_p25",
+        "z_p50",
+        "z_p75",
+        "z_p95",
+    )
+    assert metrics.implementation("pdal").status is ImplementationStatus.UNSUPPORTED
+    lastools = metrics.implementation("lastools")
+    assert lastools.expected_names("t")[:3] == ("t_max.tif", "t_avg.tif", "t_std.tif")
+    assert lastools.artifact_bands == metrics.raster.bands
+
+
+def test_first_returns_population_is_structural_only():
+    data = _data("generate_DSM2")
+    assert parse_contract(data).record["population"]["points"] == "first_returns"
+    bad = copy.deepcopy(data)
+    bad["population"]["classes"] = [2]
+    with pytest.raises(ContractError, match="only allowed when"):
+        parse_contract(bad)
+    mean = _data()
+    mean["population"]["points"] = "first_returns"
+    with pytest.raises(ContractError, match=r'require population\.points = "all"'):
+        parse_contract(mean)
 
 
 @pytest.mark.parametrize(

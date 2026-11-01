@@ -31,10 +31,6 @@ _NAN_HEIGHTS = (
     "which is written to LAZ as Z near -2147483 (reported upstream); diagnostic until a "
     "fixed lasR release is pinned"
 )
-_UNSTABLE_TIN = (
-    "pinned lasR 0.21.2 first-return TIN is non-repeatable near duplicate XY with different Z "
-    "(blocked in the legacy harness)"
-)
 
 
 class LasRAdapter(RBridgeAdapter):
@@ -61,6 +57,25 @@ class LasRAdapter(RBridgeAdapter):
                 "generate_DSM1",
                 call=(
                     "exec(pipeline = dsm(1, tin = FALSE, ofile = fout), on = f, "
+                    "with = list(buffer = 20, chunk = 0, progress = FALSE))"
+                ),
+                buffer=20.0,
+            ),
+            "pixel_metrics_2": RWorkload(
+                "pixel_metrics_2",
+                call=(
+                    "exec(pipeline = rasterize(20, c('z_max','z_mean','z_sd','z_above2','z_p5',"
+                    "'z_p25','z_p50','z_p75','z_p95'), ofile = fout), on = f, "
+                    "with = list(buffer = 20, chunk = 0, progress = FALSE))"
+                ),
+                buffer=20.0,
+            ),
+            # workloads-v8: the legacy candidate (blocked there). Not repeatable near
+            # first returns sharing XY with different Z; structural validation only.
+            "generate_DSM2": RWorkload(
+                "generate_DSM2",
+                call=(
+                    "exec(pipeline = dsm(1, tin = TRUE, ofile = fout), on = f, "
                     "with = list(buffer = 20, chunk = 0, progress = FALSE))"
                 ),
                 buffer=20.0,
@@ -93,9 +108,8 @@ class LasRAdapter(RBridgeAdapter):
             WorkloadSupport(w, ImplementationStatus.BLOCKED, reason=_TIN_NORMALIZATION)
             for w in ("complex_task1", "complex_task2")
         ),
-        WorkloadSupport("generate_DSM2", ImplementationStatus.BLOCKED, reason=_UNSTABLE_TIN),
         *(
             WorkloadSupport(w, ImplementationStatus.UNSUPPORTED, reason=_NOT_PORTED)
-            for w in ("pixel_metrics_2", "tree_detection")
+            for w in ("tree_detection",)
         ),
     )

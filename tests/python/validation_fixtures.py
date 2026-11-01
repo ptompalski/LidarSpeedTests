@@ -57,11 +57,13 @@ def write_las(
     header_count: int | None = None,
     header_bounds: tuple[float, float, float, float, float, float] | None = None,
     classification: Sequence[int] | None = None,
+    returns: Sequence[tuple[int, int]] | None = None,
 ) -> Cloud:
     """Write an uncompressed LAS 1.2 point-format-0 file; return decoded coordinates.
 
     ``header_count``/``header_bounds`` override the header to build corrupt files.
     ``header_bounds`` is ``(min_x, min_y, min_z, max_x, max_y, max_z)``.
+    ``returns`` are ``(return number, number of returns)`` per point (default 1 of 1).
     """
     if not (len(x) == len(y) == len(z)):
         raise ValueError("x, y and z must have equal length")
@@ -72,6 +74,7 @@ def write_las(
     dy = tuple(q * scale[1] + offset[1] for q in qy)
     dz = tuple(q * scale[2] + offset[2] for q in qz)
     classes = list(classification) if classification is not None else [1] * len(x)
+    echoes = list(returns) if returns is not None else [(1, 1)] * len(x)
     if dx:
         bounds = (min(dx), min(dy), min(dz), max(dx), max(dy), max(dz))
     else:
@@ -93,8 +96,11 @@ def write_las(
     struct.pack_into("<6d", header, 179, max_x, min_x, max_y, min_y, max_z, min_z)
     records = bytearray()
     for i in range(len(qx)):
-        # X, Y, Z, intensity, return byte (return 1 of 1), class, angle, user, source.
-        records += struct.pack("<iiiHBBbBH", qx[i], qy[i], qz[i], 0, 0b001001, classes[i], 0, 0, 1)
+        # X, Y, Z, intensity, return byte (bits 0-2 return, 3-5 returns), class, angle,
+        # user data, point source.
+        number, total = echoes[i]
+        flags = (number & 0b111) | ((total & 0b111) << 3)
+        records += struct.pack("<iiiHBBbBH", qx[i], qy[i], qz[i], 0, flags, classes[i], 0, 0, 1)
     path.write_bytes(bytes(header) + bytes(records))
     return Cloud(path, dx, dy, dz)
 

@@ -26,11 +26,16 @@ details and varies between identical queries (LASTOOLS_260914_ISSUE_REPORT.md).
 Interpretation is conservative (WORKLOADS.md): nonzero exit statuses,
 ``ERROR``/``FATAL`` lines, unlicensed-run notices, unrecognized ``WARNING``
 lines and missing or empty primary outputs all fail the attempt, because a
-multi-core LAStools parent can exit 0 after a child failed. The documented
-``lascanopy`` all-values-above-the-height-cutoff warning is the single
-exception. It is disabled by default (tool option
-``accept_known_cutoff_warning``), applies only to the basic mean metric, and is
-recorded as a named exception with the raw exit status.
+multi-core LAStools parent can exit 0 after a child failed. Two documented
+warnings are the only exceptions, each disabled by default and recorded as a
+named exception with the raw exit status:
+
+* the ``lascanopy`` all-values-above-the-height-cutoff warning (tool option
+  ``accept_known_cutoff_warning``; the pixel metrics only);
+* the ``blast2dem`` triangulator's ``WARNING: set nverts N but v_count M`` with
+  ``M < N``: points with identical XY were merged into one TIN vertex (tool option
+  ``accept_known_duplicate_xy_warning``; ``generate_DSM2`` only, where first
+  returns often share XY).
 """
 
 from __future__ import annotations
@@ -81,6 +86,8 @@ CUTOFF_EXCEPTION = "lascanopy_all_values_above_height_cutoff"
 CUTOFF_POLICY = "lastools.accept_known_cutoff_warning"
 CUTOFF_COMMANDS = frozenset({"lascanopy", "lascanopy64"})
 CUTOFF_SUGGESTION = "maybe run 'lasheight -i raw.las -replace_z -o normalized.laz'."
+DUPLICATE_XY_EXCEPTION = "blast2dem_duplicate_xy_points_merged"
+DUPLICATE_XY_POLICY = "lastools.accept_known_duplicate_xy_warning"
 
 PLACEHOLDERS = ("{inputs}", "{output}", "{cores}", "{height_cutoff}")
 SUPPORTED_PARAMETERS = ("epsg",)
@@ -104,42 +111,64 @@ _CUTOFF_HEADER_RE = re.compile(
     rf"^WARNING: z coordinates range from ({_NUMBER}) to ({_NUMBER}) for '(.*)'$"
 )
 _CUTOFF_CONTINUATION_RE = re.compile(rf"^all values are above the height_cutoff ({_NUMBER})\.$")
+_DUPLICATE_XY_RE = re.compile(r"^WARNING: set nverts ([0-9]+) but v_count ([0-9]+)$")
 _LINE_LIMIT = 20
 
 
 @dataclass(frozen=True)
 class LastoolsWorkload:
-    """A workload implemented by one pinned legacy LAStools call.
+    """A workload implemented by one pinned LAStools call.
 
     ``args`` is the legacy ``task_call_lastools`` argument template of
-    ``R/0_setup.R`` with the closed placeholder set :data:`PLACEHOLDERS`.
-    ``{inputs}`` expands to one argument per input file. A changed template
-    needs a new workload version.
+    ``R/0_setup.R`` (or, with ``legacy_call = False``, a template that has no
+    legacy counterpart and is defined by the workload contract) with the closed
+    placeholder set :data:`PLACEHOLDERS`. ``{inputs}`` expands to one argument
+    per input file. A changed template needs a new workload version.
+    ``artifact_patterns`` are the primary outputs per input tile, in contract order.
     """
 
     workload_id: str
     command: str
     args: tuple[str, ...]
-    artifact_pattern: str
+    artifact_patterns: tuple[str, ...]
     buffer: float = 20.0
     kind: ArtifactKind = ArtifactKind.RASTER
     cutoff_warning_applies: bool = False
     """Whether the documented lascanopy cutoff-warning exception may apply."""
+    duplicate_xy_warning_applies: bool = False
+    """Whether the blast2dem duplicate-XY (``set nverts N but v_count M``) exception may apply."""
     legacy_deviation: tuple[tuple[str, str, str], ...] = ()
     """``(flag, legacy value, pinned value)`` of a deliberately changed legacy template
     (declared in the contract note); empty = exactly the legacy call."""
+    legacy_call: bool = True
+    """Whether ``R/0_setup.R`` defines a LAStools call for this workload."""
 
     def __post_init__(self) -> None:
         for arg in self.args:
             if ("{" in arg or "}" in arg) and arg not in PLACEHOLDERS:
                 raise ValueError(f"unknown LAStools argument placeholder: {arg}")
+        if (
+            not isinstance(self.artifact_patterns, tuple)
+            or not self.artifact_patterns
+            or len(set(self.artifact_patterns)) != len(self.artifact_patterns)
+            or not all("{stem}" in p for p in self.artifact_patterns)
+        ):
+            raise ValueError("artifact_patterns must be distinct names containing {stem}")
+        if self.legacy_deviation and not self.legacy_call:
+            raise ValueError("legacy_deviation needs a legacy call")
         for flag, _, pinned in self.legacy_deviation:
             i = self.args.index(flag)
             if self.args[i + 1] != pinned:
                 raise ValueError(f"legacy_deviation {flag} {pinned} is not in the arguments")
 
     def legacy_args(self) -> tuple[str, ...]:
-        """The ``R/0_setup.R`` template this call derives from."""
+        """The ``R/0_setup.R`` template this call derives from.
+
+        Raises:
+            ValueError: The workload has no legacy LAStools call.
+        """
+        if not self.legacy_call:
+            raise ValueError(f"{self.workload_id} has no legacy LAStools call")
         args = list(self.args)
         for flag, legacy, _ in self.legacy_deviation:
             args[args.index(flag) + 1] = legacy
@@ -164,7 +193,7 @@ WORKLOADS: Mapping[str, LastoolsWorkload] = MappingProxyType(
                 "-i", "{inputs}", "-odir", "{output}", "-olaz", "-cores", "{cores}",
                 "-replace_z", "-buffered", "20",
             ),
-            artifact_pattern="{stem}.laz",
+            artifact_patterns=("{stem}.laz",),
             kind=ArtifactKind.POINT_CLOUD,
         ),
         "pixel_metrics_1a": LastoolsWorkload(
@@ -176,7 +205,24 @@ WORKLOADS: Mapping[str, LastoolsWorkload] = MappingProxyType(
                 "-height_cutoff", "{height_cutoff}", "-grid_ll", "0", "0",
                 "-no_data", "-9999", "-no_kml",
             ),
-            artifact_pattern="{stem}_avg.tif",
+            artifact_patterns=("{stem}_avg.tif",),
+            cutoff_warning_applies=True,
+        ),
+        # Nine single-band rasters per tile, in the contract's band order (workloads-v8).
+        "pixel_metrics_2": LastoolsWorkload(
+            "pixel_metrics_2",
+            command="lascanopy64",
+            args=(
+                "-i", "{inputs}", "-step", "20", "-max", "-avg", "-std", "-dns", "-p",
+                "5", "25", "50", "75", "95", "-odir", "{output}", "-otif",
+                "-cores", "{cores}", "-buffered", "20", "-use_orig_bb",
+                "-height_cutoff", "{height_cutoff}", "-cover_cutoff", "2", "-fractions",
+                "-grid_ll", "0", "0", "-no_data", "-9999", "-no_kml",
+            ),
+            artifact_patterns=tuple(
+                f"{{stem}}_{m}.tif"
+                for m in ("max", "avg", "std", "dns", "p05", "p25", "p50", "p75", "p95")
+            ),
             cutoff_warning_applies=True,
         ),
         "generate_DSM1": LastoolsWorkload(
@@ -187,7 +233,7 @@ WORKLOADS: Mapping[str, LastoolsWorkload] = MappingProxyType(
                 "-cores", "{cores}", "-buffered", "20", "-use_orig_bb",
                 "-no_data", "-9999", "-no_kml",
             ),
-            artifact_pattern="{stem}.tif",
+            artifact_patterns=("{stem}.tif",),
         ),
         "generate_DEM": LastoolsWorkload(
             "generate_DEM",
@@ -198,27 +244,32 @@ WORKLOADS: Mapping[str, LastoolsWorkload] = MappingProxyType(
                 "-kill", "100000", "-buffered", "20", "-use_orig_bb",
                 "-no_data", "-9999", "-no_kml",
             ),
-            artifact_pattern="{stem}.tif",
+            artifact_patterns=("{stem}.tif",),
             # workloads-v6: no long-triangle trimming (like lasR) instead of the default 100 m.
             legacy_deviation=(("-kill", "100", "100000"),),
+        ),
+        # workloads-v8: the generate_DEM call with -keep_return 1 instead of -keep_class 2 9
+        # (no legacy LAStools call exists for this workload). -first_only would also keep
+        # points with the invalid return number 0.
+        "generate_DSM2": LastoolsWorkload(
+            "generate_DSM2",
+            command="blast2dem64",
+            args=(
+                "-i", "{inputs}", "-otif", "-odir", "{output}", "-step", "1",
+                "-cores", "{cores}", "-keep_return", "1", "-elevation",
+                "-kill", "100000", "-buffered", "20", "-use_orig_bb",
+                "-no_data", "-9999", "-no_kml",
+            ),
+            artifact_patterns=("{stem}.tif",),
+            duplicate_xy_warning_applies=True,
+            legacy_call=False,
         ),
     }
 )
 # fmt: on
 """Pinned calls; a parity test compares them with ``R/0_setup.R`` (after ``legacy_deviation``)."""
 
-_NOT_PORTED = "not yet available through the Python orchestrator: no workloads-v1 contract"
 OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
-    *(
-        WorkloadSupport(w, ImplementationStatus.UNSUPPORTED, reason=f"{_NOT_PORTED} ({cmd})")
-        for w, cmd in (("pixel_metrics_2", "lascanopy64"),)
-    ),
-    WorkloadSupport(
-        "generate_DSM2",
-        ImplementationStatus.UNSUPPORTED,
-        reason="no LAStools implementation in the legacy harness (needs a lasthin + las2dem "
-        "combination)",
-    ),
     WorkloadSupport(
         "tree_detection",
         ImplementationStatus.UNSUPPORTED,
@@ -465,6 +516,26 @@ def known_cutoff_warnings(
     return known
 
 
+def known_duplicate_xy_warnings(lines: Sequence[str], argv: Sequence[str]) -> list[int]:
+    """Indices of ``blast2dem`` ``WARNING: set nverts N but v_count M`` lines with 0 < M < N.
+
+    The triangulator merged ``N - M`` points whose XY duplicates another point's.
+    Only ``blast2dem``/``blast2dem64`` output is recognized; policy and workload
+    checks are the caller's.
+    """
+    name = Path(argv[0]).name.lower() if argv else ""
+    if name.endswith(".exe"):
+        name = name[:-4]
+    if name not in ("blast2dem", "blast2dem64"):
+        return []
+    known = []
+    for i, line in enumerate(lines):
+        match = _DUPLICATE_XY_RE.match(line.strip())
+        if match is not None and 0 < int(match.group(2)) < int(match.group(1)):
+            known.append(i)
+    return known
+
+
 def _quote(lines: Iterable[str]) -> str:
     """Lines for a failure reason; licensing messages are withheld (see the logs)."""
     shown = [
@@ -495,6 +566,10 @@ class LastoolsAdapter(ToolAdapter):
       all-values-above-the-height-cutoff warning (raw status 0 or 1) as the
       named exception ``lascanopy_all_values_above_height_cutoff``. Default
       ``False``; part of the campaign identity.
+    * ``accept_known_duplicate_xy_warning``: accept blast2dem's duplicate-XY
+      warning (raw status 0) for ``generate_DSM2`` as the named exception
+      ``blast2dem_duplicate_xy_points_merged``. Default ``False``; part of the
+      campaign identity.
     * ``expected_version``: refuse every other build (for example ``"260914"``).
     * ``version_timeout_s``: timeout of each ``-version`` query (default 30).
     """
@@ -511,10 +586,12 @@ class LastoolsAdapter(ToolAdapter):
         accept_known_cutoff_warning: bool = False,
         expected_version: str = "",
         version_timeout_s: float = 30.0,
+        accept_known_duplicate_xy_warning: bool = False,
     ) -> None:
         for name, value, kind in (
             ("bin_dir", bin_dir, str),
             ("accept_known_cutoff_warning", accept_known_cutoff_warning, bool),
+            ("accept_known_duplicate_xy_warning", accept_known_duplicate_xy_warning, bool),
             ("expected_version", expected_version, str),
         ):
             if not isinstance(value, kind):
@@ -531,6 +608,7 @@ class LastoolsAdapter(ToolAdapter):
             raise TypeError("option 'version_timeout_s' must be > 0")
         self.bin_dir_option = bin_dir
         self.accept_known_cutoff_warning = accept_known_cutoff_warning
+        self.accept_known_duplicate_xy_warning = accept_known_duplicate_xy_warning
         self.expected_version = expected_version
         self.version_timeout_s = float(version_timeout_s)
         self.windows = sys.platform == "win32"
@@ -644,6 +722,7 @@ class LastoolsAdapter(ToolAdapter):
             "discovery": self._source,
             "platform_binaries": "windows-exe" if self.windows else "native",
             "accept_known_cutoff_warning": self.accept_known_cutoff_warning,
+            "accept_known_duplicate_xy_warning": self.accept_known_duplicate_xy_warning,
             "expected_version": self.expected_version or None,
             "licence_flag": LICENCE_FLAG,
             "version_source": "-version banner; build number only, licensing text not recorded",
@@ -781,10 +860,13 @@ class LastoolsAdapter(ToolAdapter):
                     f"command line of {length} characters exceeds the Windows limit of "
                     f"{WINDOWS_COMMAND_LINE_LIMIT}; the pinned call passes every tile with -i"
                 )
-        accepted = (
-            (CUTOFF_EXCEPTION,)
-            if self.accept_known_cutoff_warning and workload.cutoff_warning_applies
-            else ()
+        accepted = tuple(
+            name
+            for name, applies in (
+                (CUTOFF_EXCEPTION, self._cutoff_applies(workload)),
+                (DUPLICATE_XY_EXCEPTION, self._duplicate_xy_applies(workload)),
+            )
+            if applies
         )
         return CommandSpec(
             argv=argv,
@@ -793,25 +875,39 @@ class LastoolsAdapter(ToolAdapter):
             accepted_exceptions=accepted,
         )
 
+    def _cutoff_applies(self, workload: LastoolsWorkload) -> bool:
+        return self.accept_known_cutoff_warning and workload.cutoff_warning_applies
+
+    def _duplicate_xy_applies(self, workload: LastoolsWorkload) -> bool:
+        return self.accept_known_duplicate_xy_warning and workload.duplicate_xy_warning_applies
+
+    def _policy(self, workload: LastoolsWorkload) -> str | None:
+        if self._cutoff_applies(workload):
+            return CUTOFF_POLICY
+        if self._duplicate_xy_applies(workload):
+            return DUPLICATE_XY_POLICY
+        return None
+
     def expected_outputs(self, invocation: Invocation) -> list[ArtifactSpec]:
-        """One raster or point cloud per input tile, named as the workload contract declares."""
+        """The rasters or point cloud of each input tile, named as the workload contract declares."""
         workload = self._workload(invocation)
         return [
             ArtifactSpec(
-                invocation.output_dir / workload.artifact_pattern.replace("{stem}", path.stem),
+                invocation.output_dir / pattern.replace("{stem}", path.stem),
                 workload.kind,
                 required=True,
                 description=f"{workload.workload_id} output of {workload.command} for {path.name}",
             )
             for path in invocation.inputs
+            for pattern in workload.artifact_patterns
         ]
 
     def invocation_metadata(self, invocation: Invocation) -> Mapping[str, MetadataValue]:
         """Command, template digest, cutoff, CRS assignment and exception policy."""
         workload = self._workload(invocation)
-        applies = self.accept_known_cutoff_warning and workload.cutoff_warning_applies
         return {
             "lastools_command": workload.command,
+            "legacy_call": workload.legacy_call,
             "legacy_template_sha256": workload.template_sha256,
             "legacy_deviation": (
                 "; ".join(f"{f} {old} -> {new}" for f, old, new in workload.legacy_deviation)
@@ -824,7 +920,7 @@ class LastoolsAdapter(ToolAdapter):
             "epsg": self._epsg(invocation),
             "licence_flag": LICENCE_FLAG,
             "threading_model": str(ThreadingModel.NATIVE_THREADS),
-            "accepted_exception_policy": CUTOFF_POLICY if applies else None,
+            "accepted_exception_policy": self._policy(workload),
             "inner_timing_boundary": None,
         }
 
@@ -841,17 +937,24 @@ class LastoolsAdapter(ToolAdapter):
         unlicensed = [line for line in lines if _UNLICENSED_RE.search(line)]
 
         known: list[int] = []
+        duplicates: list[int] = []
         cutoff = None
-        applies = self.accept_known_cutoff_warning and workload.cutoff_warning_applies
-        if applies:
+        if self._cutoff_applies(workload):
             cutoff = self.height_cutoff(invocation)
             known = known_cutoff_warnings(
                 lines, process.argv, (os.fspath(p) for p in invocation.inputs), cutoff
             )
-        unknown = [lines[i] for i in warning_indices if i not in known]
-        evidence = tuple(line.strip() for i in known for line in lines[i : i + 3])
+        if self._duplicate_xy_applies(workload):
+            duplicates = known_duplicate_xy_warnings(lines, process.argv)
+        unknown = [lines[i] for i in warning_indices if i not in known and i not in duplicates]
+        evidence = tuple(line.strip() for i in known for line in lines[i : i + 3]) + tuple(
+            lines[i].strip() for i in duplicates
+        )
         exit_code = process.exit_code
-        known_status = exit_code == 1 and not errors and bool(warning_indices) and not unknown
+        # Only the cutoff warning is documented with a raw exit status of 1.
+        known_status = (
+            exit_code == 1 and not errors and bool(known) and bool(warning_indices) and not unknown
+        )
         outputs = self._output_problems(invocation)
 
         failure = None
@@ -871,7 +974,8 @@ class LastoolsAdapter(ToolAdapter):
         elif unknown:
             failure = (
                 "LAStools reported warnings outside the accepted exceptions "
-                f"(accept_known_cutoff_warning={self.accept_known_cutoff_warning}): "
+                f"(accept_known_cutoff_warning={self.accept_known_cutoff_warning}, "
+                f"accept_known_duplicate_xy_warning={self.accept_known_duplicate_xy_warning}): "
                 f"{_quote(unknown)}"
             )
         elif outputs:
@@ -883,6 +987,10 @@ class LastoolsAdapter(ToolAdapter):
         accepted = None
         if failure is None and known:
             accepted = AcceptedException(CUTOFF_EXCEPTION, exit_code or 0, CUTOFF_POLICY, evidence)
+        elif failure is None and duplicates:
+            accepted = AcceptedException(
+                DUPLICATE_XY_EXCEPTION, exit_code or 0, DUPLICATE_XY_POLICY, evidence
+            )
         return Interpretation(
             failure_reason=failure,
             warnings=tuple(line.strip() for line in unknown),
@@ -892,6 +1000,7 @@ class LastoolsAdapter(ToolAdapter):
                 "error_lines": len(errors),
                 "warning_lines": len(warning_indices),
                 "accepted_warning_blocks": len(known),
+                "accepted_duplicate_xy_warnings": len(duplicates),
                 "unlicensed_notices": len(unlicensed),
                 "height_cutoff": cutoff,
                 "output_problems": outputs,

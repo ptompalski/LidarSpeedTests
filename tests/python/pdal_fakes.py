@@ -114,7 +114,7 @@ readers = [s for s in stages if s["type"] in ("readers.las", "readers.copc")]
 import laspy, numpy as np, rasterio
 from rasterio.transform import from_origin
 
-xs, ys, zs, cs, counts = [], [], [], [], []
+xs, ys, zs, cs, rs, counts = [], [], [], [], [], []
 for reader in readers:
     las = laspy.read(reader["filename"])
     keep = np.ones(len(las.points), dtype=bool)
@@ -126,9 +126,10 @@ for reader in readers:
     ys.append(np.asarray(las.y, dtype=np.float64)[keep])
     zs.append(np.asarray(las.z, dtype=np.float64)[keep])
     cs.append(np.asarray(las.classification, dtype=np.int64)[keep])
+    rs.append(np.asarray(las.return_number, dtype=np.int64)[keep])
     counts.append(int(keep.sum()))
 x, y, z = np.concatenate(xs), np.concatenate(ys), np.concatenate(zs)
-c = np.concatenate(cs)
+c, rn = np.concatenate(cs), np.concatenate(rs)
 
 
 def _box(text):
@@ -194,7 +195,7 @@ if writer["type"] == "writers.las":
     sys.exit(0)
 
 if writer["type"] == "writers.raster":
-    # TIN stand-in (no triangulation): crop, class filter, then every cell centre inside
+    # TIN stand-in (no triangulation): crop, class or first-return filter, then every cell centre inside
     # the kept points' bounding box gets their mean Z. Plumbing only, not PDAL behaviour.
     names = [s["type"] for s in stages]
     assert names[-4:] == ["filters.range", "filters.delaunay", "filters.faceraster",
@@ -202,8 +203,12 @@ if writer["type"] == "writers.raster":
     crop = next(s for s in stages if s["type"] == "filters.crop")["bounds"]
     (x0, x1), (y0, y1) = json.loads(crop.replace("(", "[").replace(")", "]"))
     limits = next(s for s in stages if s["type"] == "filters.range")["limits"]
-    keep_classes = [int(p.split("[")[1].split(":")[0]) for p in limits.split(",")]
-    keep = (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1) & np.isin(c, keep_classes)
+    keep = (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1)
+    if limits == "ReturnNumber[1:1]":
+        keep &= rn == 1
+    else:
+        assert limits.startswith("Classification["), limits
+        keep &= np.isin(c, [int(p.split("[")[1].split(":")[0]) for p in limits.split(",")])
     face = stages[-2]
     r, ox, oy = face["resolution"], face["origin_x"], face["origin_y"]
     w, h = face["width"], face["height"]

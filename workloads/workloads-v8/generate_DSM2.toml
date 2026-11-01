@@ -1,0 +1,79 @@
+# Workload contract (lidarbench.workload/1). See pixel_metrics_1a.toml for the layout.
+# New in workloads-v8. Structural validation only, like generate_DEM: no independent TIN
+# reference exists yet, so every implementation is non_comparable and its timings are
+# descriptive (numerical level "unsupported", outcome "unverified"; WORKLOADS.md,
+# design/VALIDATION.md). lasR runs although its first-return TIN is not repeatable (see its
+# note): the structural checks are its pass criterion, as for every implementation here.
+schema = "lidarbench.workload/1"
+suite = "workloads-v8"
+id = "generate_DSM2"
+title = "First-return TIN surface model at 1 m"
+description = """
+Linear Delaunay TIN of all first returns (return number 1, single returns included),
+original Z, sampled at the centre of each 1 m cell, with no maximum-edge trimming and no
+highest-per-cell preselection. One single-band surface-elevation raster per input tile.
+The tools differ in duplicate-XY handling (first returns with the same XY and different Z)
+and hull masking, so the values and NoData support are tool-specific and not compared."""
+
+[population]
+input = "original"
+points = "first_returns"
+z = "original"
+require_finite_xyz = true
+horizontal_units = "metre"
+
+[spatial]
+tiling = "per_input_file"
+buffer = 20.0
+
+[raster]
+resolution = 1.0
+origin = [0.0, 0.0]
+extent = "header_bounds_snapped_outward"
+cell_ownership = "cell_centre_sample"
+empty_cells = "nodata"
+bands = []                    # single band; band description is tool-specific
+nodata_source = "file_metadata"
+forbidden_values = [-9999.0, -999999.0, -1000000.0]
+
+[reference]
+method = "none"               # no TIN reference validator: structural validation only
+
+[artifacts]
+ignored_sidecars = ["*.aux.xml", "*.vrt", "*.tfw", "*.kml"]   # blast2dem writes a KML despite -no_kml
+
+[equivalence]
+group = "workloads-v8/generate_DSM2"
+
+[implementations.lidR]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "cell_centre_sample"
+extent = "header_bounds_snapped_nearest"   # same terra crop as the lidR DSM1/DEM
+band_names = "not_required"
+note = "lidR::rasterize_canopy(res = 1, dsmtin(max_edge = 0, highest = FALSE)); catalog buffer 20, chunk 0. Triangulates the first returns; no edge trimming."
+
+[implementations.lasR]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "cell_centre_sample"
+band_names = "not_required"
+note = "lasR exec(dsm(1, tin = TRUE)); buffer 20, chunk 0 (the legacy candidate call, blocked in the legacy harness; user-accepted in workloads-v8 with the structural pass criterion of every implementation). Not repeatable: lasR jitters XY with std::random_device noise before triangulating, so which of the first returns sharing an XY (with different Z) wins changes between runs. On the Petawawa d10 2x2 block 214-299 cells per tile (~0.025 %) differed between identical runs (up to 21 m), 96 % of them within 1.5 m of such a duplicate; the NoData mask was identical in every run and 0.02-0.03 % of cells differed from lidR by > 1 cm."
+
+[implementations.lastools]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "undeclared"
+band_names = "not_required"
+note = "blast2dem64 -keep_return 1 -elevation -step 1 -kill 100000 -buffered 20 -use_orig_bb (the generate_DEM call with -keep_return 1 instead of -keep_class 2 9; no legacy LAStools call exists; -first_only would also keep the invalid return number 0). The triangulator merges first returns with identical XY and warns 'set nverts N but v_count M'; accepted only with the lastools option accept_known_duplicate_xy_warning. The sampling convention is not established."
+
+[implementations.pdal]
+status = "runnable"
+equivalence = "non_comparable"
+artifacts = ["{stem}.tif"]
+cell_ownership = "cell_centre_sample"
+band_names = "not_required"
+note = "readers.las (tile + inputs within the 20 m buffer) -> filters.merge -> filters.crop (tile bounds + 20 m) -> filters.range ReturnNumber[1:1] -> filters.delaunay -> filters.faceraster (1 m, header bounds snapped outward, no max_triangle_edge_length) -> writers.raster (double, nodata -9999). Not streamable: always runs with --nostream."

@@ -253,7 +253,10 @@ lidR and lasR run through the R bridge (`Rscript --vanilla bridges/r/runner.R`).
 They reuse the legacy harness unchanged and pin the exact legacy calls. They
 use `interpret()` to read the bridge's result record. R warnings during the
 workload, R errors, missing records and version drift all fail the attempt.
-They also report R's inner workload interval. See [R_BRIDGE.md](R_BRIDGE.md).
+They also report R's inner workload interval. workloads-v8 adds the legacy
+`pixel_metrics_2` and `generate_DSM2` calls of both tools (lasR's `dsm(tin = TRUE)`,
+blocked in the legacy harness, runs with structural validation only: it is not
+repeatable near duplicate-XY first returns; WORKLOADS.md). See [R_BRIDGE.md](R_BRIDGE.md).
 
 ## 9. LAStools adapter (`lastools`)
 
@@ -286,9 +289,14 @@ License files are not read, hashed or recorded.
 |---|---|---|---|
 | `pixel_metrics_1a` | `lascanopy64` | `{stem}_avg.tif` | `-i <inputs> -step 20 -avg -odir <out> -otif -cores N -buffered 20 -use_orig_bb -height_cutoff <cutoff> -grid_ll 0 0 -no_data -9999 -no_kml` |
 | `generate_DSM1` | `lasgrid64` | `{stem}.tif` | `-i <inputs> -highest -otif -odir <out> -step 1 -cores N -buffered 20 -use_orig_bb -no_data -9999 -no_kml` |
+| `pixel_metrics_2` (v8) | `lascanopy64` | `{stem}_max.tif`, `_avg`, `_std`, `_dns`, `_p05`, `_p25`, `_p50`, `_p75`, `_p95` | `-i <inputs> -step 20 -max -avg -std -dns -p 5 25 50 75 95 -odir <out> -otif -cores N -buffered 20 -use_orig_bb -height_cutoff <cutoff> -cover_cutoff 2 -fractions -grid_ll 0 0 -no_data -9999 -no_kml` |
+| `generate_DSM2` (v8) | `blast2dem64` | `{stem}.tif` | no legacy call: `-i <inputs> -otif -odir <out> -step 1 -cores N -keep_return 1 -elevation -kill 100000 -buffered 20 -use_orig_bb -no_data -9999 -no_kml` |
 
 The templates are pinned in Python; a test compares them with `R/0_setup.R` and
-the artifact names with the workload contracts. A changed template needs a new
+the artifact names (`LastoolsWorkload.artifact_patterns`, in contract order) with
+the workload contracts. `generate_DSM2` has no legacy LAStools call
+(`legacy_call = False`): its template is the `generate_DEM` call with
+`-keep_return 1` instead of `-keep_class 2 9`, pinned by the contract note. A changed template needs a new
 workload version. Placeholders are a closed set (`{inputs}` expands to one
 argument per tile, `{output}`, `{cores}`, `{height_cutoff}`). As in the legacy
 harness, an `epsg` workload parameter appends `-epsg N` (metadata, no
@@ -326,13 +334,23 @@ same reported cutoff, and the exact `lasheight` suggestion. Raw status 1 is
 accepted only if every warning is recognized and no error occurred. Status 0
 with recognized warnings is labelled the same way. The recorded policy is
 `lastools.accept_known_cutoff_warning`. This is a port of
-`benchmark_lastools_cutoff_warnings()` (README.md, WORKLOADS.md).
+`benchmark_lastools_cutoff_warnings()` (README.md, WORKLOADS.md). It also applies
+to the `pixel_metrics_2` `lascanopy64` call.
+
+**Duplicate-XY exception.** `accept_known_duplicate_xy_warning = true` (tool option,
+default `false`, part of the campaign identity) declares
+`blast2dem_duplicate_xy_points_merged` for `generate_DSM2` only. blast2dem's
+triangulator merges points with identical XY into one vertex and prints
+`WARNING: set nverts N but v_count M`. Only that exact line from `blast2dem`/
+`blast2dem64` with `0 < M < N` is recognized, only with raw status 0. The recorded
+policy is `lastools.accept_known_duplicate_xy_warning`. First returns share XY
+often (every Petawawa tile in the pilot), so a DSM2 campaign needs the option.
 
 **Validation.** Up to `workloads-v3` the contracts declare LAStools
 `non_comparable` with `undeclared` cell ownership, so its outputs are at best
 `unverified` and descriptive only. `workloads-v3` accepts the `.tfw` world file
 LAStools writes beside every GeoTIFF as an ignored sidecar (v1/v2 report it as
-unexpected). `workloads-v4` (kept by `workloads-v5`, `workloads-v6` and `workloads-v7`, the default) declares LAStools `matched_definition` with
+unexpected). `workloads-v4` (kept by `workloads-v5` to `workloads-v8`, the default) declares LAStools `matched_definition` with
 the upward-Y floor cell rule (`pdal_binmode_floor`, the rule PDAL binmode uses)
 and, for `lascanopy -avg`, `value_precision = 0.01` (averages are written
 rounded to centimetres; the tolerance is widened by 0.005). On the Task 13 pilot
@@ -359,6 +377,12 @@ no class 9), keeps every point of its tile and extrapolates heights outside the
 ground TIN (`outside_surface = "extrapolate"`). On the Petawawa 2×2 block it
 writes exactly each tile's points; 250–510 interior points per tile differ from
 lidR and lasR by more than 1 cm (up to ~1 m).
+
+`pixel_metrics_2` (workloads-v8) declares LAStools `matched_definition` with the
+same cell rule and `value_precision = 0.01` (`-avg` and `-std` are rounded to cm),
+`artifact_bands` for the nine single-band files and the user-accepted
+`single_point_sd = "zero"` (`-std` writes 0 in single-point cells). On Petawawa d1
+and d10 2×2 blocks every band then matched the reference.
 
 Integration tests (`tests/python/test_lastools_integration.py`) run only when
 an installation is found, for example
@@ -438,6 +462,14 @@ records the mode used, `configured_execution_mode` the option). These stages are
 not required by the probe: a PDAL without them only makes `generate_DEM`
 `unsupported`. `faceraster` samples the TIN at cell centres; on a planar ground
 surface the real-PDAL integration test reproduces it to < 1e-6 m.
+
+**First-return TIN (`generate_DSM2`, workloads-v8).** The TIN pipeline with
+`filters.range limits = "ReturnNumber[1:1]"` (return number 1, single returns
+included; `filters.returns groups = "first"` would drop single returns) instead of
+the class filter, and without `max_triangle_edge_length` (PDAL's default is no
+limit; the contract has no edge trimming). Structural-only, `cell_centre_sample`,
+always `--nostream`; metadata `point_filter` records the filter. `pixel_metrics_2`
+is `unsupported`: `writers.gdal` has no percentile or above-threshold statistic.
 
 **Height normalization (`normalization`, workloads-v7).** A point-cloud,
 structural-only contract (design/VALIDATION.md §1):
@@ -527,7 +559,9 @@ definition, different declared edge convention), `non_comparable` and
 | `pixel_metrics_1a` | functionally | strictly | non-comparable | **functionally** |
 | `generate_DSM1` | functionally | strictly | non-comparable | **functionally** |
 | `generate_DEM` (v6), `normalization` (v7) | non-comparable | non-comparable (`normalization`: diagnostic only) | non-comparable | non-comparable (structural validation only) |
-| `generate_DSM2`, `pixel_metrics_2`, `tree_detection`, `complex_task1/2` | — | — | — | **unsupported** (no contract; candidate PDAL stages are not evaluated) |
+| `pixel_metrics_2` (v8) | functionally | strictly | functionally | unsupported |
+| `generate_DSM2` (v8) | non-comparable | non-comparable | non-comparable | non-comparable (structural validation only) |
+| `tree_detection`, `complex_task1/2` | — | — | — | **unsupported** (no contract; candidate PDAL stages are not evaluated) |
 
 PDAL computes the same population, grid and statistic, but its upward-Y edge rule
 differs from the contract and from lidR's clamp and lasR's partition. PDAL is
@@ -548,10 +582,9 @@ installation validate the actual PDAL outputs:
 
 - Real adapters `cli` and `pylib`. The modules exist as placeholders and are
   not registered.
-- LAStools `pixel_metrics_2` (no contract yet).
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
-- Equivalence data covers only the contracts in `workloads/` (`workloads-v7` is
-  the default; `workloads-v1` to `workloads-v6` are kept frozen; v1 has no PDAL
-  entry). `generate_DEM` and `normalization` have no numerical reference
-  (structural validation only).
+- Equivalence data covers only the contracts in `workloads/` (`workloads-v8` is
+  the default; `workloads-v1` to `workloads-v7` are kept frozen; v1 has no PDAL
+  entry). `generate_DEM`, `generate_DSM2` and `normalization` have no numerical
+  reference (structural validation only).

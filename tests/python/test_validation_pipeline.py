@@ -554,7 +554,8 @@ def test_no_applicable_validator_is_unsupported(scene, tmp_path):
     v = validate_outputs(request, validators=[]).verdicts
     assert v.numerical.status is Status.UNSUPPORTED
     validators, errors = discover_validators()
-    assert [x.name for x in validators] == ["cell-statistic"] and errors == []
+    assert sorted(x.name for x in validators) == ["cell-metrics", "cell-statistic"]
+    assert errors == []
 
 
 # -- input problems -----------------------------------------------------------------------

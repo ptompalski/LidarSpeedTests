@@ -219,8 +219,9 @@ def test_bridge_records_versions_threads_and_inner_timing(campaign, adapters):
         timing = result["tool_timing"]
         assert timing["within_outer_interval"] is True
         assert timing["marks"]["bridge_start"] <= timing["start_wall_ns"]
-        assert timing["startup_overhead_ns"] > timing["marks"]["packages_loaded"] - (
-            timing["marks"]["bridge_start"]
+        assert (
+            timing["startup_overhead_ns"]
+            > timing["marks"]["packages_loaded"] - (timing["marks"]["bridge_start"])
         )
         # Lazily loaded namespaces (sf/terra: GDAL, PROJ, GEOS) stay outside the
         # inner interval.
@@ -275,16 +276,60 @@ def test_outputs_against_independent_validator(campaign):
     assert comparabilities and all(c is Comparability.DESCRIPTIVE_ONLY for c in comparabilities)
 
 
-def _run(adapter, inputs: list[Path], root: Path, workload="pixel_metrics_1a"):
+def _run(adapter, inputs: list[Path], root: Path, workload="pixel_metrics_1a", threads=1):
     root.mkdir()
     out, work, attempt = root / "out", root / "work", root / "attempt"
     for path in (out, work, attempt):
         path.mkdir()
-    inv = Invocation(workload, tuple(inputs), out, work, threads=1)
+    inv = Invocation(workload, tuple(inputs), out, work, threads=threads, parameters={"epsg": EPSG})
     plan = plan_invocation(adapter, inv)
     assert plan.ready, plan.reason
     execute_plan(plan, inv, attempt, timeout_s=900, adapter=adapter)
     return json.loads((attempt / "execution.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    ("tool", "workload"),
+    [
+        ("lidr", "pixel_metrics_2"),
+        ("lidr-multisession", "pixel_metrics_2"),
+        ("lasr", "pixel_metrics_2"),
+        ("lidr", "generate_DSM2"),
+        ("lasr", "generate_DSM2"),
+    ],
+)
+def test_workloads_v8_run_and_validate(adapters, indexed_scene, tmp_path, tool, workload):
+    """Two workers: lidR's future workers must resolve the legacy metrics_multiple()."""
+    _, inputs = indexed_scene
+    adapter = (
+        LidRAdapter(future_backend="multisession")
+        if tool == "lidr-multisession"
+        else adapters[tool][0]
+    )
+    if tool == "lidr-multisession":
+        assert adapter.probe(PLATFORM).available
+    record = _run(adapter, sorted(inputs.glob("*.las")), tmp_path / "run", workload, threads=2)
+    assert record["execution_status"] == "succeeded", record["failure_reason"]
+    result = {
+        "workload_id": workload,
+        "tool_adapter": adapter.adapter_id,
+        "execution_status": "succeeded",
+    }
+    invocation = {
+        "inputs": [str(p) for p in sorted(inputs.glob("*.las"))],
+        "output_dir": str(tmp_path / "run" / "out"),
+    }
+    verdicts = _validate(
+        result, invocation, Policies(accept_known_extent_discrepancies=True)
+    ).verdicts
+    assert verdicts.structural.status is Status.PASSED, verdicts.to_record()
+    if workload == "generate_DSM2":
+        assert verdicts.numerical.status is Status.UNSUPPORTED  # structural-only contract
+    elif adapter.adapter_id == "lidr":
+        assert verdicts.outcome is Outcome.VALIDATED, verdicts.to_record()
+    else:
+        # lasR: its known one-cell outward extent, every band within tolerance.
+        assert verdicts.numerical.status is Status.ACCEPTED_EXCEPTION, verdicts.to_record()
 
 
 def test_lasr_refuses_unindexed_inputs_without_touching_them(adapters, tmp_path):

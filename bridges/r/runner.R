@@ -169,6 +169,10 @@ local({
     inputs <- normalizePath(inputs, winslash = "/", mustWork = TRUE)
     epsg <- invocation$epsg
     context <- new.env(parent = globalenv())
+    # Legacy helpers the pinned calls reference by name (lidR pixel_metrics_2:
+    # ~metrics_multiple(Z)) live in the global environment, as in the legacy harness:
+    # lidR resolves a formula's globals by name for its future workers.
+    assign("metrics_multiple", harness$metrics_multiple, envir = globalenv())
     context$dir_out <- output_dir
     context$cores <- threads
     context$fout <- paste0(output_dir, "/*.", invocation$output_extension)

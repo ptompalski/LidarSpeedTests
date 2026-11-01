@@ -167,7 +167,9 @@ def test_adapters_are_registered_entry_points():
 def test_workload_declarations(cls, model):
     adapter = cls()
     support = {s.workload_id: s for s in adapter.workload_support()}
-    pinned = ("pixel_metrics_1a", "generate_DSM1", "generate_DEM", "normalization")
+    pinned = tuple(cls.workloads)
+    assert {"pixel_metrics_1a", "pixel_metrics_2", "generate_DSM1", "generate_DEM"} <= set(pinned)
+    assert "generate_DSM2" in pinned  # lasR: runnable from workloads-v8 (structural only)
     for workload in pinned:
         assert support[workload].status is cls.workloads[workload].status
         assert support[workload].status.dispatchable
@@ -179,8 +181,28 @@ def test_workload_declarations(cls, model):
 
 def test_lasr_declares_legacy_blocked_workloads():
     support = {s.workload_id: s for s in LasRAdapter().workload_support()}
-    for workload in ("complex_task1", "complex_task2", "generate_DSM2"):
+    for workload in ("complex_task1", "complex_task2"):
         assert support[workload].status is ImplementationStatus.BLOCKED
+    assert support["generate_DSM2"].status is ImplementationStatus.RUNNABLE
+
+
+def test_workloads_v8_pin_the_legacy_metrics_and_first_return_tin_calls():
+    lidr, lasr = LidRAdapter.workloads, LasRAdapter.workloads
+    assert "~metrics_multiple(Z)" in lidr["pixel_metrics_2"].call
+    assert "dsmtin(max_edge = 0, highest = FALSE)" in lidr["generate_DSM2"].call
+    assert "'z_p95'" in lasr["pixel_metrics_2"].call
+    assert "dsm(1, tin = TRUE, ofile = fout)" in lasr["generate_DSM2"].call
+    for workload in (
+        lidr["pixel_metrics_2"],
+        lidr["generate_DSM2"],
+        lasr["pixel_metrics_2"],
+        lasr["generate_DSM2"],
+    ):
+        assert (workload.output_extension, workload.artifact_pattern) == ("tif", "{stem}.tif")
+        assert workload.status is ImplementationStatus.RUNNABLE
+    # The bridge exposes the legacy helper the lidR formula names to the future workers.
+    runner = (REPO / "bridges" / "r" / "runner.R").read_text(encoding="utf-8")
+    assert 'assign("metrics_multiple", harness$metrics_multiple, envir = globalenv())' in runner
 
 
 def test_normalization_writes_laz_and_lasr_is_diagnostic_only():
@@ -344,7 +366,7 @@ def test_non_las_and_colliding_inputs_are_unsupported(layout, project):
 
 def test_blocked_workload_is_skipped(layout, project):
     adapter = _ready(LasRAdapter(project=str(project)))
-    plan = plan_invocation(adapter, _invocation(layout, "generate_DSM2"), _available(adapter))
+    plan = plan_invocation(adapter, _invocation(layout, "complex_task1"), _available(adapter))
     assert plan.status is PlanStatus.SKIPPED_BLOCKED and "TIN" in plan.reason
 
 

@@ -519,6 +519,65 @@ points on maximum header edges) while pinned lasR fails on 53–106 corrupt heig
 per tile. LAStools and PDAL: design/ADAPTERS.md §9–§10. The legacy harness is
 unchanged.
 
+## Python orchestrator: `generate_DSM2` and `pixel_metrics_2` in workloads-v8
+
+`workloads/workloads-v8/` (the default) keeps the v7 definitions unchanged and adds
+two contracts. PDAL `pixel_metrics_2` is not run.
+
+| Task ID | lidR | lasR | LAStools | PDAL |
+|---|---|---|---|---|
+| `generate_DSM2` | runnable, non-comparable | runnable, non-comparable (not repeatable) | runnable, non-comparable | runnable, non-comparable |
+| `pixel_metrics_2` | matched (functionally comparable) | matched (strictly comparable) | matched (functionally comparable) | unsupported |
+
+**`generate_DSM2`** is structural-only, like `generate_DEM`: a linear TIN of every
+point with return number 1 (`population.points = "first_returns"`, single returns
+included), sampled at 1 m cell centres, no edge trimming, no reference
+(`reference.method = "none"`). lidR uses the legacy `dsmtin(max_edge = 0,
+highest = FALSE)` call. lasR runs the legacy candidate `dsm(1, tin = TRUE)`, which the
+legacy harness blocked because it is not repeatable. **User-accepted (2026-10-31):** like
+every other DSM2 implementation, lasR passes on the structural checks alone. lasR
+jitters XY with `std::random_device` noise before triangulating, so which of several
+first returns sharing an XY (with different Z) wins changes between runs. On the
+Petawawa d10 2×2 block, 214–299 cells per tile (~0.025 %) differed between identical
+runs (up to 21 m), 96 % of them within 1.5 m of such a duplicate. The NoData mask was
+identical in every run, and 0.02–0.03 % of cells differed from lidR by more than
+1 cm. Repeated lasR DSM2 timings therefore measure slightly different outputs.
+LAStools has no legacy call: the contract pins `blast2dem64` with the
+generate_DEM arguments and `-keep_return 1` instead of `-keep_class 2 9`
+(`-first_only` would also keep the invalid return number 0). Its triangulator merges
+first returns with identical XY and warns `set nverts N but v_count M`. The attempt is
+accepted only with the opt-in LAStools option `accept_known_duplicate_xy_warning`, as
+the named exception `blast2dem_duplicate_xy_points_merged`. PDAL uses the DEM pipeline
+with `filters.range ReturnNumber[1:1]` and PDAL's default unlimited
+`max_triangle_edge_length`.
+
+**`pixel_metrics_2`** has an independent float64 reference for every band
+(`reference.method = "cell_metrics"`): the nine definitions above, with `z_sd` NoData
+in single-point cells (R `sd()`). lidR and lasR run the legacy calls. The R bridge puts
+the legacy `metrics_multiple()` in the global environment, as the legacy harness did,
+so that lidR's future workers resolve it. LAStools runs the legacy `lascanopy64` call
+and writes nine single-band rasters per tile (`_max`, `_avg`, `_std`, `_dns`, `_p05`
+… `_p95`). The contract maps them to the bands with `artifact_bands`. Two
+**user-accepted declarations** (2026-10-31) are reproduced exactly by the reference;
+the tolerance is unchanged:
+
+- LAStools `single_point_sd = "zero"`: `-std` writes 0, not NoData, in single-point
+  cells (1–4 cells per Petawawa 2×2 block).
+- lasR `percentile_rank = "float32"`: lasR computes the type-7 rank as
+  `(p / 100.0f) * (float)(n - 1) + 1` in binary32 (Metrics.cpp). This moved about one
+  `z_p95` cell per block by ~1e-4 m, beyond the 2e-6 + 2e-7·|z| tolerance.
+
+On a Petawawa d1 and d10 2×2 block every other LAStools band and NoData mask matched
+the reference (`-std` uses n − 1, `-p` gives type-7 percentiles, `-dns -fractions` is
+the all-return fraction above 2; `-avg`/`-std` are rounded to cm, `value_precision =
+0.01`). lidR validated without a declaration. PDAL's `writers.gdal` has no percentile
+or above-threshold statistic, so PDAL is `unsupported`.
+
+Inputs with invalid return numbers (0, or greater than the number of returns) make
+lidR's `LAS()` constructor warn for every workload (`select = "*"`), and the R bridge
+then fails the attempt. The current Petawawa preparation has no such points; an
+older copy did.
+
 ## Checks and remaining acceptance work
 
 Run `Rscript --vanilla tests/testthat.R`; focused workload checks use

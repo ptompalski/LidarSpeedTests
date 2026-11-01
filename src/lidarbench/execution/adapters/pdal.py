@@ -9,8 +9,9 @@ tile (``ConfigFile`` in the attempt's work directory)::
                         origin_x, origin_y, width, height, nodata=-9999,
                         data_type=double, gdaldriver=GTiff)
 
-``generate_DEM`` is a class-filtered TIN raster (``filters.delaunay`` ->
-``filters.faceraster`` -> ``writers.raster``, see :class:`PdalWorkload`) and
+``generate_DEM`` is a class-filtered and ``generate_DSM2`` a first-return TIN raster
+(``filters.delaunay`` -> ``filters.faceraster`` -> ``writers.raster``, see
+:class:`PdalWorkload`) and
 ``normalization`` rewrites each tile's points as heights above a TIN of its
 ground points (see :func:`build_normalization_pipeline`)::
 
@@ -214,9 +215,11 @@ class PdalWorkload:
     or a height normalization.
 
     ``method = "binmode"``: ``writers.gdal`` cell statistic ``output_type``.
-    ``method = "tin"``: ``filters.range`` (``classes``) -> ``filters.delaunay`` ->
-    ``filters.faceraster`` (sampled at cell centres) -> ``writers.raster``; the merged
-    points are first cropped to the tile bounds grown by ``buffer``. Not streamable.
+    ``method = "tin"``: ``filters.range`` (``classes``, or ``ReturnNumber[1:1]`` with
+    ``first_returns``) -> ``filters.delaunay`` -> ``filters.faceraster`` (sampled at cell
+    centres) -> ``writers.raster``; the merged points are first cropped to the tile bounds
+    grown by ``buffer``. ``max_triangle_edge_length = None`` leaves PDAL's default (no
+    limit). Not streamable.
     ``method = "normalization"``: ``filters.hag_delaunay`` over the ground ``classes``
     (``hag_count`` neighbours, ``allow_extrapolation``) written back as Z with
     ``writers.las``; see :func:`build_normalization_pipeline`. Not streamable.
@@ -232,12 +235,20 @@ class PdalWorkload:
     max_triangle_edge_length: float | None = None
     hag_count: int | None = None
     allow_extrapolation: bool | None = None
+    first_returns: bool = False
+    """TIN of the points with return number 1 instead of ``classes``."""
 
     def __post_init__(self) -> None:
         if self.method not in ("binmode", "tin", "normalization"):
             raise ValueError(f"unknown PDAL workload method {self.method!r}")
-        if self.method != "binmode" and (self.output_type or not self.classes):
-            raise ValueError("TIN and normalization workloads take classes and no output_type")
+        if self.first_returns and (self.method != "tin" or self.classes):
+            raise ValueError("first_returns is a TIN population and excludes classes")
+        if self.method != "binmode" and (
+            self.output_type or not (self.classes or self.first_returns)
+        ):
+            raise ValueError(
+                "TIN and normalization workloads take classes (or first_returns) and no output_type"
+            )
         if (self.method == "normalization") != (self.resolution is None):
             raise ValueError("raster workloads need a resolution, normalization has none")
         if self.method == "normalization" and (
@@ -272,6 +283,8 @@ WORKLOADS: Mapping[str, PdalWorkload] = MappingProxyType(
         "generate_DEM": PdalWorkload(
             "generate_DEM", "", 1.0, method="tin", classes=(2, 9), max_triangle_edge_length=100.0
         ),
+        # workloads-v8: no maximum edge length (PDAL's default), as the contract requires.
+        "generate_DSM2": PdalWorkload("generate_DSM2", "", 1.0, method="tin", first_returns=True),
         "normalization": PdalWorkload(
             "normalization",
             "",
@@ -289,16 +302,16 @@ WORKLOADS: Mapping[str, PdalWorkload] = MappingProxyType(
 
 _NO_CONTRACT = "not implemented for PDAL: no workloads-v2 contract for this workload yet"
 OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
-    *(
-        WorkloadSupport(w, ImplementationStatus.UNSUPPORTED, reason=f"{_NO_CONTRACT} ({why})")
-        for w, why in (
-            ("generate_DSM2", "the legacy subcircle/pit-free DSM has no evaluated PDAL pipeline"),
-            (
-                "pixel_metrics_2",
-                "the nine-band metric set exceeds writers.gdal statistics; not evaluated",
-            ),
-            ("tree_detection", "no evaluated PDAL equivalent of the legacy local-maximum filter"),
-        )
+    WorkloadSupport(
+        "pixel_metrics_2",
+        ImplementationStatus.UNSUPPORTED,
+        reason="not run with PDAL (workloads-v8 contract: unsupported): writers.gdal offers min, "
+        "max, mean, idw, count and stdev only, no percentiles and no above-threshold fraction",
+    ),
+    WorkloadSupport(
+        "tree_detection",
+        ImplementationStatus.UNSUPPORTED,
+        reason=f"{_NO_CONTRACT} (no evaluated PDAL equivalent of the legacy local-maximum filter)",
     ),
     *(
         WorkloadSupport(
@@ -561,6 +574,14 @@ def _range_limits(classes: Sequence[int]) -> str:
     return ",".join(f"Classification[{c}:{c}]" for c in classes)
 
 
+FIRST_RETURN_LIMITS = "ReturnNumber[1:1]"
+"""Return number 1, single returns included (``filters.returns`` ``first`` would drop them)."""
+
+
+def _tin_limits(workload: PdalWorkload) -> str:
+    return FIRST_RETURN_LIMITS if workload.first_returns else _range_limits(workload.classes)
+
+
 def build_tin_pipeline(
     tile: Path,
     neighbours: Sequence[Path],
@@ -617,7 +638,7 @@ def build_tin_pipeline(
             "type": "filters.crop",
             "bounds": box,
         },
-        {"type": "filters.range", "limits": _range_limits(workload.classes)},
+        {"type": "filters.range", "limits": _tin_limits(workload)},
         {"type": "filters.delaunay"},
         raster,
         {
@@ -991,7 +1012,7 @@ class PdalAdapter(ToolAdapter):
     # -- workloads and commands -------------------------------------------------------
 
     def workload_support(self) -> list[WorkloadSupport]:
-        """Binmode statistics, TIN DEM, normalization; contract-less workloads unsupported."""
+        """Binmode statistics, TIN rasters, normalization; contract-less workloads unsupported."""
         threading = ThreadingSupport(ThreadingModel.CONCURRENT_FILES, 1, None)
         return [
             *(
@@ -1242,6 +1263,7 @@ class PdalAdapter(ToolAdapter):
                 "hag_delaunay_z" if norm else "tin_faceraster" if tin else workload.output_type
             ),
             "classes": ",".join(map(str, workload.classes)) or None,
+            "point_filter": _tin_limits(workload) if tin else None,
             "max_triangle_edge_length": workload.max_triangle_edge_length,
             "resolution": workload.resolution,
             "buffer": workload.buffer,

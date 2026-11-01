@@ -61,6 +61,7 @@ psutil = "lidarbench.monitoring.psutil_backend:PsutilBackend"
 # Numerical reference validators; the entry-point name must equal the validator's name.
 [project.entry-points."lidarbench.validators"]
 cell-statistic = "lidarbench.validation.validators:CellStatisticValidator"
+cell-metrics = "lidarbench.validation.validators:CellMetricsValidator"
 
 [project.optional-dependencies]
 validation = [

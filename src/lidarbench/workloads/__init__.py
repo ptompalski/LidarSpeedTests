@@ -3,6 +3,7 @@
 from lidarbench.workloads.contract import (
     CELL_OWNERSHIP,
     CONTRACT_SCHEMA,
+    METRICS,
     ContractError,
     Implementation,
     PointCloudProduct,
@@ -19,6 +20,7 @@ from lidarbench.workloads.contract import (
 __all__ = [
     "CELL_OWNERSHIP",
     "CONTRACT_SCHEMA",
+    "METRICS",
     "ContractError",
     "Implementation",
     "PointCloudProduct",

@@ -165,6 +165,48 @@ def test_real_pdal_dem_is_a_class_filtered_tin_validated_structurally(tmp_path):
             assert np.abs(band[valid] - expected[valid]).max() < 1e-6
 
 
+def first_return_scene(directory: Path) -> None:
+    """Two 100 m tiles: a planar surface of first (1 of 2) and single (1 of 1) returns,
+    and second returns 25 m below it that the first-return TIN must ignore."""
+    for name, x0 in (("west", X0), ("east", X0 + 100.0)):
+        xs, ys, zs, returns = [], [], [], []
+        for i in range(21):
+            for j in range(21):
+                x, y = x0 + 5.0 * i, Y0 + 5.0 * j
+                xs.append(x)
+                ys.append(y)
+                zs.append(_plane(x, y))
+                returns.append((1, 1) if i == 7 else (1, 2))
+                if i < 20 and j < 20:
+                    xs.append(x + 2.5)
+                    ys.append(y + 2.5)
+                    zs.append(_plane(x + 2.5, y + 2.5) - 25.0)
+                    returns.append((2, 2))
+        write_las(directory / f"{name}.las", xs, ys, zs, returns=returns)
+
+
+def test_real_pdal_dsm2_is_a_first_return_tin_validated_structurally(tmp_path):
+    import numpy as np
+
+    from lidarbench.validation.status import Outcome, Status
+
+    inv, record, report = _run(tmp_path, "generate_DSM2", scene=first_return_scene)
+    assert record["interpretation"]["details"]["execution_mode"] == "standard"
+    v = report.verdicts
+    assert v.structural.status is Status.PASSED, v.structural.reasons
+    assert v.numerical.status is Status.UNSUPPORTED and v.outcome is Outcome.UNVERIFIED
+    # Not part of validation: the first and single returns span the plane exactly.
+    for artifact in sorted(inv.output_dir.glob("*.tif")):
+        with rasterio.open(artifact) as src:
+            band = src.read(1)
+            rows, cols = np.indices(band.shape)
+            x = src.bounds.left + (cols + 0.5) * src.res[0]
+            y = src.bounds.top - (rows + 0.5) * src.res[1]
+            valid = band != src.nodata
+            assert valid.mean() > 0.99
+            assert np.abs(band[valid] - _plane(x, y)[valid]).max() < 1e-6
+
+
 def copc_scene(directory: Path, base=neighbour_scene) -> None:
     """A LAS fixture converted to real COPC files (writers.copc, scale kept)."""
     import subprocess
@@ -305,6 +347,6 @@ def test_real_pdal_normalization_uses_ground_and_water_and_keeps_attributes(tmp_
             )
         )
         assert report.verdicts.artifacts.status is Status.PASSED
-        assert (
-            report.verdicts.structural.status is Status.PASSED
-        ), report.verdicts.structural.reasons
+        assert report.verdicts.structural.status is Status.PASSED, (
+            report.verdicts.structural.reasons
+        )

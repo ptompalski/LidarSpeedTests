@@ -29,7 +29,7 @@ from lidarbench.core.canonical import digest
 from lidarbench.execution.adapters.base import WORKLOAD_ID_PATTERN, ImplementationStatus
 
 CONTRACT_SCHEMA = "lidarbench.workload/1"
-DEFAULT_SUITE = "workloads-v7"
+DEFAULT_SUITE = "workloads-v8"
 
 SUITE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 TOOL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -100,8 +100,9 @@ OUTSIDE_SURFACE = {
 """Declared per-implementation handling of points outside the ground surface."""
 
 POPULATION_INPUTS = ("original",)
-POPULATION_POINTS = ("all", "classes")
-"""``all``: no filter; ``classes``: only points whose ASPRS class is in ``population.classes``."""
+POPULATION_POINTS = ("all", "classes", "first_returns")
+"""``all``: no filter; ``classes``: only points whose ASPRS class is in ``population.classes``;
+``first_returns``: only points with return number 1 (single returns included)."""
 POPULATION_Z = ("original",)
 UNITS = ("metre",)
 TILINGS = ("per_input_file",)
@@ -111,10 +112,36 @@ IMPLEMENTATION_EXTENT_RULES = ("header_bounds_snapped_nearest",)
 ``accept_known_extent_discrepancies`` policy; design/VALIDATION.md)."""
 EMPTY_CELLS = ("nodata",)
 NODATA_SOURCES = ("file_metadata",)
-REFERENCE_METHODS = ("cell_statistic", "none")
-"""``none``: the contract defines no independent numerical reference; validation stops at
+REFERENCE_METHODS = ("cell_statistic", "cell_metrics", "none")
+"""``cell_statistic``: one band, ``reference.statistic`` of the owned points' Z;
+``cell_metrics``: one band per :data:`METRICS` name in ``raster.bands``;
+``none``: the contract defines no independent numerical reference; validation stops at
 the structural level and the numerical level is ``unsupported`` (descriptive timings)."""
 STATISTICS = ("mean", "max")
+METRICS = {
+    "z_max": "maximum Z",
+    "z_mean": "arithmetic mean Z",
+    "z_sd": "sample standard deviation of Z (denominator n - 1); NoData when n < 2",
+    "z_above2": "count(Z > 2) / n, all points in the denominator (fraction 0-1)",
+    "z_p5": "5th percentile of Z, R type 7: sorted values interpolated at 1 + (n - 1) * p",
+    "z_p25": "25th percentile of Z, R type 7",
+    "z_p50": "50th percentile of Z, R type 7",
+    "z_p75": "75th percentile of Z, R type 7",
+    "z_p95": "95th percentile of Z, R type 7",
+}
+"""Per-cell metrics a ``cell_metrics`` reference can compute, keyed by band name."""
+SINGLE_POINT_SD = {
+    "zero": "z_sd is 0 (not NoData) in cells with exactly one point (LAStools lascanopy -std).",
+}
+"""Declared per-implementation ``z_sd`` value in single-point cells (default: NoData)."""
+PERCENTILE_RANKS = {
+    "float32": (
+        "The type-7 rank 1 + (n - 1) * p is computed in IEEE-754 binary32 as "
+        "(p / 100.0f) * (float)(n - 1) + 1 and its fraction weights the two neighbouring "
+        "values (lasR Metrics.cpp); the values themselves are interpolated in binary64."
+    ),
+}
+"""Declared per-implementation percentile rank arithmetic (default: exact binary64)."""
 EQUIVALENCE = ("matched_definition", "non_comparable")
 BAND_NAMES = ("required", "not_required")
 COMPARABILITY = (
@@ -262,10 +289,29 @@ class Implementation:
     outside_surface: str | None = None
     """Point-cloud products only: declared handling of points outside the ground
     surface (:data:`OUTSIDE_SURFACE`); ``None`` for rasters."""
+    single_point_sd: str | None = None
+    """``cell_metrics`` only: declared ``z_sd`` in single-point cells (:data:`SINGLE_POINT_SD`);
+    ``None`` = the contract's NoData."""
+    percentile_rank: str | None = None
+    """``cell_metrics`` only: declared percentile rank arithmetic (:data:`PERCENTILE_RANKS`);
+    ``None`` = exact binary64."""
+    artifact_bands: tuple[str, ...] = ()
+    """Raster products only: when non-empty, each artifact is a single-band raster holding
+    the contract band at the same position (``artifacts[i]`` holds ``artifact_bands[i]``);
+    empty = every artifact holds all contract bands."""
 
     def expected_names(self, stem: str) -> tuple[str, ...]:
         """Primary artifact file names expected for one input tile stem."""
         return tuple(p.replace(ARTIFACT_PLACEHOLDER, stem) for p in self.artifacts)
+
+    def bands_of(self, stem: str, name: str, contract_bands: tuple[str, ...]) -> tuple[str, ...]:
+        """Contract bands held, in order, by artifact ``name`` of tile ``stem``.
+
+        Without :attr:`artifact_bands` every artifact holds all ``contract_bands``.
+        """
+        if not self.artifact_bands:
+            return contract_bands
+        return (self.artifact_bands[self.expected_names(stem).index(name)],)
 
     @property
     def ownership_declared(self) -> bool:
@@ -360,7 +406,15 @@ class WorkloadContract:
 
 
 def _implementation(tool: str, value: Any, where: str, product: str = "raster") -> Implementation:
-    raster_keys = {"cell_ownership", "band_names", "value_precision", "extent"}
+    raster_keys = {
+        "cell_ownership",
+        "band_names",
+        "value_precision",
+        "extent",
+        "artifact_bands",
+        "single_point_sd",
+        "percentile_rank",
+    }
     point_keys = {"outside_surface"}
     table = _table(
         value,
@@ -424,6 +478,24 @@ def _implementation(tool: str, value: Any, where: str, product: str = "raster") 
         if "outside_surface" in table
         else None
     )
+    artifact_bands = tuple(
+        _str(b, f"{where}.artifact_bands[{i}]")
+        for i, b in enumerate(_list(table.get("artifact_bands", []), f"{where}.artifact_bands"))
+    )
+    if "artifact_bands" in table and len(artifact_bands) != len(artifacts):
+        raise ContractError(
+            f"{where}.artifact_bands must name one band per artifact ({len(artifacts)})"
+        )
+    single_point_sd = (
+        _choice(table["single_point_sd"], f"{where}.single_point_sd", SINGLE_POINT_SD)
+        if "single_point_sd" in table
+        else None
+    )
+    percentile_rank = (
+        _choice(table["percentile_rank"], f"{where}.percentile_rank", PERCENTILE_RANKS)
+        if "percentile_rank" in table
+        else None
+    )
     return Implementation(
         tool=tool,
         status=status,
@@ -436,6 +508,9 @@ def _implementation(tool: str, value: Any, where: str, product: str = "raster") 
         value_precision=precision,
         extent=extent,
         outside_surface=outside,
+        artifact_bands=artifact_bands,
+        single_point_sd=single_point_sd,
+        percentile_rank=percentile_rank,
     )
 
 
@@ -633,20 +708,28 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
 
     ref = _table(top["reference"], "reference", {"method", "statistic"}, ("method",))
     method = _choice(ref["method"], "reference.method", REFERENCE_METHODS)
+    if method != "none":
+        if raster is None:
+            raise ContractError('point_cloud contracts require reference.method = "none"')
+        if population.points != "all":
+            raise ContractError(f'{method} references require population.points = "all"')
     if method == "cell_statistic":
         if "statistic" not in ref:
             raise ContractError("reference: missing required key(s) ['statistic']")
         statistic = _choice(ref["statistic"], "reference.statistic", STATISTICS)
-        if raster is None:
-            raise ContractError('point_cloud contracts require reference.method = "none"')
+        assert raster is not None
         if raster.band_count != 1:
             raise ContractError("cell_statistic references produce exactly one band")
-        if population.points != "all":
-            raise ContractError('cell_statistic references require population.points = "all"')
     else:
         if "statistic" in ref:
-            raise ContractError('reference.statistic is not allowed when method = "none"')
+            raise ContractError(f"reference.statistic is not allowed when method = {method!r}")
         statistic = ""
+    if method == "cell_metrics":
+        assert raster is not None
+        if not raster.bands:
+            raise ContractError("cell_metrics references need named raster.bands")
+        for i, band in enumerate(raster.bands):
+            _choice(band, f"raster.bands[{i}]", METRICS)
 
     if method == "none":
         if "tolerance" in top:
@@ -686,6 +769,31 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
                     f"implementations.{tool}.equivalence must be non_comparable: point_cloud "
                     "contracts define no numerical reference in this schema version"
                 )
+    for tool, impl in implementations.items():
+        if impl.single_point_sd is not None and (
+            method != "cell_metrics" or raster is None or "z_sd" not in raster.bands
+        ):
+            raise ContractError(
+                f"implementations.{tool}.single_point_sd needs a cell_metrics reference with "
+                "a z_sd band"
+            )
+        if impl.percentile_rank is not None and (
+            method != "cell_metrics"
+            or raster is None
+            or not any(b.startswith("z_p") for b in raster.bands)
+        ):
+            raise ContractError(
+                f"implementations.{tool}.percentile_rank needs a cell_metrics reference with "
+                "a percentile band"
+            )
+        if not impl.artifact_bands:
+            continue
+        bands = raster.bands if raster is not None else ()
+        if len(bands) < 2 or sorted(impl.artifact_bands) != sorted(bands):
+            raise ContractError(
+                f"implementations.{tool}.artifact_bands must list every one of the (two or "
+                f"more) raster.bands {list(bands)} exactly once"
+            )
     lowered = [t.lower() for t in implementations]
     if len(set(lowered)) != len(lowered):
         raise ContractError("implementations: tool names must differ by more than case")
@@ -760,6 +868,17 @@ def parse_contract(data: Mapping[str, Any], source: Path | None = None) -> Workl
                     else {}
                 ),
                 **({"extent": impl.extent} if impl.extent is not None else {}),
+                **({"artifact_bands": list(impl.artifact_bands)} if impl.artifact_bands else {}),
+                **(
+                    {"single_point_sd": impl.single_point_sd}
+                    if impl.single_point_sd is not None
+                    else {}
+                ),
+                **(
+                    {"percentile_rank": impl.percentile_rank}
+                    if impl.percentile_rank is not None
+                    else {}
+                ),
             }
             for tool, impl in implementations.items()
         },

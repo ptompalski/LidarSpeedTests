@@ -1,0 +1,81 @@
+# generate_DSM2 + pixel_metrics_2 pilot (workloads-v8), all four tools, 1 and 2 CPUs.
+# Edit the /path/to placeholders, then:
+#
+#   uv run lidarbench preflight configs/examples/dsm2-metrics2-pilot-campaign.toml
+#   uv run lidarbench run configs/examples/dsm2-metrics2-pilot-campaign.toml
+#   uv run lidarbench report WORKSPACE/campaigns/dsm2-metrics2-pilot-example-001 --mode performance-only
+#
+# pixel_metrics_2 (nine metrics at 20 m) has an independent per-band reference: lidR,
+# lasR and LAStools are validated (lasR and LAStools with the one-cell extent
+# exception, LAStools and lidR as functionally comparable); PDAL is skipped as
+# unsupported (writers.gdal has no percentiles). generate_DSM2 (first-return TIN at 1 m)
+# is structural-only, like generate_DEM: every tool is "unverified" and its timings
+# descriptive (performance-only reports). lasR's first-return TIN is not repeatable
+# near first returns sharing XY (~0.025 % of cells change between runs; WORKLOADS.md).
+# LAStools needs accept_known_duplicate_xy_warning for generate_DSM2 (blast2dem warns
+# when first returns share XY) and accept_known_cutoff_warning for pixel_metrics_2.
+# lidR reads every attribute, so use repaired inputs (data-check warnings fail the
+# attempt). lasR refuses inputs without .lax indexes.
+schema = "lidarbench.campaign-config/1"
+campaign_id = "dsm2-metrics2-pilot-example-001"
+description = "generate_DSM2 + pixel_metrics_2 pilot: lidR, lasR, LAStools, PDAL; 1-2 CPUs"
+workspace = "/path/to/lidarbench-pilot/workspace"
+validation_mode = "numerical"
+cpu_counts = [1, 2]
+timeout_s = 1800
+
+[scheduling]
+seed = 20261031
+repetitions = 3
+warmups = 1
+tool_order = "balanced"
+cooldown_s = 5.0
+cache_policy = "uncontrolled-warm"
+cpu_affinity = "pinned"
+
+[monitoring]
+enabled = true
+backend = "psutil"
+interval_s = 0.5
+required = true
+
+[scratch]
+roots = { local = "/path/to/lidarbench-pilot/scratch" }
+retain = "on-failure"
+
+[validation]
+# lasR and LAStools rasters extend one cell east/north of the tile; lidR crops to
+# the nearest grid line.
+accept_known_extent_discrepancies = true
+reuse_identical_outputs = true
+
+[integrity]
+record_output_digests = true
+verify_inputs_at_end = true
+
+[[datasets]]
+id = "pilot-pair"
+path = "/path/to/lidarbench-pilot/inputs/tile_1000_density_1"
+include = ["*.laz"]
+
+[[workloads]]
+id = "pixel_metrics_2"          # z_max, z_mean, z_sd, z_above2, z_p5..z_p95 at 20 m
+parameters = { epsg = 2959 }
+
+[[workloads]]
+id = "generate_DSM2"            # linear TIN of first returns, 1 m
+parameters = { epsg = 2959 }
+
+[[tools]]
+id = "lidr"
+
+[[tools]]
+id = "lasr"
+
+[[tools]]
+id = "lastools"
+options = { bin_dir = "/path/to/LAStools/bin", accept_known_cutoff_warning = true, accept_known_duplicate_xy_warning = true }
+
+[[tools]]
+id = "pdal"
+options = { executable = "/path/to/conda/envs/pdal/bin/pdal" }

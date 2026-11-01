@@ -19,7 +19,7 @@ unchanged:
 
 | Legacy piece | Use in the bridge |
 |---|---|
-| `R/1_functions.R` | `sys.source()`d into a private environment |
+| `R/1_functions.R` | `sys.source()`d into a private environment; `metrics_multiple()` is also assigned into the global environment, as the legacy harness had it, because lidR resolves the `pixel_metrics_2` formula's globals (`~metrics_multiple(Z)`) by name for its future workers |
 | `R/0_setup.R` `benchmark_tasks` | parsed, not run. Each cell of the `tribble()` literal is evaluated on its own in `baseenv()` to get the exact `task_call_lidR` / `task_call_lasR` string. |
 | `prepare_input()` | lidR catalog configuration: buffer 20, chunk 0, alignment (0, 0), `wall_to_wall = FALSE`, `{ORIGINALFILENAME}` outputs |
 | `benchmark_with_resources()` | reference-BLAS check, thread caps, `future` multisession or mirai (lidR), `concurrent_files` (lasR), cleanup |
@@ -308,14 +308,17 @@ declared equivalent.
 ## 10. Limitations
 
 - Only `pixel_metrics_1a`, `generate_DSM1`, (workloads-v6, structural
-  validation only, `non_comparable`) `generate_DEM` and (workloads-v7, LAZ
-  output, structural validation only) `normalization` are runnable, with the
-  legacy `R/0_setup.R` calls; lasR `normalization` is `diagnostic_only` (lasR ≤
-  0.21.3 writes NaN heights as corrupt Z). Other legacy tasks are declared
-  `unsupported` (no contract) or `blocked` (lasR TIN defects), with reasons.
-- lidR `normalization` reads every attribute, so `readLAS` data-check warnings
-  (for example invalid return numbers in the unrepaired pilot inputs) fail the
-  attempt (exit 3); use repaired inputs.
+  validation only, `non_comparable`) `generate_DEM`, (workloads-v7, LAZ
+  output, structural validation only) `normalization` and (workloads-v8)
+  `pixel_metrics_2` and `generate_DSM2` (structural validation only; lasR's
+  first-return TIN is not repeatable near duplicate XY) are runnable, with the
+  legacy `R/0_setup.R` calls (the lasR DSM2 call is the tribble literal, which
+  the legacy harness blanked at run time); lasR `normalization` is
+  `diagnostic_only` (lasR ≤ 0.21.3 writes NaN heights as corrupt Z). Other
+  legacy tasks are declared `unsupported` (no contract) or `blocked`, with reasons.
+- lidR reads every attribute (`select = "*"`) for every workload, so `LAS()`
+  data-check warnings (for example invalid return numbers 0 in the unrepaired
+  pilot inputs) fail the attempt (exit 3); use repaired inputs.
 - The lasR path does not check header CRS conflicts for a declared `epsg`
   (legacy behaviour).
 - The fake-`Rscript` tests use a POSIX shebang script and are skipped on

@@ -93,7 +93,7 @@ def test_trusted_digests_skip_hashing(tmp_path, monkeypatch):
 
 def test_reference_cache_is_byte_bounded_lru():
     def entry(n: int) -> TileReference:
-        return TileReference(1, ("a",), {"c": np.zeros(n)}, {"c": 1}, {"c": 0})
+        return TileReference(1, ("a",), {"c": {"": np.zeros(n)}}, {"c": 1}, {"c": 0})
 
     cache = ReferenceCache(max_bytes=8 * 100)
     cache.put(("a",), entry(50), 400)

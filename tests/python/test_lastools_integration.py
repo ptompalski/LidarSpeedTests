@@ -17,6 +17,10 @@ are at best ``unverified`` and never comparable with other tools.
 ground (class 2), where the exact heights are known: every input point is
 written once to its own tile, buffer points are not, heights are exact inside
 the ground TIN and extrapolated (kept, finite) outside it.
+
+The workloads-v8 calls run on the synthetic scene: the nine ``lascanopy64`` metric
+rasters must pass numerical validation, and ``blast2dem64 -keep_return 1`` must merge
+the scene's duplicate-XY pair under the explicit duplicate-XY opt-in.
 """
 
 from __future__ import annotations
@@ -34,7 +38,11 @@ from lidarbench.campaign.runner import CampaignRunner, RunOptions
 from lidarbench.config.campaign import load_config
 from lidarbench.core.platform import get_platform_info
 from lidarbench.execution.adapters import Invocation
-from lidarbench.execution.adapters.lastools import CUTOFF_EXCEPTION, LastoolsAdapter
+from lidarbench.execution.adapters.lastools import (
+    CUTOFF_EXCEPTION,
+    DUPLICATE_XY_EXCEPTION,
+    LastoolsAdapter,
+)
 from lidarbench.execution.adapters.registry import AdapterRegistry
 from lidarbench.execution.attempt import execute_plan
 from lidarbench.execution.plan import plan_invocation
@@ -310,3 +318,59 @@ def test_normalization_writes_exact_heights_per_tile(tmp_path):
         assert error[hull].max() <= 0.002  # exact inside the ground TIN, across the tile edge
         # Outside the ground TIN lasheight keeps the points with extrapolated heights.
         assert (~hull).any() and error[~hull].max() < 0.1
+
+
+# -- workloads-v8: pixel_metrics_2 (lascanopy64) and generate_DSM2 (blast2dem64) --------
+
+
+@pytest.mark.parametrize("workload", ["pixel_metrics_2", "generate_DSM2"])
+def test_v8_workloads_run_and_validate(tmp_path, workload):
+    pytest.importorskip("numpy")
+    pytest.importorskip("rasterio")
+    pytest.importorskip("laspy")
+    from lidarbench.validation import Policies, Status, ValidationRequest, validate_outputs
+    from lidarbench.workloads import default_suite_dir, load_suite
+
+    adapter = LastoolsAdapter(
+        accept_known_cutoff_warning=True, accept_known_duplicate_xy_warning=True
+    )
+    availability = adapter.probe(PLATFORM)
+    if not availability.available:
+        pytest.skip(f"LAStools unavailable: {availability.detail}")
+    if adapter.support_for(workload, 2).status.value != "runnable":
+        pytest.skip(f"LAStools installation lacks the {workload} command")
+    dirs = [tmp_path / n for n in ("lidar inputs", "out dir", "work", "attempt")]
+    neighbour_scene(dirs[0])
+    for path in dirs[1:]:
+        path.mkdir()
+    inputs = tuple(sorted(dirs[0].glob("*.las")))
+    inv = Invocation(workload, inputs, dirs[1], dirs[2], threads=2, parameters={"epsg": EPSG})
+    plan = plan_invocation(adapter, inv, availability=availability)
+    assert plan.ready, plan.reason
+    execution = execute_plan(plan, inv, dirs[3], timeout_s=300, adapter=adapter)
+    assert str(execution.execution_status) == "succeeded", execution.failure_reason
+    report = validate_outputs(
+        ValidationRequest(
+            contract=load_suite(default_suite_dir()).get(workload),
+            tool="lastools",
+            inputs=inputs,
+            output_dir=dirs[1],
+            expected_epsg=EPSG,
+            policies=Policies(accept_known_extent_discrepancies=True),
+        )
+    )
+    v = report.verdicts
+    assert v.structural.status is Status.PASSED, v.structural.reasons
+    if workload == "pixel_metrics_2":
+        # The scene's negative elevation drives the all-point cutoff warning; every one
+        # of the nine single-band files matches its reference band (Z > 2 fraction,
+        # n - 1 sd, type-7 percentiles; cm-rounded avg/std) under the declared cell rule.
+        assert execution.accepted_exception["name"] == CUTOFF_EXCEPTION
+        assert v.numerical.status is Status.PASSED, v.numerical.reasons
+        assert len(report.artifacts) == 18
+    else:
+        # The scene's duplicate-XY pair is merged by blast2dem's triangulator.
+        assert execution.accepted_exception["name"] == DUPLICATE_XY_EXCEPTION
+        assert v.numerical.status is Status.UNSUPPORTED  # structural-only contract
+        argv = plan.command.argv
+        assert argv[argv.index("-keep_return") + 1] == "1"

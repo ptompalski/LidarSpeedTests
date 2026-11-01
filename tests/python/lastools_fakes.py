@@ -17,7 +17,8 @@ fail      exits 3
 
 ============= ==================================================================
 ok            writes ``<stem><suffix>.tif`` and a ``.tfw`` per input (``<stem>.laz``
-              and no sidecar with ``-olaz``), exits 0
+              and no sidecar with ``-olaz``; nine ``_max`` … ``_p95`` rasters for a
+              lascanopy call with ``-max``), exits 0
 cutoff1       outputs plus the documented lascanopy cutoff warning, exits 1
               (``cutoff*`` modes act like ``ok`` for commands without a cutoff)
 cutoff0       the same warning with exit 0 (multi-core parent)
@@ -31,6 +32,9 @@ child         the last tile's output is missing, exits 0 (hidden child failure)
 empty         the last tile's output has zero bytes, exits 0
 unlicensed    outputs plus an unlicensed notice, exits 0
 crash         exits 139 without outputs
+duplicates    outputs plus blast2dem's ``WARNING: set nverts 10 but v_count 8`` per
+              tile (other commands: like ``ok``), exits 0
+duplicatesbad the same line with ``v_count`` equal to ``nverts``, exits 0
 ============= ==================================================================
 
 Every invocation appends its argv (JSON) to ``FAKE_LASTOOLS_LOG`` when set.
@@ -77,12 +81,17 @@ while end < len(args) and not args[end].startswith("-"):
     end += 1
 inputs = args[start:end]
 odir = Path(args[args.index("-odir") + 1])
-suffix = "_avg" if command.startswith("lascanopy") else ""
+if command.startswith("lascanopy") and "-max" in args:
+    suffixes = ["_max", "_avg", "_std", "_dns", "_p05", "_p25", "_p50", "_p75", "_p95"]
+else:
+    suffixes = ["_avg"] if command.startswith("lascanopy") else [""]
 laz = "-olaz" in args
 extension, payload = (".laz", b"LASF fake laz") if laz else (".tif", b"II*\x00fake tiff")
 cutoff = args[args.index("-height_cutoff") + 1] if "-height_cutoff" in args else None
 if mode.startswith("cutoff") and cutoff is None:
     mode = "ok"  # only lascanopy has a height cutoff
+if mode.startswith("duplicates") and not command.startswith("blast2dem"):
+    mode = "ok"  # only blast2dem triangulates
 
 def write(path, data):
     path.write_bytes(data)
@@ -95,11 +104,16 @@ if mode in ("fatal3", "crash"):
 
 for i, tile in enumerate(inputs):
     last = i == len(inputs) - 1
-    target = odir / f"{Path(tile).stem}{suffix}{extension}"
     if mode == "child" and last:
         print(f"child process for {Path(tile).name} exited", file=sys.stderr)
         continue
-    write(target, b"" if mode == "empty" and last else payload)
+    for suffix in suffixes:
+        target = odir / f"{Path(tile).stem}{suffix}{extension}"
+        write(target, b"" if mode == "empty" and last else payload)
+    if mode.startswith("duplicates"):
+        merged = 10 if mode == "duplicatesbad" else 8
+        print("read 10 points. produced TIN with 8 vertices and 9 triangles", file=sys.stderr)
+        print(f"WARNING: set nverts 10 but v_count {merged}", file=sys.stderr)
     if mode.startswith("cutoff"):
         named = "/elsewhere/other.las" if mode == "cutoffbad" else tile
         print(f"WARNING: z coordinates range from {float(cutoff) + 2.5} to 99.5 for '{named}'",

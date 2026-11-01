@@ -45,6 +45,7 @@ from lidarbench.execution.adapters.pdal import (
     WORKER_MODULE,
     WORKLOADS,
     PdalAdapter,
+    PdalWorkload,
     ProbeError,
     TileGrid,
     buffered_neighbours,
@@ -174,7 +175,8 @@ def test_declared_classification_of_every_tool():
         assert contract.declared_comparability("lasR") == "strictly_comparable"
         assert contract.declared_comparability("lidR") == "functionally_comparable"
         assert contract.declared_comparability("lastools") == "functionally_comparable"
-        assert contract.declared_comparability("pdal") == "functionally_comparable"
+        pdal = "unsupported" if contract.id == "pixel_metrics_2" else "functionally_comparable"
+        assert contract.declared_comparability("pdal") == pdal
         assert contract.declared_comparability("unknown") == "unsupported"
 
 
@@ -470,7 +472,8 @@ def test_plan_with_spaces_and_metacharacters(pdal, layout):
         ({"parameters": {"epsg": "2959"}}, "positive integer"),
         ({"parameters": {"epsg": True}}, "positive integer"),
         ({"parameters": {"res": 2.0}}, "does not accept"),
-        ({"workload_id": "generate_DSM2"}, "no workloads-v2 contract"),
+        ({"workload_id": "pixel_metrics_2"}, "no percentiles"),
+        ({"workload_id": "tree_detection"}, "no workloads-v2 contract"),
     ],
 )
 def test_unsupported_combinations(pdal, layout, change, text):
@@ -576,6 +579,21 @@ def test_execute_plan_and_validate_independently(pdal, layout, monkeypatch, work
     assert impl["declared_comparability"] == "functionally_comparable"
 
 
+def _first_return_scene(layout) -> None:
+    """Two 100 m tiles of first returns at 150 m and second returns at 140 m to drop."""
+    from validation_fixtures import X0, Y0
+
+    for name, x0 in (("west tile", X0), ("east tile", X0 + 100.0)):
+        xs, ys, zs, returns = [], [], [], []
+        for i in range(21):
+            for j in range(21):
+                xs += [x0 + 5.0 * i, x0 + 5.0 * i + 0.5]
+                ys += [Y0 + 5.0 * j, Y0 + 5.0 * j + 0.5]
+                zs += [150.0, 140.0]
+                returns += [(1, 2), (2, 2)]
+        write_las(layout["inputs"] / f"{name}.las", xs, ys, zs, returns=returns)
+
+
 def _ground_scene(layout) -> None:
     """Two 100 m tiles of ground (2) and water (9) points plus vegetation (1) to drop."""
     from validation_fixtures import X0, Y0
@@ -645,6 +663,66 @@ def test_dem_needs_the_tin_stages(pdal, layout, monkeypatch):
     assert plan.status is PlanStatus.SKIPPED_UNSUPPORTED and "filters.delaunay" in plan.reason
     plan = plan_invocation(adapter, _invocation(layout, "generate_DSM1"), adapter.probe(PLATFORM))
     assert plan.ready, plan.reason
+
+
+def test_dsm2_pipeline_is_an_untrimmed_first_return_tin(pdal, layout):
+    _first_return_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, "generate_DSM2", epsg=EPSG)
+    _, (_, _, west) = adapter.pipelines(inv)
+    dem = adapter.pipelines(replace(inv, workload_id="generate_DEM"))[1][2]
+    assert [s["type"] for s in west["pipeline"]] == [s["type"] for s in dem["pipeline"]]
+    by_type = {s["type"]: s for s in west["pipeline"]}
+    assert by_type["filters.range"]["limits"] == "ReturnNumber[1:1]"
+    assert "max_triangle_edge_length" not in by_type["filters.faceraster"]  # PDAL: no limit
+    meta = plan_invocation(adapter, inv, adapter.probe(PLATFORM)).metadata
+    assert meta["point_filter"] == "ReturnNumber[1:1]" and meta["classes"] is None
+    assert meta["max_triangle_edge_length"] is None and meta["execution_mode"] == "standard"
+    contract = SUITE.get("generate_DSM2")
+    impl = contract.implementation(PdalAdapter.contract_tool)
+    assert impl is not None and impl.artifacts == (WORKLOADS["generate_DSM2"].artifact_pattern,)
+    assert contract.population.points == "first_returns" and not contract.has_reference
+    assert contract.declared_comparability("pdal") == "non_comparable"
+    with pytest.raises(ValueError, match="first_returns"):
+        PdalWorkload("x", "", 1.0, method="tin", classes=(2,), first_returns=True)
+    with pytest.raises(ValueError, match="first_returns"):
+        PdalWorkload("x", "mean", 1.0, first_returns=True)
+
+
+@pytest.mark.platform
+@needs_posix
+def test_dsm2_runs_standard_and_validates_structurally(pdal, layout, monkeypatch):
+    pytest.importorskip("rasterio")
+    pytest.importorskip("laspy")
+    import numpy as np
+
+    from lidarbench.validation.io import read_raster
+    from lidarbench.validation.pipeline import ValidationRequest, validate_outputs
+    from lidarbench.validation.status import Outcome, Status
+
+    fake_env(monkeypatch, "ok")
+    _first_return_scene(layout)
+    adapter = _adapter(pdal)
+    inv = _invocation(layout, "generate_DSM2", epsg=EPSG)
+    plan = plan_invocation(adapter, inv, availability=adapter.probe(PLATFORM))
+    assert plan.ready, plan.reason
+    execution = execute_plan(plan, inv, layout["attempt"], timeout_s=120, adapter=adapter)
+    record = json.loads((layout["attempt"] / "execution.json").read_text(encoding="utf-8"))
+    assert str(execution.execution_status) == "succeeded", record["failure_reason"]
+    raster = read_raster(inv.output_dir / "west tile.tif")
+    # The fake rasterizes the mean Z of the kept points: only first returns (150 m) count.
+    assert np.nanmax(raster.values) == np.nanmin(raster.values) == 150.0
+    v = validate_outputs(
+        ValidationRequest(
+            contract=SUITE.get("generate_DSM2"),
+            tool="pdal",
+            inputs=inv.inputs,
+            output_dir=inv.output_dir,
+            expected_epsg=EPSG,
+        )
+    ).verdicts
+    assert v.structural.status is Status.PASSED, v.structural.reasons
+    assert v.numerical.status is Status.UNSUPPORTED and v.outcome is Outcome.UNVERIFIED
 
 
 def test_dem_contract_is_structural_only():

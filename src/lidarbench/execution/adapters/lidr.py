@@ -86,6 +86,22 @@ class LidRAdapter(RBridgeAdapter):
                 ),
                 buffer=20.0,
             ),
+            "pixel_metrics_2": RWorkload(
+                "pixel_metrics_2",
+                call=(
+                    "lidR::pixel_metrics(las = ctg, ~metrics_multiple(Z), res = 20, "
+                    "start = c(0, 0))"
+                ),
+                buffer=20.0,
+            ),
+            "generate_DSM2": RWorkload(
+                "generate_DSM2",
+                call=(
+                    "lidR::rasterize_canopy(ctg, res = 1, algorithm = dsmtin(max_edge = 0, "
+                    "highest = FALSE))"
+                ),
+                buffer=20.0,
+            ),
             "normalization": RWorkload(
                 "normalization",
                 call="lidR::normalize_height(las = ctg, algorithm = tin(), use_class = c(2L, 9L))",
@@ -99,11 +115,7 @@ class LidRAdapter(RBridgeAdapter):
     other_workloads = (
         *(
             WorkloadSupport(w, ImplementationStatus.UNSUPPORTED, reason=_NOT_PORTED)
-            for w in (
-                "pixel_metrics_2",
-                "generate_DSM2",
-                "tree_detection",
-            )
+            for w in ("tree_detection",)
         ),
         *(
             WorkloadSupport(

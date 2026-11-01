@@ -119,7 +119,9 @@ class TileReference:
 
     population_points: int
     population_sources: tuple[str, ...]
-    references: dict[str, Any]
+    references: dict[str, dict[str, Any]]
+    """Per reference key (:func:`reference_key`): reference array per band (key ``""`` for
+    a single unnamed band)."""
     owned_points: dict[str, int]
     boundaries: dict[str, int]
     """Points owned by a different cell than under the contract convention, per convention."""
@@ -129,9 +131,9 @@ class TileReference:
     @property
     def nbytes(self) -> int:
         """Approximate memory use."""
-        return sum(int(r.nbytes) for r in self.references.values()) + sum(
-            int(c.nbytes) for c in self.counts.values()
-        )
+        return sum(
+            int(r.nbytes) for bands in self.references.values() for r in bands.values()
+        ) + sum(int(c.nbytes) for c in self.counts.values())
 
 
 def _cell_counts(cells: Any, grid: Any) -> Any:
@@ -141,38 +143,89 @@ def _cell_counts(cells: Any, grid: Any) -> Any:
     return np.bincount(owned, minlength=grid.size).astype(np.int32).reshape(grid.shape)
 
 
+def reference_bands(contract: WorkloadContract) -> tuple[str, ...]:
+    """Band keys of a contract's references (``("",)`` for one unnamed statistic band)."""
+    if contract.reference_method == "cell_metrics":
+        return contract.require_raster().bands
+    bands = contract.require_raster().bands
+    return bands if bands else ("",)
+
+
+def reference_key(convention: str, implementation: Implementation | None = None) -> str:
+    """Key of a reference: the cell convention plus the implementation's declared
+    ``cell_metrics`` variants (``single_point_sd``, ``percentile_rank``), if any."""
+    variants = []
+    if implementation is not None and implementation.single_point_sd is not None:
+        variants.append(f"single_point_sd={implementation.single_point_sd}")
+    if implementation is not None and implementation.percentile_rank is not None:
+        variants.append(f"percentile_rank={implementation.percentile_rank}")
+    return "|".join((convention, *variants))
+
+
+def _parse_key(key: str) -> tuple[str, dict[str, str]]:
+    convention, *variants = key.split("|")
+    return convention, dict(v.split("=", 1) for v in variants)
+
+
+def _band_references(
+    population: Any, cells: Any, grid: Any, contract: WorkloadContract, variants: dict[str, str]
+):
+    from lidarbench.validation.reference import cell_metrics, cell_statistic
+
+    if contract.reference_method == "cell_metrics":
+        return cell_metrics(
+            population.z,
+            cells,
+            grid,
+            contract.require_raster().bands,
+            single_point_sd=variants.get("single_point_sd"),
+            percentile_rank=variants.get("percentile_rank"),
+        )
+    (band,) = reference_bands(contract)
+    return {band: cell_statistic(population.z, cells, grid, contract.statistic)}
+
+
 def tile_reference(
-    population: Any, grid: Any, contract: WorkloadContract, conventions: Iterable[str]
+    population: Any, grid: Any, contract: WorkloadContract, keys: Iterable[str]
 ) -> TileReference:
-    """Compute the contract-convention reference plus one per extra declared convention."""
+    """Compute the contract-convention reference plus one per extra reference key
+    (:func:`reference_key`: a declared convention, optionally with declared variants)."""
     from lidarbench.validation.grid import assign_cells, ownership_differences
-    from lidarbench.validation.reference import cell_statistic
 
     base = contract.require_raster().cell_ownership
     contract_cells = assign_cells(population.x, population.y, grid, base)
     out = TileReference(
         population.count,
         tuple(population.sources),
-        {base: cell_statistic(population.z, contract_cells, grid, contract.statistic)},
+        {base: _band_references(population, contract_cells, grid, contract, {})},
         {base: int((contract_cells >= 0).sum())},
         {base: 0},
         {base: _cell_counts(contract_cells, grid)},
     )
-    for convention in sorted(set(conventions) - {base}):
-        cells = assign_cells(population.x, population.y, grid, convention)
-        out.references[convention] = cell_statistic(population.z, cells, grid, contract.statistic)
-        out.owned_points[convention] = int((cells >= 0).sum())
-        out.boundaries[convention] = ownership_differences(cells, contract_cells)
-        out.counts[convention] = _cell_counts(cells, grid)
+    cells_by_convention = {base: contract_cells}
+    for key in sorted(set(keys) - {base}):
+        convention, variants = _parse_key(key)
+        cells = cells_by_convention.get(convention)
+        if cells is None:
+            cells = assign_cells(population.x, population.y, grid, convention)
+            cells_by_convention[convention] = cells
+            out.owned_points[convention] = int((cells >= 0).sum())
+            out.boundaries[convention] = ownership_differences(cells, contract_cells)
+            out.counts[convention] = _cell_counts(cells, grid)
+        out.references[key] = _band_references(population, cells, grid, contract, variants)
     return out
 
 
 def declared_conventions(contract: WorkloadContract) -> set[str]:
-    """Every declared cell convention of the contract and its implementations."""
-    found = {contract.require_raster().cell_ownership}
-    found.update(
-        impl.cell_ownership for impl in contract.implementations.values() if impl.ownership_declared
-    )
+    """Every reference key the contract and its implementations declare: each declared
+    cell convention, and for implementations with declared variants also those variants
+    under their own and under the contract convention."""
+    base = contract.require_raster().cell_ownership
+    found = {base}
+    for impl in contract.implementations.values():
+        found.add(reference_key(base, impl))
+        if impl.ownership_declared:
+            found.add(reference_key(impl.cell_ownership, impl))
     return found
 
 
@@ -210,12 +263,14 @@ class CellStatisticValidator:
         import numpy as np
 
         from lidarbench.validation.population import InputError
-        from lidarbench.validation.reference import compare_band
+        from lidarbench.validation.reference import Comparison, compare_band
 
         grid = structure.expected_grid
         declared = implementation.ownership_declared
         base = contract.require_raster().cell_ownership
         convention = implementation.cell_ownership if declared else base
+        key_used = reference_key(convention, implementation)
+        base_key = reference_key(base, implementation)
         try:
             entry: TileReference | None = None
             key: tuple[Any, ...] | None = None
@@ -229,60 +284,75 @@ class CellStatisticValidator:
             cache_state = "disabled" if self.cache is None else "hit"
             if entry is None:
                 population = loader.population(artifact.tile)
-                wanted = declared_conventions(contract) if self.cache else {base, convention}
+                wanted = (
+                    declared_conventions(contract) if self.cache else {base, key_used, base_key}
+                )
                 entry = tile_reference(population, grid, contract, wanted)
                 if self.cache is not None and key is not None:
                     self.cache.put(key, entry, entry.nbytes)
                     cache_state = "miss"
         except InputError as exc:
             return ArtifactNumerical(Status.FAILED, [f"input cannot support a reference: {exc}"])
-        statistic = contract.statistic
         tolerance = contract.tolerance
         if implementation.value_precision is not None:
             # The tool declares that it rounds values to this quantum (contract-level).
             tolerance = replace(
                 tolerance, absolute=tolerance.absolute + implementation.value_precision / 2
             )
-        contract_ref = entry.references[base]
-        reference = entry.references[convention]
+        bands = implementation.bands_of(artifact.tile, artifact.name, reference_bands(contract))
+        contract_refs = entry.references[base_key]
+        references = entry.references[key_used]
         boundary: int | None = entry.boundaries[convention] if declared else None
         trimmed: dict[str, Any] | None = None
         compare_grid = grid
         if structure.inset is not None:
             # Declared inward extent rule: compare the covered cells; count what was cut.
             counts = entry.counts[convention]
-            dropped = int(counts.sum()) - int(structure.covered(counts).sum())
-            lost_cells = int((~np.isnan(reference)).sum()) - int(
-                (~np.isnan(structure.covered(reference))).sum()
-            )
+            covered_counts = structure.covered(counts)
+            dropped = int(counts.sum()) - int(covered_counts.sum())
+            lost_cells = int((counts > 0).sum()) - int((covered_counts > 0).sum())
             trimmed = {
                 "rule": implementation.extent,
                 "cells_wesn": list(structure.trimmed),
                 "dropped_points": dropped,
                 "occupied_cells_cut": lost_cells,
             }
-            reference = structure.covered(reference)
-            contract_ref = structure.covered(contract_ref)
+            references = {b: structure.covered(r) for b, r in references.items()}
+            contract_refs = {b: structure.covered(r) for b, r in contract_refs.items()}
             compare_grid = structure.actual_grid
             if boundary is not None:
                 boundary += dropped
 
-        dtype = np.dtype(raster.dtypes[0])
-        nodata = raster.nodata[0]
-        sentinels = tuple(contract.require_raster().forbidden_values)
-        if nodata is not None and not np.isnan(nodata):
-            sentinels = (*sentinels, float(nodata))
-        actual = (
-            raster.values[0] if structure.inset is not None else structure.core(raster.values[0])
-        )
-        encode = dtype.type if dtype.kind == "f" else None
-        primary = compare_band(
-            actual, reference, tolerance, compare_grid, tuple(sorted(set(sentinels))), encode
-        )
+        forbidden = tuple(contract.require_raster().forbidden_values)
+        comparisons: dict[str, Comparison] = {}
+        versus_contract: dict[str, Comparison] = {}
+        for index, band in enumerate(bands):
+            dtype = np.dtype(raster.dtypes[index])
+            nodata = raster.nodata[index]
+            sentinels = forbidden
+            if nodata is not None and not np.isnan(nodata):
+                sentinels = (*sentinels, float(nodata))
+            values = raster.values[index]
+            actual = values if structure.inset is not None else structure.core(values)
+            encode = dtype.type if dtype.kind == "f" else None
+            comparisons[band] = compare_band(
+                actual,
+                references[band],
+                tolerance,
+                compare_grid,
+                tuple(sorted(set(sentinels))),
+                encode,
+            )
+            if declared and implementation.cell_ownership != base:
+                versus_contract[band] = compare_band(
+                    actual, contract_refs[band], tolerance, compare_grid
+                )
+        single = len(bands) == 1
         detail: dict[str, Any] = {
             "reference": {
                 "method": f"{self.name}/{self.version}",
-                "statistic": statistic,
+                "statistic": contract.statistic or contract.reference_method,
+                **({} if single else {"bands": list(bands)}),
                 "accumulation": "float64",
                 "convention": convention,
                 "population_points": entry.population_points,
@@ -296,24 +366,62 @@ class CellStatisticValidator:
                 "contract_absolute": contract.tolerance.absolute,
                 "value_precision": implementation.value_precision,
             },
-            "comparison": primary.to_record(),
+            "comparison": (
+                comparisons[bands[0]].to_record()
+                if single
+                else {
+                    "passed": all(c.passed for c in comparisons.values()),
+                    "bands": {b: c.to_record() for b, c in comparisons.items()},
+                }
+            ),
         }
         if trimmed is not None:
             detail["trimmed_extent"] = trimmed
-        if declared and implementation.cell_ownership != base:
-            versus_contract = compare_band(actual, contract_ref, tolerance, compare_grid)
+        declared_notes: list[str] = []
+        declared_record: dict[str, Any] = {}
+        if implementation.single_point_sd is not None and "z_sd" in bands:
+            cell_counts = entry.counts[convention]
+            if structure.inset is not None:
+                cell_counts = structure.covered(cell_counts)
+            single_cells = int((cell_counts == 1).sum())
+            declared_record["single_point_sd"] = {
+                "value": implementation.single_point_sd,
+                "single_point_cells": single_cells,
+            }
+            if single_cells:
+                declared_notes.append(
+                    f"{single_cells} single-point cell(s) compared with z_sd = 0 (declared "
+                    f"single_point_sd = {implementation.single_point_sd}; the contract has "
+                    "NoData there)"
+                )
+        if implementation.percentile_rank is not None and any(b.startswith("z_p") for b in bands):
+            declared_record["percentile_rank"] = implementation.percentile_rank
+            declared_notes.append(
+                "percentiles compared with the declared type-7 rank arithmetic "
+                f"(percentile_rank = {implementation.percentile_rank})"
+            )
+        if declared_record:
+            detail["reference"]["declared"] = declared_record
+        if versus_contract:
             detail["contract_convention_comparison"] = {
                 "convention": base,
-                "passed": versus_contract.passed,
-                "mask_differences": versus_contract.mask_differences,
-                "values_exceeding_tolerance": versus_contract.values_exceeding_tolerance,
+                "passed": all(c.passed for c in versus_contract.values()),
+                "mask_differences": sum(c.mask_differences for c in versus_contract.values()),
+                "values_exceeding_tolerance": sum(
+                    c.values_exceeding_tolerance for c in versus_contract.values()
+                ),
             }
 
-        reasons = primary.problems()
-        if primary.sentinel_collisions:
+        reasons = [
+            problem if single else f"{band}: {problem}"
+            for band, comparison in comparisons.items()
+            for problem in comparison.problems()
+        ]
+        passed = all(c.passed for c in comparisons.values())
+        if any(c.sentinel_collisions for c in comparisons.values()):
             return ArtifactNumerical(Status.FAILED, reasons, boundary, detail)
         if not declared:
-            verdict = "agrees" if primary.passed else "does not agree"
+            verdict = "agrees" if passed else "does not agree"
             return ArtifactNumerical(
                 Status.UNVERIFIED,
                 [
@@ -324,13 +432,14 @@ class CellStatisticValidator:
                 boundary,
                 detail,
             )
-        if not primary.passed:
+        if not passed:
             return ArtifactNumerical(Status.FAILED, reasons, boundary, detail)
         if implementation.value_precision is not None:
             reasons.append(
                 f"values compared within the declared output precision of "
                 f"{implementation.value_precision} (tolerance widened by half of it)"
             )
+        reasons.extend(declared_notes)
         if boundary:
             reasons.append(
                 f"{boundary} point(s) are owned by a different cell under "
@@ -358,7 +467,27 @@ class CellStatisticValidator:
         return ArtifactNumerical(Status.PASSED, reasons, boundary, detail)
 
 
-BUILTIN_VALIDATORS: tuple[type[CellStatisticValidator], ...] = (CellStatisticValidator,)
+class CellMetricsValidator(CellStatisticValidator):
+    """Independent per-cell metrics (``METRICS``) of original Z, one reference per band.
+
+    Same population, cell conventions, extent rules and tolerance handling as
+    :class:`CellStatisticValidator`; every band of the artifact (or the single band of
+    a per-band artifact, ``Implementation.artifact_bands``) is compared with its own
+    reference, and the artifact passes only if every band does.
+    """
+
+    name = "cell-metrics"
+    version = "1"
+
+    def applicable(self, contract: WorkloadContract) -> bool:
+        """Contracts with ``reference.method = "cell_metrics"``."""
+        return contract.reference_method == "cell_metrics"
+
+
+BUILTIN_VALIDATORS: tuple[type[CellStatisticValidator], ...] = (
+    CellStatisticValidator,
+    CellMetricsValidator,
+)
 
 
 def discover_validators() -> tuple[list[ReferenceValidator], list[str]]:
