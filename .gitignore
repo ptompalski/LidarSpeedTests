@@ -99,3 +99,4 @@ env/
 *.swp
 *.swo
 *~
+MIGRATION_PLAN.md

@@ -152,7 +152,7 @@ Task 9 acceptance criteria:
 - [x] Missing or too-old PDAL is `skipped_unavailable` with a reason; nothing is installed.
 - [x] Tests cover discovery, version/capability checks, pipeline generation (spaces, non-ASCII, Windows separators), failures, a campaign run and independent validation of rasters from a fake `pdal`. Optional real-PDAL tests are in `tests/python/test_pdal_integration.py`.
 - [x] Both workloads are classified *functionally comparable* (upward-Y edge rule); the other legacy workloads are *unsupported* with reasons.
-- [ ] Real-PDAL integration tests run on a machine with PDAL (none installed in the development environment).
+- [x] Real-PDAL integration tests run on a machine with PDAL (PDAL 2.10.2 from conda-forge on Linux; outputs numerically validated).
 - [ ] Verified natively on Windows and macOS.
 
 **Key tasks**:
