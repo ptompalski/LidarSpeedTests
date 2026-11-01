@@ -830,6 +830,11 @@ def _duplicates(merged: int = 8, total: int = 10) -> str:
         ("/x/blast2dem64", "WARNING: set nverts 10 but v_count 11", False),
         ("/x/blast2dem64", "WARNING: set nverts 10 but v_count 0", False),
         ("/x/blast2dem64", "WARNING: set nverts 10 but v_count 8 (more)", False),
+        ("/x/blast2dem64", "WARNING: there were 1 duplicate rasters", True),
+        ("/x/blast2dem64", "WARNING: there were 32 duplicate rasters", True),
+        ("/x/blast2dem64", "WARNING: there were 0 duplicate rasters", False),
+        ("/x/blast2dem64", "WARNING: there were 1 duplicate rasters!", False),
+        ("/x/las2dem64", "WARNING: there were 1 duplicate rasters", False),
         ("/x/las2dem64", "WARNING: set nverts 10 but v_count 8", False),
         ("/x/lascanopy64", "WARNING: set nverts 10 but v_count 8", False),
     ],
@@ -974,7 +979,8 @@ def test_opted_in_duplicate_xy_warning_is_a_named_exception(
     assert str(execution.execution_status) == "succeeded", record["failure_reason"]
     exception = record["accepted_exception"]
     assert exception["name"] == DUPLICATE_XY_EXCEPTION and exception["exit_code"] == 0
-    assert exception["policy"] == DUPLICATE_XY_POLICY and len(exception["evidence"]) == 2
+    assert exception["policy"] == DUPLICATE_XY_POLICY and len(exception["evidence"]) == 3
+    assert "WARNING: there were 1 duplicate rasters" in exception["evidence"]
 
 
 @pytest.mark.platform

@@ -33,7 +33,8 @@ empty         the last tile's output has zero bytes, exits 0
 unlicensed    outputs plus an unlicensed notice, exits 0
 crash         exits 139 without outputs
 duplicates    outputs plus blast2dem's ``WARNING: set nverts 10 but v_count 8`` per
-              tile (other commands: like ``ok``), exits 0
+              tile and one ``WARNING: there were 1 duplicate rasters`` (other
+              commands: like ``ok``), exits 0
 duplicatesbad the same line with ``v_count`` equal to ``nverts``, exits 0
 ============= ==================================================================
 
@@ -114,6 +115,8 @@ for i, tile in enumerate(inputs):
         merged = 10 if mode == "duplicatesbad" else 8
         print("read 10 points. produced TIN with 8 vertices and 9 triangles", file=sys.stderr)
         print(f"WARNING: set nverts 10 but v_count {merged}", file=sys.stderr)
+        if i == 0 and mode == "duplicates":
+            print("WARNING: there were 1 duplicate rasters", file=sys.stderr)
     if mode.startswith("cutoff"):
         named = "/elsewhere/other.las" if mode == "cutoffbad" else tile
         print(f"WARNING: z coordinates range from {float(cutoff) + 2.5} to 99.5 for '{named}'",

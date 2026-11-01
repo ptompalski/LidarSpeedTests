@@ -545,9 +545,11 @@ identical in every run, and 0.02–0.03 % of cells differed from lidR by more th
 LAStools has no legacy call: the contract pins `blast2dem64` with the
 generate_DEM arguments and `-keep_return 1` instead of `-keep_class 2 9`
 (`-first_only` would also keep the invalid return number 0). Its triangulator merges
-first returns with identical XY and warns `set nverts N but v_count M`. The attempt is
-accepted only with the opt-in LAStools option `accept_known_duplicate_xy_warning`, as
-the named exception `blast2dem_duplicate_xy_points_merged`. PDAL uses the DEM pipeline
+first returns with identical XY and warns `set nverts N but v_count M`; its
+rasterization may also warn `there were N duplicate rasters` (one Petawawa d10 tile of
+100). The attempt is accepted only with the opt-in LAStools option
+`accept_known_duplicate_xy_warning`, as the named exception
+`blast2dem_duplicate_xy_points_merged`. PDAL uses the DEM pipeline
 with `filters.range ReturnNumber[1:1]` and PDAL's default unlimited
 `max_triangle_edge_length`.
 

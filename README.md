@@ -118,7 +118,7 @@ the binaries' SHA-256, never the banner's licensing text. Nonzero exits,
 `ERROR`/`FATAL` lines, unlicensed notices, unrecognized warnings and missing
 outputs fail the attempt. The documented `lascanopy` cutoff warning is
 accepted only with `accept_known_cutoff_warning = true` (default `false`), and
-blast2dem's duplicate-XY warning for `generate_DSM2` only with
+blast2dem's duplicate-XY and duplicate-raster warnings for `generate_DSM2` only with
 `accept_known_duplicate_xy_warning = true` (default `false`). The `workloads-v8`
 contracts add `pixel_metrics_2` (nine metrics: lidR, lasR, LAStools; PDAL has no
 percentile statistic) and the first-return TIN `generate_DSM2` (all four tools;

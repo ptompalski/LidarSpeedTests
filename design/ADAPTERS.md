@@ -341,10 +341,14 @@ to the `pixel_metrics_2` `lascanopy64` call.
 default `false`, part of the campaign identity) declares
 `blast2dem_duplicate_xy_points_merged` for `generate_DSM2` only. blast2dem's
 triangulator merges points with identical XY into one vertex and prints
-`WARNING: set nverts N but v_count M`. Only that exact line from `blast2dem`/
-`blast2dem64` with `0 < M < N` is recognized, only with raw status 0. The recorded
-policy is `lastools.accept_known_duplicate_xy_warning`. First returns share XY
-often (every Petawawa tile in the pilot), so a DSM2 campaign needs the option.
+`WARNING: set nverts N but v_count M`; its rasterization can also print
+`WARNING: there were N duplicate rasters`. Only those exact lines from `blast2dem`/
+`blast2dem64` (with `0 < M < N`, resp. `N > 0`) are recognized, only with raw status
+0. The recorded policy is `lastools.accept_known_duplicate_xy_warning`. First returns
+share XY often (every Petawawa tile in the pilot), so a DSM2 campaign needs the
+option. The duplicate-raster line was added after the first d10 campaign
+(`petawawa-d10-v8-20261031-001`): one of 100 tiles printed it in three of the four
+runs, which failed them although the rasters passed every structural check.
 
 **Validation.** Up to `workloads-v3` the contracts declare LAStools
 `non_comparable` with `undeclared` cell ownership, so its outputs are at best

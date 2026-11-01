@@ -33,7 +33,8 @@ named exception with the raw exit status:
 * the ``lascanopy`` all-values-above-the-height-cutoff warning (tool option
   ``accept_known_cutoff_warning``; the pixel metrics only);
 * the ``blast2dem`` triangulator's ``WARNING: set nverts N but v_count M`` with
-  ``M < N``: points with identical XY were merged into one TIN vertex (tool option
+  ``M < N``: points with identical XY were merged into one TIN vertex, and its
+  rasterization's ``WARNING: there were N duplicate rasters`` (tool option
   ``accept_known_duplicate_xy_warning``; ``generate_DSM2`` only, where first
   returns often share XY).
 """
@@ -112,6 +113,7 @@ _CUTOFF_HEADER_RE = re.compile(
 )
 _CUTOFF_CONTINUATION_RE = re.compile(rf"^all values are above the height_cutoff ({_NUMBER})\.$")
 _DUPLICATE_XY_RE = re.compile(r"^WARNING: set nverts ([0-9]+) but v_count ([0-9]+)$")
+_DUPLICATE_RASTERS_RE = re.compile(r"^WARNING: there were ([0-9]+) duplicate rasters$")
 _LINE_LIMIT = 20
 
 
@@ -517,9 +519,15 @@ def known_cutoff_warnings(
 
 
 def known_duplicate_xy_warnings(lines: Sequence[str], argv: Sequence[str]) -> list[int]:
-    """Indices of ``blast2dem`` ``WARNING: set nverts N but v_count M`` lines with 0 < M < N.
+    """Indices of ``blast2dem`` duplicate warnings.
 
-    The triangulator merged ``N - M`` points whose XY duplicates another point's.
+    Two exact forms are recognized:
+
+    * ``WARNING: set nverts N but v_count M`` with 0 < M < N: the triangulator merged
+      ``N - M`` points whose XY duplicates another point's;
+    * ``WARNING: there were N duplicate rasters`` with N > 0: reported by the TIN
+      rasterization (seen on one Petawawa d10 tile of 100 in every run of the
+      workloads-v8 campaign; the rasters passed every structural check).
     Only ``blast2dem``/``blast2dem64`` output is recognized; policy and workload
     checks are the caller's.
     """
@@ -530,8 +538,13 @@ def known_duplicate_xy_warnings(lines: Sequence[str], argv: Sequence[str]) -> li
         return []
     known = []
     for i, line in enumerate(lines):
-        match = _DUPLICATE_XY_RE.match(line.strip())
+        text = line.strip()
+        match = _DUPLICATE_XY_RE.match(text)
         if match is not None and 0 < int(match.group(2)) < int(match.group(1)):
+            known.append(i)
+            continue
+        rasters = _DUPLICATE_RASTERS_RE.match(text)
+        if rasters is not None and int(rasters.group(1)) > 0:
             known.append(i)
     return known
 
@@ -566,8 +579,8 @@ class LastoolsAdapter(ToolAdapter):
       all-values-above-the-height-cutoff warning (raw status 0 or 1) as the
       named exception ``lascanopy_all_values_above_height_cutoff``. Default
       ``False``; part of the campaign identity.
-    * ``accept_known_duplicate_xy_warning``: accept blast2dem's duplicate-XY
-      warning (raw status 0) for ``generate_DSM2`` as the named exception
+    * ``accept_known_duplicate_xy_warning``: accept blast2dem's duplicate-XY and
+      duplicate-raster warnings (raw status 0) for ``generate_DSM2`` as the named exception
       ``blast2dem_duplicate_xy_points_merged``. Default ``False``; part of the
       campaign identity.
     * ``expected_version``: refuse every other build (for example ``"260914"``).
