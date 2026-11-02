@@ -119,7 +119,10 @@ the binaries' SHA-256, never the banner's licensing text. Nonzero exits,
 outputs fail the attempt. The documented `lascanopy` cutoff warning is
 accepted only with `accept_known_cutoff_warning = true` (default `false`), and
 blast2dem's duplicate-XY and duplicate-raster warnings for `generate_DSM2` only with
-`accept_known_duplicate_xy_warning = true` (default `false`). The `workloads-v8`
+`accept_known_duplicate_xy_warning = true` (default `false`). Buffered calls on
+inputs holding more than 2^32 − 1 points in total (100 tiles at 50 pts/m²) print
+an on-the-fly merged point-count warning, accepted only with
+`accept_known_merged_point_count_warning = true` (default `false`). The `workloads-v8`
 contracts add `pixel_metrics_2` (nine metrics: lidR, lasR, LAStools; PDAL has no
 percentile statistic) and the first-return TIN `generate_DSM2` (all four tools;
 structural validation only); see [WORKLOADS.md](WORKLOADS.md) and

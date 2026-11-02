@@ -188,7 +188,10 @@ records `future_backend`, the plan class and the worker count. Use a separate
 `multisession`, lidR's main R process saturates one core from about 16 workers
 and limits scaling; mirai's dispatch overhead is lower (diagnostic on the
 10 pts/m² Petawawa tiles, mean metric: multisession 250/201/287 s, mirai
-244/153/86 s at 8/16/32 workers).
+244/153/86 s at 8/16/32 workers). `future::multicore` (forked per chunk; Linux/macOS
+only) was measured on 2026-11-01 with the same 100 d10 tiles (mean metric, median of
+two runs, pinned): multisession 461/256/188/286 s, multicore 539/288/154/107 s, mirai
+454/242/131/80 s at 4/8/16/32 workers. It never beats mirai and is not offered.
 
 | Adapter | Threading model | Threads |
 |---|---|---|
@@ -314,7 +317,8 @@ declared equivalent.
   first-return TIN is not repeatable near duplicate XY) are runnable, with the
   legacy `R/0_setup.R` calls (the lasR DSM2 call is the tribble literal, which
   the legacy harness blanked at run time); lasR `normalization` is
-  `diagnostic_only` (lasR ≤ 0.21.3 writes NaN heights as corrupt Z). Other
+  `runnable` from workloads-v9 with lasR 0.21.4 (`diagnostic_only` in v7/v8:
+  lasR ≤ 0.21.3 writes NaN heights as corrupt Z). Other
   legacy tasks are declared `unsupported` (no contract) or `blocked`, with reasons.
 - lidR reads every attribute (`select = "*"`) for every workload, so `LAS()`
   data-check warnings (for example invalid return numbers 0 in the unrepaired

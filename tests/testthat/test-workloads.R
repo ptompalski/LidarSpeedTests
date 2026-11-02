@@ -279,7 +279,7 @@ test_that("blocked runner attempts retain the contract and workload blocker diag
   })
 })
 
-test_that("the pinned normalization defect is characterized and affected calls cannot run", {
+test_that("the pinned lasR has no normalization NaN defect; legacy calls stay blocked", {
   env <- workload_setup()
   xy <- expand.grid(X = c(1, 19, 21, 39), Y = c(1, 19, 21, 39))
   data <- data.frame(xy, Z = 10, Classification = 2L)
@@ -289,9 +289,9 @@ test_that("the pinned normalization defect is characterized and affected calls c
     on = data, with = list(ncores = lasR::sequential(), buffer = 20,
                           chunk = 0, progress = FALSE)
   )
-  expect_true(anyNA(result$Z))
-  interior <- result$X > 1 & result$X < 39 & result$Y > 1 & result$Y < 39
-  expect_equal(result$Z[interior], rep(0, sum(interior)))
+  # lasR <= 0.21.3 returned NaN on the collinear hull edges (r-lidar/lasR#355).
+  expect_false(anyNA(result$Z))
+  expect_equal(result$Z, rep(0, nrow(data)))
   for (task in c("normalization", "complex_task1", "complex_task2")) {
     row <- env$benchmark_tasks[env$benchmark_tasks$task_id == task, ]
     contract <- env$benchmark_workload_contract(task, "lasR")

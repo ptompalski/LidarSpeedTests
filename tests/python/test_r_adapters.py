@@ -205,17 +205,19 @@ def test_workloads_v8_pin_the_legacy_metrics_and_first_return_tin_calls():
     assert 'assign("metrics_multiple", harness$metrics_multiple, envir = globalenv())' in runner
 
 
-def test_normalization_writes_laz_and_lasr_is_diagnostic_only():
+def test_normalization_writes_laz_and_lasr_is_runnable():
     lidr = LidRAdapter.workloads["normalization"]
     lasr = LasRAdapter.workloads["normalization"]
     for workload in (lidr, lasr):
         assert (workload.output_extension, workload.artifact_pattern) == ("laz", "{stem}.laz")
         assert workload.kind is ArtifactKind.POINT_CLOUD
-    assert lidr.status is ImplementationStatus.RUNNABLE
-    assert lasr.status is ImplementationStatus.DIAGNOSTIC_ONLY
-    assert "NaN" in lasr.reason
+        assert workload.status is ImplementationStatus.RUNNABLE
     support = LasRAdapter().support_for("normalization", 4)
-    assert support.status is ImplementationStatus.DIAGNOSTIC_ONLY and support.reason == lasr.reason
+    assert support.status is ImplementationStatus.RUNNABLE
+    # workloads-v9 needs lasR >= 0.21.4; renv.lock pins it and the probe enforces the lock.
+    lock = json.loads((REPO / "renv.lock").read_text(encoding="utf-8"))
+    version = tuple(int(p) for p in lock["Packages"]["lasR"]["Version"].split("."))
+    assert version >= (0, 21, 4)
     with pytest.raises(ValueError, match="needs a reason"):
         RWorkload("x", "call", 20.0, status=ImplementationStatus.DIAGNOSTIC_ONLY)
     with pytest.raises(ValueError, match="runnable or diagnostic_only"):

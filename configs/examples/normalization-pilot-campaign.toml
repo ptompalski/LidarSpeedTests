@@ -1,4 +1,4 @@
-# normalization pilot (workloads-v7): height above a linear TIN of ground (2) and water (9)
+# normalization pilot (default suite, workloads-v9): height above a linear TIN of ground (2) and water (9)
 # points, one LAZ per tile, all four tools, 1 and 2 CPUs. Edit the /path/to placeholders,
 # then:
 #
@@ -9,13 +9,13 @@
 # The contract has no numerical reference (structural validation only), so every
 # attempt is "unverified" and every implementation non_comparable: the timings are
 # descriptive and appear only in performance-only reports (design/VALIDATION.md §1).
-# lasR is diagnostic_only: lasR <= 0.21.3 writes NaN heights as corrupt Z, which the
-# structural level rejects. lidR reads every attribute, so use repaired inputs (readLAS
+# lasR is runnable from workloads-v9 with the pinned lasR 0.21.4 (diagnostic_only in
+# workloads-v7/v8: lasR <= 0.21.3 writes NaN heights as corrupt Z). lidR reads every attribute, so use repaired inputs (readLAS
 # data-check warnings fail the attempt). lasR refuses inputs without .lax indexes.
 # Normalized LAZ outputs are about as large as the inputs: size the scratch root.
 schema = "lidarbench.campaign-config/1"
 campaign_id = "normalization-pilot-example-001"
-description = "normalization pilot: lidR, lasR (diagnostic), LAStools, PDAL; ground TIN; 1-2 CPUs"
+description = "normalization pilot: lidR, lasR, LAStools, PDAL; ground TIN; 1-2 CPUs"
 workspace = "/path/to/lidarbench-pilot/workspace"
 validation_mode = "numerical"
 cpu_counts = [1, 2]

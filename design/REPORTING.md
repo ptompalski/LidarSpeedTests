@@ -28,7 +28,7 @@ lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v8 --include
 | `-o` | New report directory. Default `<workspace>/reports/<campaign>-<mode>-<UTC>`. An existing directory, a path inside the campaign, the repository root or `docs/` is refused. |
 | `--min-seconds` | Shorter timings are excluded and flagged (default 0.1 s, as in R). |
 | `--historical` | Directory of legacy per-run CSVs, or a `lidarbench.legacy-r-campaign/1` export (repeatable). |
-| `--suite` | Workload suite for the *declared* comparability labels (default `workloads/workloads-v8` of the checkout). |
+| `--suite` | Workload suite for the *declared* comparability labels (default `workloads/workloads-v9` of the checkout). |
 | `--render` | `auto` (default): render if Quarto, Rscript, `knitr` and `rmarkdown` are found, otherwise explain what is missing; `always`: exit 5 unless rendered; `never`. |
 | `--include-raw` | Also copy the verified campaign directory into `<report>/raw/`. |
 

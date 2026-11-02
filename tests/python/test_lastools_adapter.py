@@ -43,6 +43,8 @@ from lidarbench.execution.adapters.lastools import (
     DUPLICATE_XY_EXCEPTION,
     DUPLICATE_XY_POLICY,
     LICENCE_FLAG,
+    MERGED_COUNT_EXCEPTION,
+    MERGED_COUNT_POLICY,
     WORKLOADS,
     LastoolsAdapter,
     LastoolsWorkload,
@@ -54,6 +56,7 @@ from lidarbench.execution.adapters.lastools import (
     inputs_height_cutoff,
     known_cutoff_warnings,
     known_duplicate_xy_warnings,
+    known_merged_count_warnings,
     locate_bin_dir,
     parse_version,
     query_version,
@@ -878,6 +881,80 @@ def test_interpret_accepts_duplicate_xy_warnings_only_for_dsm2_when_opted_in(
     argv = adapter.build_command(inv).argv
     refused = adapter.interpret(inv, _process(tmp_path, argv, 1, stderr=stderr))
     assert refused.accepted_exception is None and "status 1" in refused.failure_reason
+
+
+def _merged(count: int = 4542118200, prefixes: int = 1) -> str:
+    return (
+        "WARNING: " * prefixes
+        + f"on-the-fly merged LAS 1.2 files contain too many points ({count}) "
+        + "for single LAS 1.2 file."
+    )
+
+
+BUFFERED = ["/x/lascanopy64", "-i", "a.laz", "-buffered", "20"]
+
+
+@pytest.mark.parametrize(
+    ("lines", "argv", "known"),
+    [
+        ([_merged(), "done"], BUFFERED, [0]),
+        ([_merged(2**32)], BUFFERED, [0]),
+        ([_merged(2**32 - 1)], BUFFERED, []),  # fits in LAS 1.2
+        ([_merged()], BUFFERED[:3], []),  # no -buffered neighbour reader
+        ([_merged() + " extra"], BUFFERED, []),
+        # interleaved stderr of concurrent children: every prefix has its body
+        ([_merged(prefixes=3), _merged(prefixes=0), _merged(prefixes=0)], BUFFERED, [0]),
+        # a prefix without a merged-count body could belong to another warning
+        ([_merged(prefixes=2)], BUFFERED, []),
+        ([_merged(prefixes=2), "z coordinates range from 1 to 2"], BUFFERED, []),
+        ([_merged(prefixes=0)], BUFFERED, []),
+    ],
+)
+def test_known_merged_count_warning_rules(lines, argv, known):
+    assert known_merged_count_warnings(lines, argv) == known
+
+
+@needs_posix
+def test_interpret_accepts_merged_count_warnings_only_when_opted_in(bin_dir, layout, tmp_path):
+    stderr = "\n".join([_merged(), _merged(prefixes=2), _merged(prefixes=0)]) + "\n"
+    for workload in ("pixel_metrics_1a", "generate_DSM1", "normalization"):
+        _outputs(layout, workload)
+        inv = _invocation(layout, workload)
+        refused_adapter = _adapter(bin_dir)
+        argv = refused_adapter.build_command(inv).argv
+        refused = refused_adapter.interpret(inv, _process(tmp_path, argv, 0, stderr=stderr))
+        assert refused.accepted_exception is None
+        assert "accept_known_merged_point_count_warning=False" in refused.failure_reason
+
+        adapter = _adapter(bin_dir, accept_known_merged_point_count_warning=True)
+        command = adapter.build_command(inv)
+        assert MERGED_COUNT_EXCEPTION in command.accepted_exceptions
+        result = adapter.interpret(inv, _process(tmp_path, command.argv, 0, stderr=stderr))
+        assert result.failure_reason is None
+        assert result.accepted_exception.name == MERGED_COUNT_EXCEPTION
+        assert result.accepted_exception.policy == MERGED_COUNT_POLICY
+        assert result.accepted_exception.exit_code == 0
+        assert len(result.accepted_exception.evidence) == 2
+        assert result.details["accepted_merged_point_count_warnings"] == 2
+        assert MERGED_COUNT_POLICY in adapter.invocation_metadata(inv)["accepted_exception_policy"]
+        failed = adapter.interpret(inv, _process(tmp_path, command.argv, 1, stderr=stderr))
+        assert failed.accepted_exception is None and "status 1" in failed.failure_reason
+
+
+@needs_posix
+def test_cutoff_exception_takes_precedence_over_merged_count(bin_dir, layout, tmp_path):
+    adapter = _adapter(
+        bin_dir, accept_known_cutoff_warning=True, accept_known_merged_point_count_warning=True
+    )
+    inv = _invocation(layout)
+    _outputs(layout)
+    argv = adapter.build_command(inv).argv
+    stderr = _merged() + "\n" + "".join(_warning(os.fspath(p), "-13.25") for p in inv.inputs)
+    result = adapter.interpret(inv, _process(tmp_path, argv, 0, stderr=stderr))
+    assert result.failure_reason is None
+    assert result.accepted_exception.name == CUTOFF_EXCEPTION
+    assert result.details["accepted_merged_point_count_warnings"] == 1
+    assert result.details["accepted_warning_blocks"] == 2
 
 
 def test_known_cutoff_warning_requires_lascanopy_and_one_cutoff():

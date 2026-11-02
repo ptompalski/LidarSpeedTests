@@ -1085,12 +1085,12 @@
     },
     "lasR": {
       "Package": "lasR",
-      "Version": "0.21.2",
+      "Version": "0.21.4",
       "Source": "Repository",
       "Repository": "https://r-lidar.r-universe.dev",
       "RemoteType": "repository",
       "RemoteUrl": "https://github.com/r-lidar/lasR",
-      "RemoteSha": "a9ec6a5d656f413a47551a024d2e370054f28f8d",
+      "RemoteSha": "7e955df155b2c5871507fda6c4a8b8e677488f0c",
       "Requirements": [
         "R",
         "Rcpp",
@@ -1098,7 +1098,7 @@
         "stats",
         "utils"
       ],
-      "Hash": "7009711281d6edf8d556130090caaf0b"
+      "Hash": "496fbea6ce9f861e77e1db379e0c3952"
     },
     "lattice": {
       "Package": "lattice",
@@ -1252,8 +1252,8 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
-        "nanonext",
-        "R"
+        "R",
+        "nanonext"
       ],
       "Hash": "d1a2a035cf5f15b64775e37d6d579e17"
     },

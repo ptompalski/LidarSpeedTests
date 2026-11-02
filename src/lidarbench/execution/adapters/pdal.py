@@ -305,7 +305,7 @@ OTHER_WORKLOADS: tuple[WorkloadSupport, ...] = (
     WorkloadSupport(
         "pixel_metrics_2",
         ImplementationStatus.UNSUPPORTED,
-        reason="not run with PDAL (workloads-v8 contract: unsupported): writers.gdal offers min, "
+        reason="not run with PDAL (contract: unsupported since workloads-v8): writers.gdal offers min, "
         "max, mean, idw, count and stdev only, no percentiles and no above-threshold fraction",
     ),
     WorkloadSupport(

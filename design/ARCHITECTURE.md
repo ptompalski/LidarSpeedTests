@@ -60,7 +60,7 @@ acceptance criteria) and [../AGENTS.md](../AGENTS.md) (permanent development rul
 | Reporting | `R/reporting.R`, `R/5_report.R`, `*.qmd`, `_quarto.yml` | Campaign-specific report build. Selects the latest attempt per key and applies exclusion reasons. `n_comparable` is gated and `performance-only` mode exists. Reports are built in fresh directories with a checksummed `build.rds` receipt. |
 | Legacy compilation | `R/4_compileResults.R` (`LIDAR_RESULTS_MODE=legacy`) | Reads historical CSVs as `legacy-unidentified`/`unverified`. |
 | Tests | `tests/testthat/*` (23 test files + fixture helper, ~159 `test_that` blocks) | Synthetic fixtures; `Rscript` stands in for native tools; real pinned lidR/lasR on tiny clouds. |
-| Environment | `renv.lock` (R 4.6.1, 153 packages; lidR 4.3.3, lasR 0.21.2), `.R-version`, `R/check_environment.R` (Quarto 1.10.18) | |
+| Environment | `renv.lock` (R 4.6.1, 153 packages; lidR 4.3.3, lasR 0.21.4), `.R-version`, `R/check_environment.R` (Quarto 1.10.18) | |
 | Historical / protected | `docs/` (published site), `gh-pages`, `graphics/`, `_OLD/` (ignored, 94 MB), `ALS_tiles.gpkg`, `input-manifests/` | |
 
 ### 2.2 Strengths to keep

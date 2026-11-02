@@ -37,8 +37,10 @@ LAStools outputs are no longer `validation_failed` at the artifacts level),
 `workloads-v6` (frozen: the `workloads-v5` definitions unchanged plus the
 structural-only `generate_DEM` below), `workloads-v7` (frozen: the
 `workloads-v6` definitions unchanged plus the point-cloud `normalization` below) and
-`workloads-v8` (the default: the `workloads-v7` definitions unchanged plus the
-structural-only `generate_DSM2` and the nine-band `pixel_metrics_2` below).
+`workloads-v8` (frozen: the `workloads-v7` definitions unchanged plus the
+structural-only `generate_DSM2` and the nine-band `pixel_metrics_2` below) and
+`workloads-v9` (the default: the `workloads-v8` definitions unchanged, lasR
+`normalization` `runnable` with lasR 0.21.4).
 An implementation may declare `value_precision` (an output quantum, for example
 0.01 m when a tool rounds its values); the absolute tolerance is then widened by
 half of it, the reports say so, and the value is part of the contract digest. A new tool entry
@@ -171,7 +173,7 @@ are not checked (listed under `claims.not_established`).
 | Tool | Implementation | `outside_surface` |
 |---|---|---|
 | lidR | `normalize_height(tin(), use_class = c(2L, 9L))` (legacy call); half-open catalog ownership: points exactly on a tile's maximum header X/Y go to a neighbour or to no tile | `extrapolate` |
-| lasR | `normalize() + write_las()` (legacy call), `diagnostic_only`: lasR ≤ 0.21.3 writes NaN heights as Z ≈ −2147483 at collinear hull edges, which the structural level rejects | `discard` |
+| lasR | `normalize() + write_las()` (legacy call), `runnable` from workloads-v9 with lasR 0.21.4 (`diagnostic_only` in v7/v8: lasR ≤ 0.21.3 writes NaN heights as Z ≈ −2147483 at collinear hull edges, which the structural level rejects) | `discard` |
 | LAStools | `lasheight64 -replace_z -buffered 20` (legacy call; ground = class 2); writes exactly each tile's points | `extrapolate` |
 | PDAL | `filters.hag_delaunay` (PDAL defaults: `count = 10`, so heights differ slightly more from the other tools; class 9 relabelled to 2 and restored) → `HeightAboveGround => Z` → crop to the closed tile bounds (design/ADAPTERS.md §10) | `extrapolate` |
 

@@ -26,7 +26,7 @@ details and varies between identical queries (LASTOOLS_260914_ISSUE_REPORT.md).
 Interpretation is conservative (WORKLOADS.md): nonzero exit statuses,
 ``ERROR``/``FATAL`` lines, unlicensed-run notices, unrecognized ``WARNING``
 lines and missing or empty primary outputs all fail the attempt, because a
-multi-core LAStools parent can exit 0 after a child failed. Two documented
+multi-core LAStools parent can exit 0 after a child failed. Three documented
 warnings are the only exceptions, each disabled by default and recorded as a
 named exception with the raw exit status:
 
@@ -36,7 +36,13 @@ named exception with the raw exit status:
   ``M < N``: points with identical XY were merged into one TIN vertex, and its
   rasterization's ``WARNING: there were N duplicate rasters`` (tool option
   ``accept_known_duplicate_xy_warning``; ``generate_DSM2`` only, where first
-  returns often share XY).
+  returns often share XY);
+* ``WARNING: on-the-fly merged LAS 1.2 files contain too many points (N) for
+  single LAS 1.2 file.`` with N > 2**32 - 1 from a ``-buffered`` call, whose
+  neighbour reader merges every input tile (tool option
+  ``accept_known_merged_point_count_warning``; every buffered workload). When
+  several apply, the attempt records the first of cutoff, duplicate-XY and
+  merged-count as its exception; the details count each kind.
 """
 
 from __future__ import annotations
@@ -89,6 +95,10 @@ CUTOFF_COMMANDS = frozenset({"lascanopy", "lascanopy64"})
 CUTOFF_SUGGESTION = "maybe run 'lasheight -i raw.las -replace_z -o normalized.laz'."
 DUPLICATE_XY_EXCEPTION = "blast2dem_duplicate_xy_points_merged"
 DUPLICATE_XY_POLICY = "lastools.accept_known_duplicate_xy_warning"
+MERGED_COUNT_EXCEPTION = "lastools_merged_point_count_overflow"
+MERGED_COUNT_POLICY = "lastools.accept_known_merged_point_count_warning"
+LAS12_MAX_POINTS = 2**32 - 1
+"""LAS 1.2 stores the point count in 32 bits."""
 
 PLACEHOLDERS = ("{inputs}", "{output}", "{cores}", "{height_cutoff}")
 SUPPORTED_PARAMETERS = ("epsg",)
@@ -114,6 +124,11 @@ _CUTOFF_HEADER_RE = re.compile(
 _CUTOFF_CONTINUATION_RE = re.compile(rf"^all values are above the height_cutoff ({_NUMBER})\.$")
 _DUPLICATE_XY_RE = re.compile(r"^WARNING: set nverts ([0-9]+) but v_count ([0-9]+)$")
 _DUPLICATE_RASTERS_RE = re.compile(r"^WARNING: there were ([0-9]+) duplicate rasters$")
+_MERGED_COUNT_BODY = (
+    r"on-the-fly merged LAS 1\.2 files contain too many points \(([0-9]+)\) "
+    r"for single LAS 1\.2 file\."
+)
+_MERGED_COUNT_RE = re.compile(rf"^((?:WARNING: )*){_MERGED_COUNT_BODY}$")
 _LINE_LIMIT = 20
 
 
@@ -549,6 +564,37 @@ def known_duplicate_xy_warnings(lines: Sequence[str], argv: Sequence[str]) -> li
     return known
 
 
+def known_merged_count_warnings(lines: Sequence[str], argv: Sequence[str]) -> list[int]:
+    """Indices of the on-the-fly merged point-count warning lines of a ``-buffered`` run.
+
+    With ``-buffered`` every per-tile process opens all inputs as one on-the-fly
+    merged neighbour reader; above 2**32 - 1 points in total (for example 100
+    Petawawa tiles at 50 pts/m2) LAStools warns that the merged header cannot
+    hold the count, and the outputs are unaffected (the full-v8 campaign's
+    lascanopy d50 rasters passed numerical validation). Concurrent processes
+    interleave their stderr, so one line can carry several ``WARNING: `` prefixes
+    while their bodies follow on unprefixed lines. The lines are recognized only
+    if every prefix is matched by a body, so a stray prefix of another warning is
+    never absorbed; otherwise nothing is recognized. Policy checks are the caller's.
+    """
+    if "-buffered" not in argv:
+        return []
+    prefixed: list[int] = []
+    prefixes = bodies = 0
+    for i, line in enumerate(lines):
+        match = _MERGED_COUNT_RE.match(line.strip())
+        if match is None:
+            continue
+        if int(match.group(2)) <= LAS12_MAX_POINTS:
+            return []
+        bodies += 1
+        count = match.group(1).count("WARNING:")
+        if count:
+            prefixed.append(i)
+            prefixes += count
+    return prefixed if prefixes == bodies else []
+
+
 def _quote(lines: Iterable[str]) -> str:
     """Lines for a failure reason; licensing messages are withheld (see the logs)."""
     shown = [
@@ -583,6 +629,11 @@ class LastoolsAdapter(ToolAdapter):
       duplicate-raster warnings (raw status 0) for ``generate_DSM2`` as the named exception
       ``blast2dem_duplicate_xy_points_merged``. Default ``False``; part of the
       campaign identity.
+    * ``accept_known_merged_point_count_warning``: accept the on-the-fly merged LAS 1.2
+      point-count warning of ``-buffered`` calls whose inputs hold more than 2**32 - 1
+      points in total (raw status 0) as the named exception
+      ``lastools_merged_point_count_overflow``. Default ``False``; part of the
+      campaign identity.
     * ``expected_version``: refuse every other build (for example ``"260914"``).
     * ``version_timeout_s``: timeout of each ``-version`` query (default 30).
     """
@@ -600,11 +651,17 @@ class LastoolsAdapter(ToolAdapter):
         expected_version: str = "",
         version_timeout_s: float = 30.0,
         accept_known_duplicate_xy_warning: bool = False,
+        accept_known_merged_point_count_warning: bool = False,
     ) -> None:
         for name, value, kind in (
             ("bin_dir", bin_dir, str),
             ("accept_known_cutoff_warning", accept_known_cutoff_warning, bool),
             ("accept_known_duplicate_xy_warning", accept_known_duplicate_xy_warning, bool),
+            (
+                "accept_known_merged_point_count_warning",
+                accept_known_merged_point_count_warning,
+                bool,
+            ),
             ("expected_version", expected_version, str),
         ):
             if not isinstance(value, kind):
@@ -622,6 +679,7 @@ class LastoolsAdapter(ToolAdapter):
         self.bin_dir_option = bin_dir
         self.accept_known_cutoff_warning = accept_known_cutoff_warning
         self.accept_known_duplicate_xy_warning = accept_known_duplicate_xy_warning
+        self.accept_known_merged_point_count_warning = accept_known_merged_point_count_warning
         self.expected_version = expected_version
         self.version_timeout_s = float(version_timeout_s)
         self.windows = sys.platform == "win32"
@@ -736,6 +794,9 @@ class LastoolsAdapter(ToolAdapter):
             "platform_binaries": "windows-exe" if self.windows else "native",
             "accept_known_cutoff_warning": self.accept_known_cutoff_warning,
             "accept_known_duplicate_xy_warning": self.accept_known_duplicate_xy_warning,
+            "accept_known_merged_point_count_warning": (
+                self.accept_known_merged_point_count_warning
+            ),
             "expected_version": self.expected_version or None,
             "licence_flag": LICENCE_FLAG,
             "version_source": "-version banner; build number only, licensing text not recorded",
@@ -878,6 +939,7 @@ class LastoolsAdapter(ToolAdapter):
             for name, applies in (
                 (CUTOFF_EXCEPTION, self._cutoff_applies(workload)),
                 (DUPLICATE_XY_EXCEPTION, self._duplicate_xy_applies(workload)),
+                (MERGED_COUNT_EXCEPTION, self._merged_count_applies(workload)),
             )
             if applies
         )
@@ -894,12 +956,20 @@ class LastoolsAdapter(ToolAdapter):
     def _duplicate_xy_applies(self, workload: LastoolsWorkload) -> bool:
         return self.accept_known_duplicate_xy_warning and workload.duplicate_xy_warning_applies
 
+    def _merged_count_applies(self, workload: LastoolsWorkload) -> bool:
+        return self.accept_known_merged_point_count_warning and "-buffered" in workload.args
+
     def _policy(self, workload: LastoolsWorkload) -> str | None:
-        if self._cutoff_applies(workload):
-            return CUTOFF_POLICY
-        if self._duplicate_xy_applies(workload):
-            return DUPLICATE_XY_POLICY
-        return None
+        policies = [
+            policy
+            for policy, applies in (
+                (CUTOFF_POLICY, self._cutoff_applies(workload)),
+                (DUPLICATE_XY_POLICY, self._duplicate_xy_applies(workload)),
+                (MERGED_COUNT_POLICY, self._merged_count_applies(workload)),
+            )
+            if applies
+        ]
+        return ", ".join(policies) or None
 
     def expected_outputs(self, invocation: Invocation) -> list[ArtifactSpec]:
         """The rasters or point cloud of each input tile, named as the workload contract declares."""
@@ -959,10 +1029,11 @@ class LastoolsAdapter(ToolAdapter):
             )
         if self._duplicate_xy_applies(workload):
             duplicates = known_duplicate_xy_warnings(lines, process.argv)
-        unknown = [lines[i] for i in warning_indices if i not in known and i not in duplicates]
-        evidence = tuple(line.strip() for i in known for line in lines[i : i + 3]) + tuple(
-            lines[i].strip() for i in duplicates
-        )
+        merged: list[int] = []
+        if self._merged_count_applies(workload):
+            merged = known_merged_count_warnings(lines, process.argv)
+        recognized = set(known) | set(duplicates) | set(merged)
+        unknown = [lines[i] for i in warning_indices if i not in recognized]
         exit_code = process.exit_code
         # Only the cutoff warning is documented with a raw exit status of 1.
         known_status = (
@@ -988,7 +1059,9 @@ class LastoolsAdapter(ToolAdapter):
             failure = (
                 "LAStools reported warnings outside the accepted exceptions "
                 f"(accept_known_cutoff_warning={self.accept_known_cutoff_warning}, "
-                f"accept_known_duplicate_xy_warning={self.accept_known_duplicate_xy_warning}): "
+                f"accept_known_duplicate_xy_warning={self.accept_known_duplicate_xy_warning}, "
+                "accept_known_merged_point_count_warning="
+                f"{self.accept_known_merged_point_count_warning}): "
                 f"{_quote(unknown)}"
             )
         elif outputs:
@@ -999,10 +1072,17 @@ class LastoolsAdapter(ToolAdapter):
 
         accepted = None
         if failure is None and known:
+            evidence = tuple(line.strip() for i in known for line in lines[i : i + 3])
             accepted = AcceptedException(CUTOFF_EXCEPTION, exit_code or 0, CUTOFF_POLICY, evidence)
         elif failure is None and duplicates:
+            evidence = tuple(lines[i].strip() for i in duplicates)
             accepted = AcceptedException(
                 DUPLICATE_XY_EXCEPTION, exit_code or 0, DUPLICATE_XY_POLICY, evidence
+            )
+        elif failure is None and merged:
+            evidence = tuple(lines[i].strip() for i in merged)
+            accepted = AcceptedException(
+                MERGED_COUNT_EXCEPTION, exit_code or 0, MERGED_COUNT_POLICY, evidence
             )
         return Interpretation(
             failure_reason=failure,
@@ -1014,6 +1094,7 @@ class LastoolsAdapter(ToolAdapter):
                 "warning_lines": len(warning_indices),
                 "accepted_warning_blocks": len(known),
                 "accepted_duplicate_xy_warnings": len(duplicates),
+                "accepted_merged_point_count_warnings": len(merged),
                 "unlicensed_notices": len(unlicensed),
                 "height_cutoff": cutoff,
                 "output_problems": outputs,

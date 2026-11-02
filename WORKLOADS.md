@@ -513,7 +513,8 @@ implementation `non_comparable`, outcome `unverified`): output points must be
 unchanged input points inside the tile's closed header bounds, at most 0.1% of a
 tile's points may be missing, and every height must be finite and imply a ground
 elevation within the buffered ground range. lidR and lasR use the legacy calls
-above; lasR is `diagnostic_only` until a fixed lasR release is pinned. On the
+above; lasR is `diagnostic_only` in workloads-v7 and workloads-v8 (runnable from
+workloads-v9 with lasR 0.21.4, below). On the
 repaired Petawawa d10 2×2 block lidR passes (it misses ≤ 0.0023% of a tile's
 points on maximum header edges) while pinned lasR fails on 53–106 corrupt heights
 per tile. LAStools and PDAL: design/ADAPTERS.md §9–§10. The legacy harness is
@@ -521,7 +522,7 @@ unchanged.
 
 ## Python orchestrator: `generate_DSM2` and `pixel_metrics_2` in workloads-v8
 
-`workloads/workloads-v8/` (the default) keeps the v7 definitions unchanged and adds
+`workloads/workloads-v8/` keeps the v7 definitions unchanged and adds
 two contracts. PDAL `pixel_metrics_2` is not run.
 
 | Task ID | lidR | lasR | LAStools | PDAL |
@@ -602,3 +603,15 @@ lidR's algorithm/catalog-driver help; rapidlasso
 [lascanopy](https://downloads.rapidlasso.de/html/lascanopy_README.html) and
 [blast2dem](https://downloads.rapidlasso.de/html/blast2dem_README.html) manuals.
 Observed native behavior takes precedence over ambiguous metric documentation.
+
+## Python orchestrator: lasR `normalization` in workloads-v9
+
+`workloads/workloads-v9/` (the default) keeps every workloads-v8 definition and changes
+one declaration: lasR `normalization` is `runnable` (still `non_comparable`,
+structural validation only, like every normalization implementation). lasR 0.21.4
+(r-lidar/lasR#355) skips zero-area triangles during TIN interpolation and treats
+non-finite values as no-data, so the NaN heights / Z ≈ -2147483 described above no
+longer occur; `renv.lock` pins 0.21.4 and the R bridge probe refuses other versions
+(`require_locked_versions`). Use workloads-v7/v8 only to reproduce campaigns that ran
+with lasR ≤ 0.21.3. The legacy R harness still keeps the lasR normalization and
+complex calls blocked.

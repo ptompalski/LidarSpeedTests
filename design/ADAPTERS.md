@@ -350,11 +350,28 @@ option. The duplicate-raster line was added after the first d10 campaign
 (`petawawa-d10-v8-20261031-001`): one of 100 tiles printed it in three of the four
 runs, which failed them although the rasters passed every structural check.
 
+**Merged point-count exception.** `accept_known_merged_point_count_warning = true`
+(tool option, default `false`, part of the campaign identity) declares
+`lastools_merged_point_count_overflow` for every `-buffered` call. With `-buffered`,
+each per-tile process opens all input tiles as one on-the-fly merged neighbour
+reader; when they hold more than 2^32 − 1 points in total (100 Petawawa tiles at
+50 pts/m²: about 4.5 billion) LAStools prints `WARNING: on-the-fly merged LAS 1.2
+files contain too many points (N) for single LAS 1.2 file.` once per tile and exits 0.
+Only that exact line with `N > 2^32 − 1`, only from a `-buffered` argv and only with
+raw status 0 is recognized. Concurrent children interleave their stderr, so one line
+may carry several `WARNING: ` prefixes with the bodies on later unprefixed lines; the
+lines are accepted only if every prefix has a merged-count body, otherwise the
+attempt fails as before. When the cutoff (or duplicate-XY) exception also applies, the
+attempt records that exception and counts the merged-count lines in its details. The
+two d50 `lascanopy64` `pixel_metrics_1a` attempts of `petawawa-full-v8-20261101-001`
+(8 and 32 CPUs) failed on this warning alone; their retained rasters passed numerical
+validation.
+
 **Validation.** Up to `workloads-v3` the contracts declare LAStools
 `non_comparable` with `undeclared` cell ownership, so its outputs are at best
 `unverified` and descriptive only. `workloads-v3` accepts the `.tfw` world file
 LAStools writes beside every GeoTIFF as an ignored sidecar (v1/v2 report it as
-unexpected). `workloads-v4` (kept by `workloads-v5` to `workloads-v8`, the default) declares LAStools `matched_definition` with
+unexpected). `workloads-v4` (kept by `workloads-v5` to `workloads-v9`, the default) declares LAStools `matched_definition` with
 the upward-Y floor cell rule (`pdal_binmode_floor`, the rule PDAL binmode uses)
 and, for `lascanopy -avg`, `value_precision = 0.01` (averages are written
 rounded to centimetres; the tolerance is widened by 0.005). On the Task 13 pilot
@@ -588,7 +605,7 @@ installation validate the actual PDAL outputs:
   not registered.
 - Machine-level tool configuration (installation paths outside campaign
   configurations). Adapter options currently come from `[[tools]] options`.
-- Equivalence data covers only the contracts in `workloads/` (`workloads-v8` is
-  the default; `workloads-v1` to `workloads-v7` are kept frozen; v1 has no PDAL
+- Equivalence data covers only the contracts in `workloads/` (`workloads-v9` is
+  the default; `workloads-v1` to `workloads-v8` are kept frozen; v1 has no PDAL
   entry). `generate_DEM`, `generate_DSM2` and `normalization` have no numerical
   reference (structural validation only).

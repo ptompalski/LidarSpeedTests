@@ -27,7 +27,7 @@ def _data(name: str = "pixel_metrics_1a") -> dict:
 
 def test_suite_defines_the_cell_statistic_workloads_the_dem_and_normalization():
     suite = load_suite(SUITE)
-    assert suite.name == "workloads-v8"
+    assert suite.name == "workloads-v9"
     assert sorted(suite.contracts) == [
         "generate_DEM",
         "generate_DSM1",
@@ -159,7 +159,7 @@ def test_file_name_and_suite_must_match(tmp_path: Path):
     wrong.write_text(text, encoding="utf-8")
     with pytest.raises(ContractError, match="file name must equal"):
         load_contract(wrong)
-    suite = tmp_path / "workloads-v9"
+    suite = tmp_path / "workloads-v99"
     suite.mkdir()
     (suite / "pixel_metrics_1a.toml").write_text(text, encoding="utf-8")
     with pytest.raises(ContractError, match="suite"):
@@ -385,6 +385,38 @@ def test_v8_keeps_the_v7_definitions_and_adds_dsm2_and_nine_metrics():
     lastools = metrics.implementation("lastools")
     assert lastools.expected_names("t")[:3] == ("t_max.tif", "t_avg.tif", "t_std.tif")
     assert lastools.artifact_bands == metrics.raster.bands
+
+
+def test_v9_keeps_the_v8_definitions_and_makes_lasr_normalization_runnable():
+    v8 = load_suite(default_suite_dir("workloads-v8"))
+    v9 = load_suite(default_suite_dir("workloads-v9"))
+    assert set(v9.contracts) == set(v8.contracts)
+    for workload_id, old in v8.contracts.items():
+        new, old_record = copy.deepcopy(v9.get(workload_id).record), copy.deepcopy(old.record)
+        for record in (new, old_record):
+            record.pop("suite")
+            record.pop("equivalence")
+        if workload_id == "normalization":
+            new_lasr = new["implementations"].pop("lasR")
+            old_lasr = old_record["implementations"].pop("lasR")
+            assert (old_lasr.pop("status"), new_lasr.pop("status")) == (
+                "diagnostic_only",
+                "runnable",
+            )
+            assert "reason" in old_lasr and "reason" not in new_lasr
+            assert "0.21.4" in new_lasr["note"]
+            for record in (new_lasr, old_lasr):
+                record.pop("reason", None)
+                record.pop("note")
+            assert new_lasr == old_lasr
+        assert new == old_record
+    for contract in v9.contracts.values():
+        assert contract.equivalence_group == f"workloads-v9/{contract.id}"
+    norm = v9.get("normalization")
+    assert {t: i.status for t, i in norm.implementations.items()} == dict.fromkeys(
+        ("lidR", "lasR", "lastools", "pdal"), ImplementationStatus.RUNNABLE
+    )
+    assert {norm.declared_comparability(t) for t in norm.implementations} == {"non_comparable"}
 
 
 def test_first_returns_population_is_structural_only():

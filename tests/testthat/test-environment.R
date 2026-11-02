@@ -11,11 +11,11 @@ test_that("the runtime and complete manifest are pinned with lasR provenance", {
     expect_equal(utils::packageVersion(package),
                  package_version(lock$Packages[[package]]$Version), info = package)
   }
-  expect_identical(lock$Packages$lasR$Version, "0.21.2")
+  expect_identical(lock$Packages$lasR$Version, "0.21.4")
   expect_match(lock$Packages$lasR$Repository, "r_lidar|r-lidar")
   expect_identical(lock$R$Repositories$r_lidar, "https://r-lidar.r-universe.dev")
   expect_identical(lock$Packages$lasR$RemoteSha,
-                   "a9ec6a5d656f413a47551a024d2e370054f28f8d")
+                   "7e955df155b2c5871507fda6c4a8b8e677488f0c")
   expect_false(any(grepl("^R/", readLines(".renvignore"))))
   found <- renv::dependencies("R/0_setup.R", progress = FALSE)
   expect_true(all(c("lidR", "lasR", "tidyverse") %in% found$Package))
