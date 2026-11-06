@@ -322,7 +322,12 @@ def validate_outputs(
     artifacts_ok = LevelVerdict.of(Status.PASSED)
 
     # -- structural ----------------------------------------------------------------
-    from lidarbench.validation.population import PopulationLoader, build_manifest
+    from lidarbench.validation.population import (
+        InputError,
+        PopulationLoader,
+        buffered_population_bounds,
+        build_manifest,
+    )
     from lidarbench.validation.structural import check_raster
 
     manifest = build_manifest(request.inputs)
@@ -340,6 +345,22 @@ def validate_outputs(
         )
     structures = {}
     structural_errors: list[str] = []
+
+    def bounds_of(stem: str) -> Any:
+        def bounds() -> tuple[float, float, float, float] | None:
+            try:
+                return buffered_population_bounds(
+                    manifest,
+                    stem,
+                    contract.buffer,
+                    contract.population.points,
+                    contract.population.classes,
+                )
+            except InputError:
+                return None
+
+        return bounds
+
     for artifact in inventory.expected:
         raster = decoded[artifact.name]
         structure = check_raster(
@@ -352,6 +373,7 @@ def validate_outputs(
             impl.bands_of(artifact.tile, artifact.name, contract.require_raster().bands)
             if impl.artifact_bands
             else None,
+            population_bounds=bounds_of(artifact.tile),
         )
         if (
             request.validation_mode == "performance-only" or not contract.has_reference

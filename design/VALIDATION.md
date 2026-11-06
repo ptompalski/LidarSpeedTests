@@ -315,6 +315,21 @@ under the contract but by no cell of the product). On the Petawawa
 10 pts/m² dataset (100 tiles) this cut 3,048 points in 19 occupied cells
 on 9 boundary tiles.
 
+The buffered layout lidR crops is itself the bounds of the points it
+rasterizes (the contract population of the tile and its 20 m buffer) snapped
+outward. For a filtered population (`generate_DEM`: classes 2 and 9) those
+bounds can stop more than half a cell inside the header at the dataset
+boundary, and the raster edge is then the inward-most of that layout edge and
+the header-snapped edge. The rule therefore also accepts, per edge, exactly
+that inward-most edge; the population bounds are decoded from the tile and its
+buffer neighbours only when the header rule fails, and are quoted in the
+accepted exception. For unfiltered populations the layout is never inside the
+header-snapped edge, so nothing changes there. Added after the full-v9
+campaign (`petawawa-full-v9-20261101-001`), whose lidR DEM rasters were cut by
+up to 3 cells on three d1 and one d2 boundary tile; the rule reproduced every
+lidR DEM edge of that campaign at 1, 2, 5 and 10 pts/m² (1,600 edges per
+density).
+
 ## 4. What validation establishes, and what it does not
 
 Each report lists these per attempt under `claims`.

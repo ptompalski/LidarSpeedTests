@@ -285,7 +285,9 @@ class Implementation:
     extent: str | None = None
     """Declared extent rule of the tool's rasters when it differs from the contract's
     (``header_bounds_snapped_nearest``: each header bound rounded to the nearest grid
-    line, so up to one edge cell holding points can be cut off); ``None`` = contract."""
+    line, so up to one edge cell holding points can be cut off, or cut further to the
+    buffered population bounds snapped outward where the population stops inside the
+    tile; design/VALIDATION.md §3); ``None`` = contract."""
     outside_surface: str | None = None
     """Point-cloud products only: declared handling of points outside the ground
     surface (:data:`OUTSIDE_SURFACE`); ``None`` for rasters."""

@@ -273,3 +273,55 @@ class PopulationLoader:
             if now != sha:
                 changed.append(path.name)
         return changed
+
+
+def buffered_population_bounds(
+    manifest: Manifest,
+    stem: str,
+    buffer: float,
+    points: str,
+    classes: Sequence[int] = (),
+) -> tuple[float, float, float, float] | None:
+    """XY bounds of the contract population of tile ``stem`` and its buffer.
+
+    The points of the tile and of every tile whose header bounds intersect the
+    tile bounds grown by ``buffer`` are kept when they lie inside that closed
+    buffered rectangle and belong to the population (``points``: ``all``,
+    ``classes`` with ``classes``, or ``first_returns``). Returns
+    ``(min_x, min_y, max_x, max_y)``, or ``None`` when no point qualifies.
+
+    Raises:
+        InputError: An input cannot be decoded.
+    """
+    import laspy
+
+    tile = manifest.tiles[stem]
+    min_x, min_y, max_x, max_y = tile.bounds
+    grown = (min_x - buffer, min_y - buffer, max_x + buffer, max_y + buffer)
+    sources = [tile] + [
+        t for s, t in manifest.tiles.items() if s != stem and _intersects(t.bounds, grown)
+    ]
+    lo_x = lo_y = math.inf
+    hi_x = hi_y = -math.inf
+    for source in sources:
+        try:
+            las = laspy.read(source.path)
+            x = np.asarray(las.x, dtype=np.float64)
+            y = np.asarray(las.y, dtype=np.float64)
+            if points == "classes":
+                keep = np.isin(np.asarray(las.classification), np.asarray(classes))
+            elif points == "first_returns":
+                keep = np.asarray(las.return_number) == 1
+            else:
+                keep = np.ones(x.shape[0], dtype=bool)
+        except Exception as exc:
+            raise InputError(
+                f"{source.path.name}: cannot decode points ({type(exc).__name__}: {exc})"
+            ) from exc
+        keep &= (x >= grown[0]) & (x <= grown[2]) & (y >= grown[1]) & (y <= grown[3])
+        if keep.any():
+            lo_x, hi_x = min(lo_x, float(x[keep].min())), max(hi_x, float(x[keep].max()))
+            lo_y, hi_y = min(lo_y, float(y[keep].min())), max(hi_y, float(y[keep].max()))
+    if not math.isfinite(lo_x):
+        return None
+    return (lo_x, lo_y, hi_x, hi_y)

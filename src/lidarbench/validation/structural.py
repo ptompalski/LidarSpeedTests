@@ -15,8 +15,14 @@ rule, in two ways:
 * an implementation that declares ``extent = "header_bounds_snapped_nearest"``
   (pinned lidR crops to the header bounds with ``terra::crop(snap = "near")``):
   an edge may be one cell inward where the header bound lies at least half a
-  cell inside the outward grid line. Only the covered part of the reference is
-  compared; the cut cells and their points are counted by the numerical level.
+  cell inside the outward grid line. lidR lays the raster out on the bounds of
+  the points it rasterizes (the contract population of the tile and its
+  buffer) snapped outward before that crop, so an edge may also be exactly
+  the inward-most of that layout edge and the header-snapped edge; this only
+  differs from the header rule where the population stops short of the tile
+  edge (for example sparse ground points at the outer edge of the dataset).
+  Only the covered part of the reference is compared; the cut cells and their
+  points are counted by the numerical level.
 
 The extension or cut is recorded and the best possible numerical outcome
 becomes ``accepted_exception``.
@@ -24,12 +30,19 @@ becomes ``accepted_exception``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 
-from lidarbench.validation.grid import GridSpec, expected_grid, grid_from_transform
+from lidarbench.validation.grid import (
+    GridSpec,
+    _ceil_div,
+    _floor_div,
+    expected_grid,
+    grid_from_transform,
+)
 from lidarbench.validation.io import RasterData
 from lidarbench.validation.policies import Policies
 from lidarbench.workloads.contract import Implementation, WorkloadContract
@@ -129,11 +142,15 @@ def check_raster(
     expected_epsg: int | None,
     policies: Policies,
     bands: tuple[str, ...] | None = None,
+    population_bounds: Callable[[], tuple[float, float, float, float] | None] | None = None,
 ) -> RasterStructure:
     """Run every structural check on one decoded raster.
 
     ``bands`` are the contract bands this artifact holds (default: all of them); a
     per-band artifact (``Implementation.artifact_bands``) holds exactly one.
+    ``population_bounds`` returns the XY bounds of the tile's buffered contract
+    population; it is called only when a declared ``header_bounds_snapped_nearest``
+    raster is cut further inward than the header rule allows.
     """
     product = contract.require_raster()
     r = product.resolution
@@ -202,22 +219,65 @@ def check_raster(
             f"core present (accept_known_extent_discrepancies): {description}"
         )
         return out
-    if (
+    nearest = (
         policies.accept_known_extent_discrepancies
         and implementation.extent == "header_bounds_snapped_nearest"
+    )
+    if (
+        nearest
         and all(g in (0, -1) for g in grow)
         and all(-g <= ok for g, ok in zip(grow, _nearest_inward(tile_bounds, exp), strict=True))
     ):
-        out.inset = (-grow[3], -grow[0])
-        out.trimmed = (-grow[0], -grow[1], -grow[2], -grow[3])
+        _accept_inset(out, grow)
         out.accepted_exceptions.append(
             "accepted declared extent rule header_bounds_snapped_nearest: edges whose header "
             "bound lies at least half a cell inside the outward grid line are cut by one cell "
             f"(accept_known_extent_discrepancies): {description}"
         )
         return out
+    if nearest and population_bounds is not None and all(g <= 0 for g in grow):
+        bounds = population_bounds()
+        if bounds is not None and _layout_edges_match(actual, exp, tile_bounds, bounds):
+            _accept_inset(out, grow)
+            out.accepted_exceptions.append(
+                "accepted declared extent rule header_bounds_snapped_nearest with the raster "
+                "laid out on the buffered population bounds "
+                f"{[round(v, 3) for v in bounds]} snapped outward: edges are cut where the "
+                "population stops inside the header-snapped edge "
+                f"(accept_known_extent_discrepancies): {description}"
+            )
+            return out
     out.errors.append(description)
     return out
+
+
+def _accept_inset(out: RasterStructure, grow: tuple[int, int, int, int]) -> None:
+    out.inset = (-grow[3], -grow[0])
+    out.trimmed = (-grow[0], -grow[1], -grow[2], -grow[3])
+
+
+def _layout_edges_match(
+    actual: GridSpec,
+    exp: GridSpec,
+    tile_bounds: tuple[float, float, float, float],
+    population: tuple[float, float, float, float],
+) -> bool:
+    """Whether every edge is the expected edge, a header-nearest edge, or the inward-most
+    of a header-nearest edge and the population bound snapped outward (grid-line indices)."""
+    r = exp.resolution
+    inward = _nearest_inward(tile_bounds, exp)
+    p_min_x, p_min_y, p_max_x, p_max_y = population
+    edges = (
+        (actual.col0, exp.col0, 1, _floor_div(p_min_x, r), max),
+        (actual.col0 + actual.ncols, exp.col0 + exp.ncols, -1, _ceil_div(p_max_x, r), min),
+        (actual.row0, exp.row0, 1, _floor_div(p_min_y, r), max),
+        (actual.row0 + actual.nrows, exp.row0 + exp.nrows, -1, _ceil_div(p_max_y, r), min),
+    )
+    for (edge, expected, step, layout, inward_most), cut in zip(edges, inward, strict=True):
+        header = {expected, expected + step * cut}
+        if edge not in header | {inward_most(h, layout) for h in header}:
+            return False
+    return True
 
 
 def _nearest_inward(

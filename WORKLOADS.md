@@ -501,7 +501,10 @@ edge trimming therefore still differ between tools (lidR convex hull, lasR and
 LAStools none, PDAL 100 m); the legacy harness is unchanged. Where cells are too
 far from any ground point, lidR `tin()` warns and uses the nearest ground point; the
 lidR option `accept_known_tin_fallback_warning` accepts exactly that warning
-(design/R_BRIDGE.md §3), otherwise the attempt fails.
+(design/R_BRIDGE.md §3), otherwise the attempt fails. LAStools' `blast2dem64` can
+print the duplicate-XY and duplicate-raster warnings here too (one Petawawa d5 tile of
+100 in every run of the full-v9 campaign); they are accepted only with the LAStools
+option `accept_known_duplicate_xy_warning` (see `generate_DSM2` below).
 
 ## Python orchestrator: `normalization` in workloads-v7
 

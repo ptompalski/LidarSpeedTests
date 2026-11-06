@@ -223,7 +223,7 @@ def test_dsm2_is_the_dem_call_with_first_returns():
     keep = dem.args.index("-keep_class")
     assert dsm2.args == (*dem.args[:keep], "-keep_return", "1", *dem.args[keep + 3 :])
     assert "-first_only" not in dsm2.args  # it would also keep return number 0
-    assert dsm2.duplicate_xy_warning_applies and not dem.duplicate_xy_warning_applies
+    assert dsm2.duplicate_xy_warning_applies and dem.duplicate_xy_warning_applies
     assert not dsm2.cutoff_warning_applies and not dsm2.legacy_call
     with pytest.raises(ValueError, match="needs a legacy call"):
         LastoolsWorkload(
@@ -588,7 +588,7 @@ def test_metrics_and_dsm2_commands_and_outputs(bin_dir, layout):
     names = [a.path.name for a in plan.expected_outputs]
     assert len(names) == 18 and names[:2] == ["east;$tile_max.tif", "east;$tile_avg.tif"]
     assert names[-1] == "west tile_p95.tif"
-    assert plan.command.accepted_exceptions == ()  # duplicate-XY: generate_DSM2 only
+    assert plan.command.accepted_exceptions == ()  # duplicate-XY: blast2dem workloads only
 
     plan = plan_invocation(
         adapter, _invocation(layout, "generate_DSM2", threads=1), adapter.probe(PLATFORM)
@@ -849,14 +849,16 @@ def test_known_duplicate_xy_warning_rules(argv0, line, known):
 
 
 @needs_posix
-def test_interpret_accepts_duplicate_xy_warnings_only_for_dsm2_when_opted_in(
+def test_interpret_accepts_duplicate_xy_warnings_only_for_blast2dem_when_opted_in(
     bin_dir, layout, tmp_path
 ):
     stderr = _duplicates() * 2
     for workload, opted, accepted in (
         ("generate_DSM2", True, True),
         ("generate_DSM2", False, False),
-        ("generate_DEM", True, False),
+        ("generate_DEM", True, True),
+        ("generate_DEM", False, False),
+        ("pixel_metrics_1a", True, False),
     ):
         adapter = _adapter(bin_dir, accept_known_duplicate_xy_warning=opted)
         inv = _invocation(layout, workload)

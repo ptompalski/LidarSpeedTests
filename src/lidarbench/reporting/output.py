@@ -68,6 +68,10 @@ def meta_rows(dataset: ReportDataset) -> list[dict[str, Any]]:
         {"key": "campaign_description", "value": campaign.get("description")},
         {"key": "campaign_validation_mode", "value": campaign.get("validation_mode")},
     ]
+    rows += [
+        {"key": "supplement_campaign_id", "value": s.get("campaign_id")}
+        for s in campaign.get("supplements") or []
+    ]
     rows += [{"key": "note", "value": note} for note in dataset.notes]
     rows += [{"key": f"tier:{name}", "value": text} for name, text in TIER_DESCRIPTIONS.items()]
     return rows
@@ -171,8 +175,7 @@ def summary_markdown(dataset: ReportDataset, historical: Mapping[str, Table]) ->
         out.append(f"- Identity: `{campaign.get('identity_sha256')}`")
         out.append(f"- Created: {campaign.get('created_at')}")
     out.append(
-        f"- Report mode: **{dataset.policy.mode}** (minimum timing "
-        f"{dataset.policy.min_seconds} s)"
+        f"- Report mode: **{dataset.policy.mode}** (minimum timing {dataset.policy.min_seconds} s)"
     )
     out.append(f"- Generated: {dataset.generated_at}\n")
     for note in dataset.notes:
@@ -231,6 +234,46 @@ def summary_markdown(dataset: ReportDataset, historical: Mapping[str, Table]) ->
                 [{"kind": k, "count": n} for k, n in sorted(counts.items())], ("kind", "count")
             )
         )
+        for supplement in campaign.get("supplements") or []:
+            out.append(f"## Supplement campaign `{supplement['campaign_id']}`\n")
+            out.append(f"- Identity: `{supplement['identity_sha256']}`")
+            out.append(f"- Created: {supplement['created_at']}")
+            out.append(
+                f"- Units filled: {len(supplement['filled_units'])}; units already reported "
+                f"by the base campaign (consistency check only): "
+                f"{len(supplement['unused_units'])}\n"
+            )
+            out.append("Compatibility checks passed:\n")
+            out.extend(f"- {c}" for c in supplement["checks"])
+            out.append("\nlidarbench code differences (the only permitted difference):\n")
+            out.extend(f"- {c}" for c in supplement["code_changes"] or ["none"])
+            out.append("")
+            out.append(
+                markdown_table(
+                    [
+                        dict(zip(("workload", "dataset", "cpus", "tool"), u, strict=True))
+                        for u in supplement["filled_units"]
+                    ],
+                    ("workload", "dataset", "cpus", "tool"),
+                )
+            )
+        overlap = t["supplement_overlap"].rows
+        if overlap:
+            out.append("### Supplement consistency (units measured in both campaigns)\n")
+            out.append(
+                markdown_table(
+                    overlap,
+                    (
+                        "workload",
+                        "dataset",
+                        "cpus",
+                        "tool",
+                        "base_median_seconds",
+                        "supplement_median_seconds",
+                        "supplement_vs_base_median",
+                    ),
+                )
+            )
     hist = historical.get("historical_sources")
     if hist is not None and hist.rows:
         out.append("## Historical results (read-only, descriptive)\n")

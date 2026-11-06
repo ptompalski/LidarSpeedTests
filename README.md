@@ -118,7 +118,8 @@ the binaries' SHA-256, never the banner's licensing text. Nonzero exits,
 `ERROR`/`FATAL` lines, unlicensed notices, unrecognized warnings and missing
 outputs fail the attempt. The documented `lascanopy` cutoff warning is
 accepted only with `accept_known_cutoff_warning = true` (default `false`), and
-blast2dem's duplicate-XY and duplicate-raster warnings for `generate_DSM2` only with
+blast2dem's duplicate-XY and duplicate-raster warnings for `generate_DSM2` and
+`generate_DEM` only with
 `accept_known_duplicate_xy_warning = true` (default `false`). Buffered calls on
 inputs holding more than 2^32 − 1 points in total (100 tiles at 50 pts/m²) print
 an on-the-fly merged point-count warning, accepted only with
@@ -176,7 +177,12 @@ labelled descriptive. Rendering needs Quarto, R, `knitr` and `rmarkdown`
 missing and the tables are still complete. Historical R results can be added
 read-only with `--historical` (legacy per-run CSVs, or a campaign of the R
 harness exported with `bridges/r/export_legacy_campaign.R`); their task IDs are
-never mapped onto the new workload definitions. The published site in `docs/`
+never mapped onto the new workload definitions. Units a campaign could not
+report (for example after fixing an execution exception, which changes the code
+and therefore prevents a resume) can be re-measured in a small follow-up
+campaign and added with `--supplement`; it is refused unless machine, inputs,
+tool builds, workload contracts and run settings are identical, fills only the
+units without base measurements, and is labelled throughout. The published site in `docs/`
 is never touched. See [design/REPORTING.md](design/REPORTING.md).
 
 ## Benchmark pilot on prepared data

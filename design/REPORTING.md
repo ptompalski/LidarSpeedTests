@@ -20,6 +20,7 @@ lidarbench report WORKSPACE/campaigns/ID --historical _OLD/results --historical 
 lidarbench report --historical _OLD/results -o REPORT_DIR      # historical-only report
 lidarbench report ... --render auto|always|never --quarto PATH --rscript PATH --no-renv
 lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v8 --include-raw
+lidarbench report WORKSPACE/campaigns/ID --supplement WORKSPACE2/campaigns/ID2   # §3.5
 ```
 
 | Option | Meaning |
@@ -31,6 +32,7 @@ lidarbench report ... --min-seconds 0.1 --suite workloads/workloads-v8 --include
 | `--suite` | Workload suite for the *declared* comparability labels (default `workloads/workloads-v9` of the checkout). |
 | `--render` | `auto` (default): render if Quarto, Rscript, `knitr` and `rmarkdown` are found, otherwise explain what is missing; `always`: exit 5 unless rendered; `never`. |
 | `--include-raw` | Also copy the verified campaign directory into `<report>/raw/`. |
+| `--supplement` | A supplement campaign that fills units without an included measurement in the base campaign (repeatable). Refused unless it passes the compatibility checks of §3.5. |
 
 Exit codes: `0` prepared (rendering may have been skipped under `auto`);
 `1` integrity, data or output error; `2` usage; `3` a run holds the workspace
@@ -42,7 +44,9 @@ the report, and any change stops the report. An active workspace lock refuses
 the report; a stale one is recorded as a warning. Every report file is created
 exclusively; `report.json` (`lidarbench.report/1`) is written last and lists
 the policy, the SHA-256 of every report file and of every campaign record,
-the staged sources and the render outcome with the Quarto/R probe.
+the staged sources and the render outcome with the Quarto/R probe. Supplement
+campaigns are locked, snapshotted and verified the same way
+(`supplement_records`).
 
 ## 2. Report directory
 
@@ -76,6 +80,7 @@ CSV: UTF-8, `\n`, fixed column order, empty cell = missing (never 0),
 | `tools`, `tool_details` | tool / detail | availability, version, adapter; identity details (R and package versions, LAStools build, PDAL version …) and executable SHA-256 |
 | `datasets` | dataset | input/file counts, bytes, dataset digest, manifest ID/version/SHA-256 |
 | `implementations` | workload × tool | declared implementation status, threading range, declared comparability |
+| `supplement_overlap` | unit with included measurements in the base and a supplement (§3.5) | base and supplement medians and their ratio (consistency check; the base is reported) |
 | `historical_*` | historical record / group / source | §6 |
 
 ### 3.1 Selection, verdicts and exclusions
@@ -127,8 +132,8 @@ same dataset digest, campaign identity (one machine), timing boundary and run
 dimensions (CPUs, execution mode). Mixed boundaries or modes within one tool's
 attempts are refused as well. Pairs that fail keep a row with the reasons and
 no ratio. `speedup_a_vs_b_median` = median(b) / median(a); the mean ratio is
-also given. Reports never combine campaigns, so different hardware or
-datasets are never compared.
+also given. Reports combine campaigns only through guarded supplements (§3.5),
+so different hardware or datasets are never compared.
 
 CPU scaling is within one tool, version, workload, dataset and campaign:
 `scaling_ratio` = median at the smallest CPU count with included measurements
@@ -150,6 +155,48 @@ of the suite loaded at report time (contracts are not yet part of campaign
 identity; the suite name and contract digests are recorded in the dataset).
 It is a label only: the gate uses the contract recorded in each attempt's
 validation report.
+
+### 3.5 Supplement campaigns (`--supplement`)
+
+Fixing an execution exception or a validation rule changes lidarbench's code,
+so the affected campaign cannot be resumed (CAMPAIGNS.md §3). A *supplement*
+is a separate, complete campaign that re-measures the affected units; the
+report treats the base campaign plus its supplements as one machine, one
+measurement setup and different lidarbench code. `reporting/supplement.py`
+refuses a supplement (exit 1, every difference listed) unless:
+
+* the `environment` identity component (CPU, cores, RAM, OS, kernel, Python)
+  and the provenance host are identical;
+* every dataset it uses has an identical identity record (file digests);
+* every tool it uses has an identical identity record (adapter, options,
+  version, executables and their SHA-256, details) except
+  `adapter_module_sha256`, which is code;
+* every workload it uses has identical parameters, timeout and contract
+  (key, digest, suite), its datasets are base datasets and each tool's
+  declared implementation is identical;
+* `validation_mode`, `timeout_s`, `monitoring`, `integrity`, `validation`
+  (policies, comparability, suite) and `scheduling` (repetitions, warm-ups,
+  cache policy, CPU affinity, cool-down, tool order; **not** the seed) are
+  identical, and its CPU counts are base CPU counts;
+* scratch (where outputs are written and timed): same `retain`, same scratch
+  label per dataset, and each root on the same filesystem (device) as the base
+  root of that label (the paths themselves may differ);
+* every planned measurement unit is a planned base unit.
+
+The changed package files are recorded (`code_changes`). The merge is
+mechanical: the **base always wins**, and a supplement fills only units in
+which the base campaign has no included measurement (a unit filled by two
+supplements is refused). Supplement measurements of units the base already
+reports are excluded (`supplement not used: …`) and listed in
+`supplement_overlap` as a consistency check. Filled units carry
+`summary.source_campaign` and `repetitions.campaign_id`, an issue
+`supplemented`, and every comparison involving one says so in
+`accepted_differences`; the gate then treats the supplement as part of the
+base campaign. The base campaign's own failures stay in `attempts` and
+`issues`. The report metadata lists each supplement's identity, checks, code
+changes, filled and unused units; `summary.md` has a section per supplement.
+The supplement's attempts are measured at a different time; the overlap table
+shows whether that matters.
 
 ## 4. Quarto site
 
@@ -215,8 +262,9 @@ run, tool and tool version (never pooled). Sources are recorded with SHA-256.
   performance-only pilot) have no validation reports; validated reports show
   availability and issues only for them, and comparisons are refused with
   reasons.
-* One campaign per report; cross-campaign or cross-machine comparisons are
-  deliberately not offered.
+* One base campaign per report; cross-machine comparisons are deliberately not
+  offered. Other campaigns enter only as guarded supplements (§3.5) that fill
+  units the base campaign could not report.
 * Storage and tile-size views of the legacy site are not reproduced; the
   published historical site stays as it is.
 * Verified on Linux (real Quarto 1.6 render and R 4.6); Windows and macOS are

@@ -35,8 +35,8 @@ named exception with the raw exit status:
 * the ``blast2dem`` triangulator's ``WARNING: set nverts N but v_count M`` with
   ``M < N``: points with identical XY were merged into one TIN vertex, and its
   rasterization's ``WARNING: there were N duplicate rasters`` (tool option
-  ``accept_known_duplicate_xy_warning``; ``generate_DSM2`` only, where first
-  returns often share XY);
+  ``accept_known_duplicate_xy_warning``; the ``blast2dem`` workloads
+  ``generate_DSM2``, where first returns often share XY, and ``generate_DEM``);
 * ``WARNING: on-the-fly merged LAS 1.2 files contain too many points (N) for
   single LAS 1.2 file.`` with N > 2**32 - 1 from a ``-buffered`` call, whose
   neighbour reader merges every input tile (tool option
@@ -262,6 +262,9 @@ WORKLOADS: Mapping[str, LastoolsWorkload] = MappingProxyType(
                 "-no_data", "-9999", "-no_kml",
             ),
             artifact_patterns=("{stem}.tif",),
+            # The same triangulator as generate_DSM2: one Petawawa d5 tile of 100 printed
+            # "there were 1 duplicate rasters" in every run of the full-v9 campaign.
+            duplicate_xy_warning_applies=True,
             # workloads-v6: no long-triangle trimming (like lasR) instead of the default 100 m.
             legacy_deviation=(("-kill", "100", "100000"),),
         ),
@@ -541,8 +544,9 @@ def known_duplicate_xy_warnings(lines: Sequence[str], argv: Sequence[str]) -> li
     * ``WARNING: set nverts N but v_count M`` with 0 < M < N: the triangulator merged
       ``N - M`` points whose XY duplicates another point's;
     * ``WARNING: there were N duplicate rasters`` with N > 0: reported by the TIN
-      rasterization (seen on one Petawawa d10 tile of 100 in every run of the
-      workloads-v8 campaign; the rasters passed every structural check).
+      rasterization (seen on one Petawawa d10 tile of 100 in every generate_DSM2 run
+      of the workloads-v8 campaign, the rasters passed every structural check, and
+      on one d5 tile in every generate_DEM run of the full-v9 campaign).
     Only ``blast2dem``/``blast2dem64`` output is recognized; policy and workload
     checks are the caller's.
     """
@@ -626,7 +630,8 @@ class LastoolsAdapter(ToolAdapter):
       named exception ``lascanopy_all_values_above_height_cutoff``. Default
       ``False``; part of the campaign identity.
     * ``accept_known_duplicate_xy_warning``: accept blast2dem's duplicate-XY and
-      duplicate-raster warnings (raw status 0) for ``generate_DSM2`` as the named exception
+      duplicate-raster warnings (raw status 0) for ``generate_DSM2`` and ``generate_DEM``
+      as the named exception
       ``blast2dem_duplicate_xy_points_merged``. Default ``False``; part of the
       campaign identity.
     * ``accept_known_merged_point_count_warning``: accept the on-the-fly merged LAS 1.2
@@ -705,8 +710,7 @@ class LastoolsAdapter(ToolAdapter):
             if path is None:
                 where = f"in {bin_dir}" if bin_dir else "on PATH"
                 problem = (
-                    f"{command_filename(command, self.windows)} not found or not executable "
-                    f"{where}"
+                    f"{command_filename(command, self.windows)} not found or not executable {where}"
                 )
             statuses[command] = CommandStatus(command, path, problem=problem)
         return bin_dir, source, statuses

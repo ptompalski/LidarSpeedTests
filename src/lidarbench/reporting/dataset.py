@@ -44,6 +44,7 @@ from lidarbench.core.canonical import digest
 from lidarbench.core.clock import iso_utc, now
 from lidarbench.core.store import read_json
 from lidarbench.reporting.stats import describe, max_or_none, mean_or_none
+from lidarbench.reporting.supplement import Supplement, SupplementError, check_supplement
 from lidarbench.validation.comparability import (
     ComparisonSubject,
     comparison_gate,
@@ -266,6 +267,7 @@ SUMMARY_COLUMNS = (
     "machine_memory_used_peak_bytes_max",
     "skip_reasons",
     "exclusions",
+    "source_campaign",
 )
 
 REPETITION_COLUMNS = (
@@ -287,6 +289,7 @@ REPETITION_COLUMNS = (
     "machine_cpu_percent_mean",
     "machine_memory_used_peak_bytes",
     "start_wall_utc",
+    "campaign_id",
 )
 
 COMPARISON_COLUMNS = (
@@ -344,6 +347,18 @@ ISSUE_COLUMNS = (
     "attempt_id",
     "superseded",
     "detail",
+    "campaign_id",
+)
+
+SUPPLEMENT_OVERLAP_COLUMNS = (
+    *UNIT_COLUMNS,
+    "base_campaign",
+    "supplement_campaign",
+    "base_n",
+    "supplement_n",
+    "base_median_seconds",
+    "supplement_median_seconds",
+    "supplement_vs_base_median",
 )
 
 ENVIRONMENT_COLUMNS = ("section", "key", "value")
@@ -430,6 +445,11 @@ TABLE_SPECS: dict[str, tuple[tuple[str, ...], str]] = {
         IMPLEMENTATION_COLUMNS,
         "Declared implementation status of each workload per tool.",
     ),
+    "supplement_overlap": (
+        SUPPLEMENT_OVERLAP_COLUMNS,
+        "Units with included measurements in both the base campaign and a supplement "
+        "campaign (the base is reported; the supplement timing is a consistency check only).",
+    ),
 }
 
 ISSUE_KINDS = {
@@ -455,6 +475,7 @@ ISSUE_KINDS = {
     "monitoring_partial": "monitoring covered only part of the timed interval",
     "monitoring_missing": "no resource measurements for an included attempt",
     "cpu_budget_exceeded": "measured CPU time exceeds the configured CPU budget",
+    "supplemented": "unit reported from a supplement campaign (no included base measurement)",
 }
 
 
@@ -623,6 +644,10 @@ def _input_datasets(rows: Iterable[Mapping[str, Any]]) -> str | None:
     return ";".join(found) or None
 
 
+def _unit_of(row: Mapping[str, Any]) -> tuple[str, str, int, str]:
+    return (row["workload"], row["dataset"], row["cpus"], row["tool"])
+
+
 def _weakest(tiers: Iterable[str]) -> str | None:
     present = set(tiers)
     for tier in TIERS:
@@ -633,11 +658,17 @@ def _weakest(tiers: Iterable[str]) -> str | None:
 
 class _Builder:
     def __init__(
-        self, store: CampaignStore, policy: ReportPolicy, suite: WorkloadSuite | None
+        self,
+        store: CampaignStore,
+        policy: ReportPolicy,
+        suite: WorkloadSuite | None,
+        supplements: Sequence[Supplement] = (),
     ) -> None:
         self.store = store
         self.policy = policy
         self.suite = suite
+        self.supplements = list(supplements)
+        self.unit_source: dict[tuple[str, str, int, str], str] = {}
         self.tables = new_tables()
         self.notes: list[str] = []
         c = store.components
@@ -697,16 +728,52 @@ class _Builder:
     # build --------------------------------------------------------------------
 
     def build(self) -> ReportDataset:
-        infos = self.store.attempts()
-        rows = rows_for_attempts(self.store, infos)
-        derived: dict[str, _Derived] = {}
+        self.derived: dict[str, _Derived] = {}
+        self._add_attempts(self.store)
+        for supplement in self.supplements:
+            self._add_attempts(supplement.store)
+        self._select_sources()
+        self._units()
+        self._comparisons()
+        self._scaling()
+        self._issues()
+        self._environment()
+        self._tools()
+        self._datasets()
+        self._implementations()
+        self._notes()
+        manifest = self.store.manifest or {}
+        campaign = {
+            "campaign_id": self.store.campaign_id,
+            "identity_sha256": self.store.identity_sha256,
+            "created_at": manifest.get("created_at"),
+            "created_by": manifest.get("created_by"),
+            "description": self.config.get("description"),
+            "validation_mode": self.config.get("validation_mode"),
+            "schedule_entries": manifest.get("schedule_entries"),
+            "component_sha256": self.store.component_digests(),
+            "workload_suite": (
+                {
+                    "name": self.suite.name,
+                    "contracts": {k: c.digest for k, c in sorted(self.suite.contracts.items())},
+                }
+                if self.suite
+                else None
+            ),
+            "supplements": [s.to_record() for s in self.supplements],
+        }
+        return ReportDataset(self.policy, campaign, self.tables, self.notes)
+
+    def _add_attempts(self, store: CampaignStore) -> None:
+        infos = store.attempts()
+        rows = rows_for_attempts(store, infos)
         attempts = self.tables["attempts"]
         for info, row in zip(infos, rows, strict=True):
             d = derive_verdicts(info)
             result = info.result or {}
             d.tier = evidence_tier(d, bool(row["accepted_exception"]), self.policy.mode)
             d.exclusion = _exclusion(row, d, self.policy)
-            derived[info.attempt_id] = d
+            self.derived[info.attempt_id] = d
             comparability: tuple[str | None, tuple[str, ...]] = (None, ())
             if d.verdicts is not None:
                 cls, reasons = d.verdicts.comparability(self.comparability_policy)
@@ -737,36 +804,46 @@ class _Builder:
                 report_included=d.exclusion == "included",
                 exclusion=d.exclusion,
             )
-        self.derived = derived
-        self._units()
-        self._comparisons()
-        self._scaling()
-        self._issues()
-        self._environment()
-        self._tools()
-        self._datasets()
-        self._implementations()
-        self._notes()
-        manifest = self.store.manifest or {}
-        campaign = {
-            "campaign_id": self.store.campaign_id,
-            "identity_sha256": self.store.identity_sha256,
-            "created_at": manifest.get("created_at"),
-            "created_by": manifest.get("created_by"),
-            "description": self.config.get("description"),
-            "validation_mode": self.config.get("validation_mode"),
-            "schedule_entries": manifest.get("schedule_entries"),
-            "component_sha256": self.store.component_digests(),
-            "workload_suite": (
-                {
-                    "name": self.suite.name,
-                    "contracts": {k: c.digest for k, c in sorted(self.suite.contracts.items())},
-                }
-                if self.suite
-                else None
-            ),
+
+    @staticmethod
+    def _counts(row: Mapping[str, Any]) -> bool:
+        return row["phase"] == "measurement" and not row["superseded"] and row["report_included"]
+
+    def _select_sources(self) -> None:
+        """The base campaign wins; a supplement fills only units without base measurements."""
+        base_id = self.store.campaign_id
+        rows = self.tables["attempts"].rows
+        base_included = {
+            _unit_of(r) for r in rows if r["campaign_id"] == base_id and self._counts(r)
         }
-        return ReportDataset(self.policy, campaign, self.tables, self.notes)
+        self.base_included = base_included
+        candidates: dict[tuple[str, str, int, str], list[str]] = {}
+        for supplement in self.supplements:
+            sid = supplement.campaign_id
+            units = {_unit_of(r) for r in rows if r["campaign_id"] == sid and self._counts(r)}
+            for u in sorted(units, key=self.unit_sort_key):
+                if u in base_included:
+                    supplement.unused_units.append(u)
+                else:
+                    candidates.setdefault(u, []).append(sid)
+        for u, sources in candidates.items():
+            if len(sources) > 1:
+                raise SupplementError(
+                    f"unit {list(u)} would be filled by several supplements ({sources}); "
+                    "give only one of them"
+                )
+            self.unit_source[u] = sources[0]
+        for supplement in self.supplements:
+            supplement.filled_units = sorted(
+                (u for u, s in self.unit_source.items() if s == supplement.campaign_id),
+                key=self.unit_sort_key,
+            )
+        for r in rows:
+            if r["campaign_id"] == base_id or not r["report_included"]:
+                continue
+            if self.unit_source.get(_unit_of(r)) != r["campaign_id"]:
+                r["report_included"] = False
+                r["exclusion"] = "supplement not used: the base campaign has included measurements"
 
     # summary --------------------------------------------------------------------
 
@@ -785,9 +862,11 @@ class _Builder:
         self.included: dict[tuple[str, str, int, str], list[dict[str, Any]]] = {}
         summary = self.tables["summary"]
         repetitions = self.tables["repetitions"]
+        base_id = self.store.campaign_id
         for unit in sorted(planned, key=self.unit_sort_key):
             workload, dataset, cpus, tool = unit
-            unit_rows = by_unit.get(unit, [])
+            source = self.unit_source.get(unit, base_id)
+            unit_rows = [r for r in by_unit.get(unit, []) if r["campaign_id"] == source]
             measured = [r for r in unit_rows if r["phase"] == "measurement"]
             selected = [r for r in measured if not r["superseded"]]
             included = [r for r in selected if r["report_included"]]
@@ -816,6 +895,7 @@ class _Builder:
                     machine_cpu_percent_mean=r["machine_cpu_percent_mean"],
                     machine_memory_used_peak_bytes=r["machine_memory_used_peak_bytes"],
                     start_wall_utc=r["start_wall_utc"],
+                    campaign_id=r["campaign_id"],
                 )
             attempted_reps = {r["repetition"] for r in measured}
             tiers = Counter(r["evidence_tier"] for r in included)
@@ -931,7 +1011,45 @@ class _Builder:
                 ),
                 skip_reasons="; ".join(skip_reasons) or None,
                 exclusions="; ".join(f"{k} ({n})" for k, n in sorted(exclusions.items())) or None,
+                source_campaign=source,
             )
+        self._overlap(by_unit)
+
+    def _overlap(self, by_unit: Mapping[tuple[str, str, int, str], list[dict[str, Any]]]) -> None:
+        table = self.tables["supplement_overlap"]
+        base_id = self.store.campaign_id
+        for supplement in self.supplements:
+            for unit in supplement.unused_units:
+                rows = by_unit.get(unit, [])
+                base = describe(
+                    r["elapsed_s"] for r in rows if r["campaign_id"] == base_id and self._counts(r)
+                )
+                supp = describe(
+                    r["elapsed_s"]
+                    for r in rows
+                    if r["campaign_id"] == supplement.campaign_id
+                    and r["phase"] == "measurement"
+                    and not r["superseded"]
+                    and r["exclusion"].startswith("supplement not used")
+                )
+                table.add(
+                    workload=unit[0],
+                    workload_id=(self.workload_records.get(unit[0]) or {}).get("id"),
+                    dataset=unit[1],
+                    cpus=unit[2],
+                    tool=unit[3],
+                    base_campaign=base_id,
+                    supplement_campaign=supplement.campaign_id,
+                    base_n=base["n"],
+                    supplement_n=supp["n"],
+                    base_median_seconds=base["median"],
+                    supplement_median_seconds=supp["median"],
+                    supplement_vs_base_median=(
+                        supp["median"] / base["median"]
+                        if supp["median"] is not None and base["median"]
+                        else None
+                    ),
+                )
 
     @staticmethod
     def _availability(
@@ -1014,6 +1132,13 @@ class _Builder:
                     gate = comparison_gate(sa, sb, self.policy.mode, policy)
                     reasons = list(gate.reasons) + extra_a + extra_b
                     notes = list(gate.notes)
+                    for u in (ua, ub):
+                        if u in self.unit_source:
+                            notes.append(
+                                f"{u[3]}: measured in supplement campaign {self.unit_source[u]} "
+                                "(passed the report's compatibility checks; only lidarbench "
+                                "code differs from the base campaign)"
+                            )
                     inputs = {
                         ua[3]: _input_datasets(ra) or dataset,
                         ub[3]: _input_datasets(rb) or dataset,
@@ -1139,11 +1264,14 @@ class _Builder:
                 scope="campaign",
                 detail="no CPU or memory measurements were recorded",
             )
+        base_id = self.store.campaign_id
         for unit in sorted(self.planned, key=self.unit_sort_key):
+            source = self.unit_source.get(unit, base_id)
             attempted = {
                 r["repetition"]
                 for r in self.tables["attempts"].rows
                 if r["phase"] == "measurement"
+                and r["campaign_id"] == source
                 and (r["workload"], r["dataset"], r["cpus"], r["tool"]) == unit
             }
             for rep in sorted(self.planned[unit] - attempted):
@@ -1159,6 +1287,8 @@ class _Builder:
                     detail="planned measurement has no attempt (campaign not finished?)",
                 )
         for row in self.tables["attempts"].rows:
+            if row["campaign_id"] != self.store.campaign_id and _unit_of(row) in self.base_included:
+                continue  # supplement consistency measurement (supplement_overlap)
             d = self.derived[row["attempt_id"]]
             for kind, detail in self._attempt_issues(row, d):
                 issues.add(
@@ -1173,7 +1303,25 @@ class _Builder:
                     attempt_id=row["attempt_id"],
                     superseded=row["superseded"],
                     detail=detail,
+                    campaign_id=row["campaign_id"],
                 )
+        for unit, source in sorted(
+            self.unit_source.items(), key=lambda x: self.unit_sort_key(x[0])
+        ):
+            issues.add(
+                kind="supplemented",
+                scope="measurement",
+                phase="measurement",
+                workload=unit[0],
+                dataset=unit[1],
+                cpus=unit[2],
+                tool=unit[3],
+                detail=(
+                    f"no included measurement in base campaign {self.store.campaign_id}; "
+                    f"reported from supplement campaign {source}"
+                ),
+                campaign_id=source,
+            )
 
     def _attempt_issues(self, row: Mapping[str, Any], d: _Derived) -> list[tuple[str, str | None]]:
         out: list[tuple[str, str | None]] = []
@@ -1250,6 +1398,14 @@ class _Builder:
         }
         for key, value in campaign.items():
             table.add(section="campaign", key=key, value=value)
+        for supplement in self.supplements:
+            record = supplement.to_record()
+            for key in ("campaign_id", "identity_sha256", "created_at"):
+                table.add(section="supplement", key=key, value=record[key])
+            table.add(section="supplement", key="checks", value=_json(record["checks"]))
+            table.add(section="supplement", key="code_changes", value=_json(record["code_changes"]))
+            table.add(section="supplement", key="filled_units", value=len(record["filled_units"]))
+            table.add(section="supplement", key="unused_units", value=len(record["unused_units"]))
         for section in ("scheduling", "monitoring", "integrity"):
             for key, value in (self.config.get(section) or {}).items():
                 table.add(
@@ -1377,24 +1533,48 @@ class _Builder:
                 "Comparability policy strict: only tools that own every point exactly like the "
                 "contract partition and pass numerically are compared."
             )
+        if not self.supplements:
+            notes.append(
+                "Speedups are computed only within this campaign (one machine, one frozen "
+                "identity); results of different campaigns are never combined into ratios."
+            )
+            return
+        filled = sum(len(s.filled_units) for s in self.supplements)
+        names = ", ".join(s.campaign_id for s in self.supplements)
         notes.append(
-            "Speedups are computed only within this campaign (one machine, one frozen "
-            "identity); results of different campaigns are never combined into ratios."
+            f"Supplemented report: {filled} measurement unit(s) without an included measurement "
+            f"in base campaign {self.store.campaign_id} are reported from supplement "
+            f"campaign(s) {names} (summary.source_campaign, issue kind 'supplemented'). Each "
+            "supplement passed the compatibility checks: identical machine, inputs, tool "
+            "builds and options, workload contracts and run settings; only lidarbench code "
+            "differs (listed in the environment table). The base campaign always wins; "
+            "supplement units that the base already reports are only a consistency check "
+            "(supplement_overlap). Speedups and scaling may combine base and supplement "
+            "units; such comparisons say so in accepted_differences."
         )
 
 
 def build_campaign_dataset(
-    campaign_path: Path, policy: ReportPolicy, suite: WorkloadSuite | None = None
+    campaign_path: Path,
+    policy: ReportPolicy,
+    suite: WorkloadSuite | None = None,
+    supplements: Sequence[Path] = (),
 ) -> ReportDataset:
-    """Verify a campaign and derive its reporting dataset (read-only).
+    """Verify a campaign (and supplements) and derive its reporting dataset (read-only).
 
     Raises:
         CampaignExistsError: Not a complete campaign directory.
         CampaignIntegrityError: A record fails verification.
+        SupplementError: A supplement is not compatible with the campaign.
     """
     store = CampaignStore(Path(campaign_path))
     store.load()
-    return _Builder(store, policy, suite).build()
+    checked = []
+    for path in supplements:
+        other = CampaignStore(Path(path))
+        other.load()
+        checked.append(check_supplement(store, other))
+    return _Builder(store, policy, suite, checked).build()
 
 
 def empty_dataset(policy: ReportPolicy) -> ReportDataset:

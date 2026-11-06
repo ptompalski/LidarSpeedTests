@@ -4,7 +4,9 @@ Steps: refuse while a run holds the workspace lock; snapshot the SHA-256 of
 every campaign file; verify the campaign and derive the reporting dataset;
 import historical sources; write tables, a Markdown summary and the Quarto
 project into a **new** directory; render if possible; check that the campaign
-records are unchanged; write ``report.json`` last.
+records are unchanged; write ``report.json`` last. ``--supplement`` adds guarded
+supplement campaigns (reporting/supplement.py, design/REPORTING.md §3.5), which
+are locked, snapshotted and verified the same way.
 
 Exit codes: ``0`` report prepared (rendering may have been skipped with
 ``--render auto``); ``1`` integrity, data or output error; ``2`` usage;
@@ -47,6 +49,7 @@ from lidarbench.reporting.site import (
     repo_root,
     stage_site,
 )
+from lidarbench.reporting.supplement import SupplementError
 from lidarbench.workloads.contract import (
     ContractError,
     WorkloadSuite,
@@ -105,6 +108,15 @@ def add_report_parser(subparsers: Any) -> None:
         help="read-only historical R results: a directory of legacy per-run CSVs or a "
         "lidarbench.legacy-r-campaign/1 JSON export (repeatable)",
     )
+    report.add_argument(
+        "--supplement",
+        action="append",
+        metavar="CAMPAIGN",
+        default=[],
+        help="supplement campaign directory that fills units without an included "
+        "measurement in CAMPAIGN; refused unless machine, inputs, tools, contracts and run "
+        "settings are identical (only lidarbench code may differ; repeatable)",
+    )
     report.add_argument("--suite", help="workload suite directory for declared comparability")
     report.add_argument(
         "--render",
@@ -132,6 +144,7 @@ def report_command_from_args(parsed: argparse.Namespace) -> int:
         mode=parsed.mode,
         min_seconds=parsed.min_seconds,
         historical=parsed.historical,
+        supplements=parsed.supplement,
         suite=parsed.suite,
         render=parsed.render,
         quarto=parsed.quarto,
@@ -189,6 +202,7 @@ def report_command(
     mode: str | None = None,
     min_seconds: float = DEFAULT_MIN_SECONDS,
     historical: list[str] | None = None,
+    supplements: list[str] | None = None,
     suite: str | None = None,
     render: str = "auto",
     quarto: str | None = None,
@@ -202,8 +216,12 @@ def report_command(
     out = out or sys.stdout
     err = err or sys.stderr
     historical = list(historical or [])
+    supplement_paths = [Path(p) for p in supplements or []]
     if campaign is None and not historical:
         err.write("Error: give a campaign directory and/or --historical sources\n")
+        return EXIT_USAGE
+    if supplement_paths and campaign is None:
+        err.write("Error: --supplement needs a base campaign directory\n")
         return EXIT_USAGE
     if render not in RENDER_MODES:
         err.write(f"Error: --render must be one of {RENDER_MODES}\n")
@@ -216,7 +234,11 @@ def report_command(
         if campaign_path is not None:
             store = CampaignStore(campaign_path)
             store.load()
-            lock = inspect_lock(campaign_path.parent.parent / WORKSPACE_LOCK_NAME)
+            for path in supplement_paths:
+                CampaignStore(path).load()
+        for path in [campaign_path, *supplement_paths] if campaign_path is not None else []:
+            assert path is not None
+            lock = inspect_lock(path.parent.parent / WORKSPACE_LOCK_NAME)
             if lock.exists and lock.state == "active":
                 err.write(
                     f"Error: a run holds {lock.path}; report after it finishes so the "
@@ -262,15 +284,27 @@ def report_command(
 
     try:
         before = snapshot(campaign_path) if campaign_path else {}
+        supplement_before = {p: snapshot(p) for p in supplement_paths}
         if campaign_path is not None:
-            dataset = build_campaign_dataset(campaign_path, policy, loaded_suite)
+            dataset = build_campaign_dataset(campaign_path, policy, loaded_suite, supplement_paths)
         else:
             dataset = empty_dataset(policy)
         hist = load_historical([Path(h) for h in historical], policy) if historical else {}
         results_jsonl = None
         if store is not None:
-            results_jsonl = render_rows(rows_for_attempts(store, store.attempts()), "jsonl")
-    except (CampaignExistsError, CampaignIntegrityError, ReportError, OSError) as exc:
+            result_rows = rows_for_attempts(store, store.attempts())
+            for path in supplement_paths:
+                other = CampaignStore(path)
+                other.load()
+                result_rows += rows_for_attempts(other, other.attempts())
+            results_jsonl = render_rows(result_rows, "jsonl")
+    except (
+        CampaignExistsError,
+        CampaignIntegrityError,
+        ReportError,
+        SupplementError,
+        OSError,
+    ) as exc:
         err.write(f"Error: {exc}\n")
         return EXIT_ERROR
     dataset.notes.extend(warnings)
@@ -300,14 +334,16 @@ def report_command(
         else:
             result = RenderResult("skipped", "; ".join(probe.problems))
 
-    if campaign_path is not None:
-        after = snapshot(campaign_path)
-        if after != before:
-            changed = sorted(set(before) ^ set(after)) + sorted(
-                k for k in set(before) & set(after) if before[k] != after[k]
+    checked = [(campaign_path, before)] if campaign_path is not None else []
+    checked += list(supplement_before.items())
+    for path, snap in checked:
+        after = snapshot(path)
+        if after != snap:
+            changed = sorted(set(snap) ^ set(after)) + sorted(
+                k for k in set(snap) & set(after) if snap[k] != after[k]
             )
             err.write(
-                "Error: campaign records changed while the report was prepared "
+                f"Error: campaign records of {path} changed while the report was prepared "
                 f"({', '.join(changed[:5])}); discard {out_dir} and report again after "
                 "execution has stopped\n"
             )
@@ -328,6 +364,15 @@ def report_command(
             if campaign_path is not None
             else None
         ),
+        "supplement_records": [
+            {
+                "path": str(path.resolve()),
+                "files": len(snap),
+                "sha256": digest(snap),
+                "file_sha256": snap,
+            }
+            for path, snap in supplement_before.items()
+        ],
         "historical_sources": hist["historical_sources"].rows if hist else [],
         "files": files,
         "staged_sources": staged,
@@ -373,8 +418,7 @@ def _print_summary(
         out.write(f"  site: {out_dir / str(result.site)}\n")
     elif result.status == "not_requested":
         out.write(
-            "  site: not rendered (--render never); run 'quarto render' in the report "
-            "directory\n"
+            "  site: not rendered (--render never); run 'quarto render' in the report directory\n"
         )
     else:
         err.write(f"Rendering {result.status}: {result.detail}\n")

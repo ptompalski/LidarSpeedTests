@@ -456,6 +456,73 @@ def test_lidr_extent_rule_rejects_other_cuts(inset_scene, tmp_path, grow):
     assert v.structural.status is Status.FAILED
 
 
+@pytest.fixture(scope="module")
+def ground_inset_scene(tmp_path_factory) -> Path:
+    """One tile spanning X0..X0+100 whose ground (class 2) points span only X0+3.4..X0+97.2."""
+    import random
+
+    root = tmp_path_factory.mktemp("ground_inset")
+    rng = random.Random(11)
+    ground = [
+        (rng.uniform(X0 + 3.4, X0 + 97.2), rng.uniform(Y0 + 0.2, Y0 + 99.8)) for _ in range(400)
+    ]
+    ground += [(X0 + 3.4, Y0 + 0.2), (X0 + 97.2, Y0 + 99.8)]
+    other = [
+        (rng.uniform(X0 + 0.2, X0 + 99.8), rng.uniform(Y0 + 0.2, Y0 + 99.8)) for _ in range(400)
+    ]
+    other += [(X0 + 0.2, Y0 + 50.0), (X0 + 99.8, Y0 + 50.0)]
+    pts = ground + other
+    xs, ys = zip(*pts, strict=True)
+    zs = [round(rng.uniform(140.0, 185.0), 3) for _ in pts]
+    write_las(root / "edge.las", xs, ys, zs, classification=[2] * len(ground) + [1] * len(other))
+    return root
+
+
+def _dem_product(out: Path, west: int, east: int) -> Path:
+    """A 1 m DEM over X0+west..X0+100-east, Y0..Y0+100 (the expected grid is X0..X0+100)."""
+    out.mkdir(parents=True, exist_ok=True)
+    write_raster(
+        out / "edge.tif",
+        [np.full((100, 100 - west - east), 160.0)],
+        xmin=X0 + west,
+        ymax=Y0 + 100.0,
+        resolution=1.0,
+    )
+    return out
+
+
+def test_lidr_extent_rule_follows_the_buffered_population_layout(ground_inset_scene, tmp_path):
+    """lidR lays the DEM out on the ground points' bounds snapped outward (X0+3, X0+98)."""
+    dem = SUITE.get("generate_DEM")
+    policy = Policies(accept_known_extent_discrepancies=True)
+    cut = _dem_product(tmp_path / "cut", 3, 2)
+    report = run(ground_inset_scene, cut, dem, "lidR", policies=policy)
+    v = report.verdicts
+    assert v.structural.status is Status.PASSED, v.structural.reasons
+    assert v.outcome is Outcome.UNVERIFIED
+    structural = report.to_record()["artifacts"][0]["structural"]
+    assert structural["trimmed_cells_wesn"] == [3, 2, 0, 0]
+    assert any("buffered population bounds" in e for e in structural["accepted_exceptions"])
+
+    # Needs the campaign opt-in and the declaring tool.
+    assert run(ground_inset_scene, cut, dem, "lidR").verdicts.structural.status is Status.FAILED
+    assert (
+        run(ground_inset_scene, cut, dem, "lasR", policies=policy).verdicts.structural.status
+        is Status.FAILED
+    )
+    # Only the exact layout edge (or a header-snapped edge) is accepted on each side.
+    for west, east in ((4, 2), (2, 2), (3, 3), (3, 1)):
+        other = _dem_product(tmp_path / f"cut{west}{east}", west, east)
+        assert (
+            run(ground_inset_scene, other, dem, "lidR", policies=policy).verdicts.structural.status
+            is Status.FAILED
+        ), (west, east)
+    # With every point in the population (DSM1), the layout is the header's.
+    v = run(ground_inset_scene, cut, DSM, "lidR", policies=policy).verdicts
+    assert v.structural.status is Status.FAILED
+    assert all("extent" in r for r in v.structural.reasons), v.structural.reasons
+
+
 # -- unverified, unsupported, unavailable ------------------------------------------------------
 
 

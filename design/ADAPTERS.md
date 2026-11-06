@@ -339,7 +339,8 @@ to the `pixel_metrics_2` `lascanopy64` call.
 
 **Duplicate-XY exception.** `accept_known_duplicate_xy_warning = true` (tool option,
 default `false`, part of the campaign identity) declares
-`blast2dem_duplicate_xy_points_merged` for `generate_DSM2` only. blast2dem's
+`blast2dem_duplicate_xy_points_merged` for the `blast2dem` workloads `generate_DSM2` and
+`generate_DEM`. blast2dem's
 triangulator merges points with identical XY into one vertex and prints
 `WARNING: set nverts N but v_count M`; its rasterization can also print
 `WARNING: there were N duplicate rasters`. Only those exact lines from `blast2dem`/
@@ -349,6 +350,9 @@ share XY often (every Petawawa tile in the pilot), so a DSM2 campaign needs the
 option. The duplicate-raster line was added after the first d10 campaign
 (`petawawa-d10-v8-20261031-001`): one of 100 tiles printed it in three of the four
 runs, which failed them although the rasters passed every structural check.
+`generate_DEM` was added after the full-v9 campaign (`petawawa-full-v9-20261101-001`),
+where one d5 tile of 100 printed `there were 1 duplicate rasters` in all four runs
+(ground points of classes 2 and 9 can share XY as well).
 
 **Merged point-count exception.** `accept_known_merged_point_count_warning = true`
 (tool option, default `false`, part of the campaign identity) declares
